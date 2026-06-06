@@ -11,3 +11,34 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum RolUsuario {
+  CLIENTE
+  VENDEDOR
+  ADMINISTRADOR
+
+  @@map("rol_usuario")
+}
+
+enum EstadoUsuario {
+  ACTIVO
+  INACTIVO
+
+  @@map("estado_usuario")
+}
+
+model Usuario {
+  idUsuario      Int           @id @default(autoincrement()) @map("id_usuario")
+  nombres        String
+  apellidos      String
+  email          String        @unique
+  contrasenaHash String        @map("contrasena_hash")
+  telefono       String
+  fechaRegistro  DateTime      @default(now()) @map("fecha_registro")
+  dniRuc         String        @unique @map("dni_ruc")
+  direccion      String
+  rol            RolUsuario
+  estado         EstadoUsuario @default(ACTIVO)
+
+  @@map("usuarios")
+}

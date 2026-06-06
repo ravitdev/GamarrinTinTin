@@ -1,4 +1,4 @@
-// src/producto.module.ts
+// src/productos/producto.module.ts
 import { Module } from '@nestjs/common';
 import { ProductosController } from './producto.controller';
 import { ProductoManager } from './producto.manager';

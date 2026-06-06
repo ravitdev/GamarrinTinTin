@@ -1,4 +1,4 @@
-// src/producto.manager.ts
+// src/productos/producto.manager.ts
 import { IProductoRepository } from './iproducto.repository';
 import { Producto, DescuentoPorVolumen, TallaVariedad } from './domain/producto.entity';
 

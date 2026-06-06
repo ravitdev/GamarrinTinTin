@@ -1,4 +1,4 @@
-// src/producto-ram.repository.ts
+// src/productos/producto-ram.repository.ts
 import { IProductoRepository } from './iproducto.repository';
 import { Producto } from './domain/producto.entity';
 

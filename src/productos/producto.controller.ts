@@ -1,4 +1,4 @@
-// src/producto.controller.ts
+// src/productos/producto.controller.ts
 import { Controller, Get, Post, Put, Body, Param, Query, HttpException, HttpStatus } from '@nestjs/common';
 import { ProductoManager } from './producto.manager';
 import { Producto } from './domain/producto.entity';
