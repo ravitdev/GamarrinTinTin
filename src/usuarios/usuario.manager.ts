@@ -1,5 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { IniciarSesionDto } from './dto/iniciar-sesion.dto';
+import type { RefreshTokenDto } from './dto/refresh-token.dto';
+import type { RegistrarClienteDto } from './dto/registrar-cliente.dto';
+import type { RegistrarVendedorDto } from './dto/registrar-vendedor.dto';
 import type { SesionDto } from './dto/sesion.dto';
 import { Usuario } from './domain/usuario.entity';
 import type { IUsuarioRepository } from './iusuario.repository';
@@ -17,9 +20,7 @@ export class UsuarioManager {
   ) {}
 
   async iniciarSesion(credenciales: IniciarSesionDto): Promise<SesionDto> {
-    const email = (
-      credenciales.email ?? credenciales.correoElectronico
-    )?.trim();
+    const email = credenciales.email?.trim();
     const contrasena = credenciales.contrasena;
 
     if (!email || !contrasena) {
@@ -39,28 +40,68 @@ export class UsuarioManager {
       throw new Error('La cuenta no está disponible.');
     }
 
-    const accessToken = this.jwtService.firmar({
-      sub: usuario.idUsuario,
-      email: usuario.email,
-      rol: usuario.rol,
-    });
-
-    return {
-      accessToken,
-      usuario: UsuarioMapper.aSesionDto(usuario),
-    };
+    return this.generarSesion(usuario);
   }
 
-  async registrarCliente(usuario: Usuario): Promise<boolean> {
+  async registrarCliente(usuario: Usuario): Promise<Usuario> {
     return this.registrarUsuario(usuario, 'CLIENTE');
   }
 
-  async registrarVendedor(usuario: Usuario): Promise<boolean> {
+  async registrarVendedor(usuario: Usuario): Promise<Usuario> {
     return this.registrarUsuario(usuario, 'VENDEDOR');
   }
 
+  async registrarCuentaCliente(datos: RegistrarClienteDto): Promise<Usuario> {
+    const usuario = await this.crearUsuarioDesdeDatos(datos, 'CLIENTE');
+    return this.registrarCliente(usuario);
+  }
+
+  async registrarUsuarioVendedor(
+    datos: RegistrarVendedorDto,
+  ): Promise<Usuario> {
+    const usuario = await this.crearUsuarioDesdeDatos(datos, 'VENDEDOR');
+    return this.registrarVendedor(usuario);
+  }
+
   async cerrarSesion(idUsuario: number): Promise<boolean> {
-    return (await this.usuarioRepository.buscarPorId(idUsuario)) !== null;
+    return this.usuarioRepository.revocarRefreshToken(idUsuario);
+  }
+
+  async refrescarSesion(datos: RefreshTokenDto): Promise<SesionDto> {
+    const refreshToken = datos.refreshToken?.trim();
+
+    if (!refreshToken) {
+      throw new Error('Refresh token requerido.');
+    }
+
+    const payload = this.jwtService.verificar(refreshToken);
+
+    if (!payload || payload.tipo !== 'refresh') {
+      throw new Error('Refresh token inválido o expirado.');
+    }
+
+    const usuario = await this.usuarioRepository.buscarPorId(payload.sub);
+
+    if (!usuario || !usuario.estaActivo()) {
+      throw new Error('Usuario no autorizado.');
+    }
+
+    const refreshGuardado = await this.usuarioRepository.obtenerRefreshToken(
+      usuario.idUsuario,
+    );
+
+    if (
+      !refreshGuardado ||
+      refreshGuardado.fechaExpiracion < new Date() ||
+      !this.contrasenaService.verificar(
+        refreshToken,
+        refreshGuardado.refreshTokenHash,
+      )
+    ) {
+      throw new Error('Refresh token inválido o expirado.');
+    }
+
+    return this.generarSesion(usuario);
   }
 
   async modificarDatosCliente(
@@ -103,9 +144,11 @@ export class UsuarioManager {
   private async registrarUsuario(
     usuario: Usuario,
     rol: Usuario['rol'],
-  ): Promise<boolean> {
+  ): Promise<Usuario> {
+    this.validarDatosRegistro(usuario);
+
     if (usuario.rol !== rol) {
-      throw new Error('El rol del usuario no corresponde con la operacion.');
+      throw new Error('El rol del usuario no corresponde con la operación.');
     }
 
     if (await this.usuarioRepository.existePorEmail(usuario.email)) {
@@ -117,6 +160,61 @@ export class UsuarioManager {
     }
 
     return this.usuarioRepository.guardar(usuario);
+  }
+
+  private async generarSesion(usuario: Usuario): Promise<SesionDto> {
+    const payloadBase = {
+      sub: usuario.idUsuario,
+      email: usuario.email,
+      rol: usuario.rol,
+    };
+    const accessToken = this.jwtService.firmarAccessToken(payloadBase);
+    const refreshToken = this.jwtService.firmarRefreshToken(payloadBase);
+
+    await this.usuarioRepository.guardarRefreshToken(
+      usuario.idUsuario,
+      this.contrasenaService.generarHash(refreshToken),
+      this.jwtService.obtenerFechaExpiracionRefreshToken(),
+    );
+
+    return {
+      accessToken,
+      refreshToken,
+      usuario: UsuarioMapper.aSesionDto(usuario),
+    };
+  }
+
+  private async crearUsuarioDesdeDatos(
+    datos: RegistrarClienteDto | RegistrarVendedorDto,
+    rol: Usuario['rol'],
+  ): Promise<Usuario> {
+    return new Usuario(
+      0,
+      datos.nombres?.trim(),
+      datos.apellidos?.trim(),
+      datos.email?.trim().toLowerCase(),
+      this.contrasenaService.generarHash(datos.contrasena),
+      datos.telefono?.trim(),
+      new Date(),
+      datos.dniRuc?.trim(),
+      datos.direccion?.trim(),
+      rol,
+      'ACTIVO',
+    );
+  }
+
+  private validarDatosRegistro(usuario: Usuario): void {
+    if (
+      !usuario.nombres ||
+      !usuario.apellidos ||
+      !usuario.email ||
+      !usuario.contrasenaHash ||
+      !usuario.telefono ||
+      !usuario.dniRuc ||
+      !usuario.direccion
+    ) {
+      throw new Error('Faltan datos obligatorios del usuario.');
+    }
   }
 
   private async modificarDatosUsuario(

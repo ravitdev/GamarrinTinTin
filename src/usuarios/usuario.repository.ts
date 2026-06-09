@@ -1,102 +1,146 @@
 import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import { Usuario } from './domain/usuario.entity';
 import { IUsuarioRepository } from './iusuario.repository';
-import { ContrasenaService } from './seguridad/contrasena.service';
-import { UsuarioDataMapper, UsuarioRegistro } from './usuario-data.mapper';
+import { UsuarioDataMapper } from './usuario-data.mapper';
 
 @Injectable()
 export class UsuarioRepository implements IUsuarioRepository {
-  private usuariosTable: UsuarioRegistro[];
-  private readonly usuarioDataMap = new UsuarioDataMapper();
+  constructor(private readonly prisma: PrismaService) {}
 
-  constructor(private readonly contrasenaService: ContrasenaService) {
-    const fechaRegistro = new Date('2026-06-01T00:00:00.000Z');
+  async guardar(usuario: Usuario): Promise<Usuario> {
+    const registro = await this.prisma.usuario.create({
+      data: {
+        nombres: usuario.nombres,
+        apellidos: usuario.apellidos,
+        email: usuario.email,
+        contrasenaHash: usuario.contrasenaHash,
+        telefono: usuario.telefono,
+        fechaRegistro: usuario.fechaRegistro,
+        dniRuc: usuario.dniRuc,
+        direccion: usuario.direccion,
+        rol: usuario.rol,
+        estado: usuario.estado,
+      },
+    });
 
-    this.usuariosTable = [
-      {
-        idUsuario: 1,
-        nombres: 'Cliente',
-        apellidos: 'Demo',
-        email: 'cliente@gamarrintintin.com',
-        contrasenaHash: this.contrasenaService.generarHash('Cliente123'),
-        telefono: '999111222',
-        fechaRegistro,
-        dniRuc: '70000001',
-        direccion: 'Lima',
-        rol: 'CLIENTE',
-        estado: 'ACTIVO',
-      },
-      {
-        idUsuario: 2,
-        nombres: 'Vendedor',
-        apellidos: 'Demo',
-        email: 'vendedor@gamarrintintin.com',
-        contrasenaHash: this.contrasenaService.generarHash('Vendedor123'),
-        telefono: '999222333',
-        fechaRegistro,
-        dniRuc: '70000002',
-        direccion: 'Gamarra',
-        rol: 'VENDEDOR',
-        estado: 'ACTIVO',
-      },
-      {
-        idUsuario: 3,
-        nombres: 'Administrador',
-        apellidos: 'Demo',
-        email: 'admin@gamarrintintin.com',
-        contrasenaHash: this.contrasenaService.generarHash('Admin123'),
-        telefono: '999333444',
-        fechaRegistro,
-        dniRuc: '70000003',
-        direccion: 'Gamarra',
-        rol: 'ADMINISTRADOR',
-        estado: 'ACTIVO',
-      },
-      {
-        idUsuario: 4,
-        nombres: 'Cuenta',
-        apellidos: 'Inactiva',
-        email: 'inactivo@gamarrintintin.com',
-        contrasenaHash: this.contrasenaService.generarHash('Inactivo123'),
-        telefono: '999444555',
-        fechaRegistro,
-        dniRuc: '70000004',
-        direccion: 'Lima',
-        rol: 'CLIENTE',
-        estado: 'INACTIVO',
-      },
-    ];
-  }
-
-  async guardar(usuario: Usuario): Promise<boolean> {
-    return this.usuarioDataMap.insertar(usuario, this.usuariosTable);
+    return UsuarioDataMapper.aEntidad(registro);
   }
 
   async actualizar(usuario: Usuario): Promise<boolean> {
-    return this.usuarioDataMap.actualizar(usuario, this.usuariosTable);
+    const resultado = await this.prisma.usuario.updateMany({
+      where: { idUsuario: usuario.idUsuario },
+      data: {
+        nombres: usuario.nombres,
+        apellidos: usuario.apellidos,
+        email: usuario.email,
+        contrasenaHash: usuario.contrasenaHash,
+        telefono: usuario.telefono,
+        dniRuc: usuario.dniRuc,
+        direccion: usuario.direccion,
+        rol: usuario.rol,
+        estado: usuario.estado,
+      },
+    });
+
+    return resultado.count > 0;
   }
 
   async desactivar(idUsuario: number): Promise<boolean> {
-    return this.usuarioDataMap.desactivar(idUsuario, this.usuariosTable);
+    const resultado = await this.prisma.usuario.updateMany({
+      where: { idUsuario },
+      data: { estado: 'INACTIVO' },
+    });
+
+    return resultado.count > 0;
   }
 
   async buscarPorId(idUsuario: number): Promise<Usuario | null> {
-    return this.usuarioDataMap.seleccionarPorId(idUsuario, this.usuariosTable);
+    const registro = await this.prisma.usuario.findUnique({
+      where: { idUsuario },
+    });
+
+    return registro ? UsuarioDataMapper.aEntidad(registro) : null;
   }
 
   async buscarPorEmail(email: string): Promise<Usuario | null> {
-    return this.usuarioDataMap.seleccionarPorEmail(email, this.usuariosTable);
+    const registro = await this.prisma.usuario.findUnique({
+      where: { email: email.trim().toLowerCase() },
+    });
+
+    return registro ? UsuarioDataMapper.aEntidad(registro) : null;
   }
 
   async existePorEmail(email: string): Promise<boolean> {
-    return this.usuarioDataMap.existePorEmail(email, this.usuariosTable);
+    const total = await this.prisma.usuario.count({
+      where: { email: email.trim().toLowerCase() },
+    });
+
+    return total > 0;
   }
 
   async existePorDocumento(dniRuc: string): Promise<boolean> {
-    return this.usuarioDataMap.existePorDocumento(dniRuc, this.usuariosTable);
+    const total = await this.prisma.usuario.count({
+      where: { dniRuc: dniRuc.trim() },
+    });
+
+    return total > 0;
   }
 
   async listarUsuarios(): Promise<Usuario[]> {
-    return this.usuarioDataMap.seleccionarTodos(this.usuariosTable);
+    const registros = await this.prisma.usuario.findMany();
+    return registros.map((registro) => UsuarioDataMapper.aEntidad(registro));
+  }
+
+  async guardarRefreshToken(
+    idUsuario: number,
+    refreshTokenHash: string,
+    fechaExpiracion: Date,
+  ): Promise<boolean> {
+    await this.prisma.$transaction([
+      this.prisma.refreshToken.updateMany({
+        where: { idUsuario, revocado: false },
+        data: { revocado: true },
+      }),
+      this.prisma.refreshToken.create({
+        data: {
+          idUsuario,
+          tokenHash: refreshTokenHash,
+          fechaExpiracion,
+        },
+      }),
+    ]);
+
+    return true;
+  }
+
+  async obtenerRefreshToken(
+    idUsuario: number,
+  ): Promise<{ refreshTokenHash: string; fechaExpiracion: Date } | null> {
+    const registro = await this.prisma.refreshToken.findFirst({
+      where: {
+        idUsuario,
+        revocado: false,
+      },
+      orderBy: { fechaCreacion: 'desc' },
+    });
+
+    if (!registro) {
+      return null;
+    }
+
+    return {
+      refreshTokenHash: registro.tokenHash,
+      fechaExpiracion: registro.fechaExpiracion,
+    };
+  }
+
+  async revocarRefreshToken(idUsuario: number): Promise<boolean> {
+    const resultado = await this.prisma.refreshToken.updateMany({
+      where: { idUsuario, revocado: false },
+      data: { revocado: true },
+    });
+
+    return resultado.count > 0;
   }
 }

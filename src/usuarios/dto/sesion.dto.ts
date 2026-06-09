@@ -10,5 +10,6 @@ export interface UsuarioSesionDto {
 
 export interface SesionDto {
   accessToken: string;
+  refreshToken: string;
   usuario: UsuarioSesionDto;
 }

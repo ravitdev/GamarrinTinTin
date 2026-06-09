@@ -1,5 +1,4 @@
 export interface IniciarSesionDto {
-  email?: string;
-  correoElectronico?: string;
+  email: string;
   contrasena: string;
 }

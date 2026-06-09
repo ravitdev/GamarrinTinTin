@@ -4,8 +4,7 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -27,18 +26,77 @@ enum EstadoUsuario {
   @@map("estado_usuario")
 }
 
+enum EstadoPedido {
+  REGISTRADO
+  CONFIRMADO
+  PROCESANDO
+  ENVIADO
+  ENTREGADO
+  CANCELADO
+
+  @@map("estado_pedido")
+}
+
+enum Talla {
+  S
+  M
+  L
+  XL
+
+  @@map("talla")
+}
+
 model Usuario {
-  idUsuario      Int           @id @default(autoincrement()) @map("id_usuario")
+  idUsuario      Int            @id @default(autoincrement()) @map("id_usuario")
   nombres        String
   apellidos      String
-  email          String        @unique
-  contrasenaHash String        @map("contrasena_hash")
+  email          String         @unique
+  contrasenaHash String         @map("contrasena_hash")
   telefono       String
-  fechaRegistro  DateTime      @default(now()) @map("fecha_registro")
-  dniRuc         String        @unique @map("dni_ruc")
+  fechaRegistro  DateTime       @default(now()) @map("fecha_registro")
+  dniRuc         String         @unique @map("dni_ruc")
   direccion      String
   rol            RolUsuario
-  estado         EstadoUsuario @default(ACTIVO)
+  estado         EstadoUsuario  @default(ACTIVO)
+  pedidos        Pedido[]
+  refreshTokens  RefreshToken[]
 
   @@map("usuarios")
+}
+
+model RefreshToken {
+  idRefreshToken  Int      @id @default(autoincrement()) @map("id_refresh_token")
+  idUsuario       Int      @map("id_usuario")
+  tokenHash       String   @map("token_hash")
+  fechaCreacion   DateTime @default(now()) @map("fecha_creacion")
+  fechaExpiracion DateTime @map("fecha_expiracion")
+  revocado        Boolean  @default(false)
+  usuario         Usuario  @relation(fields: [idUsuario], references: [idUsuario])
+
+  @@index([idUsuario])
+  @@map("refresh_tokens")
+}
+
+model Pedido {
+  idPedido  Int             @id @default(autoincrement()) @map("id_pedido")
+  idCliente Int             @map("id_cliente")
+  fecha     DateTime        @default(now())
+  estado    EstadoPedido    @default(REGISTRADO)
+  total     Decimal         @db.Decimal(10, 2)
+  cliente   Usuario         @relation(fields: [idCliente], references: [idUsuario])
+  detalles  PedidoDetalle[]
+
+  @@map("pedidos")
+}
+
+model PedidoDetalle {
+  idPedidoDetalle Int     @id @default(autoincrement()) @map("id_pedido_detalle")
+  idPedido        Int     @map("id_pedido")
+  idProducto      Int     @map("id_producto")
+  talla           Talla
+  cantidad        Int
+  precioUnitario  Decimal @map("precio_unitario") @db.Decimal(10, 2)
+  pedido          Pedido  @relation(fields: [idPedido], references: [idPedido])
+
+  @@map("pedido_detalles")
 }
