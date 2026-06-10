@@ -4,7 +4,7 @@ import type { RefreshTokenDto } from './dto/refresh-token.dto';
 import type { RegistrarClienteDto } from './dto/registrar-cliente.dto';
 import type { RegistrarVendedorDto } from './dto/registrar-vendedor.dto';
 import type { SesionDto } from './dto/sesion.dto';
-import { Usuario } from './domain/usuario.entity';
+import { TipoDocumento, Usuario } from './domain/usuario.entity';
 import type { IUsuarioRepository } from './iusuario.repository';
 import { ContrasenaService } from './seguridad/contrasena.service';
 import { JwtService } from './seguridad/jwt.service';
@@ -20,12 +20,14 @@ export class UsuarioManager {
   ) {}
 
   async iniciarSesion(credenciales: IniciarSesionDto): Promise<SesionDto> {
-    const email = credenciales.email?.trim();
+    const email = this.normalizarTexto(credenciales.email).toLowerCase();
     const contrasena = credenciales.contrasena;
 
     if (!email || !contrasena) {
       throw new Error('Debe ingresar email y contraseña.');
     }
+
+    this.validarEmail(email);
 
     const usuario = await this.usuarioRepository.buscarPorEmail(email);
 
@@ -52,18 +54,19 @@ export class UsuarioManager {
   }
 
   async registrarCuentaCliente(datos: RegistrarClienteDto): Promise<Usuario> {
-    const usuario = await this.crearUsuarioDesdeDatos(datos, 'CLIENTE');
+    const usuario = this.crearUsuarioDesdeDatos(datos, 'CLIENTE');
     return this.registrarCliente(usuario);
   }
 
   async registrarUsuarioVendedor(
     datos: RegistrarVendedorDto,
   ): Promise<Usuario> {
-    const usuario = await this.crearUsuarioDesdeDatos(datos, 'VENDEDOR');
+    const usuario = this.crearUsuarioDesdeDatos(datos, 'VENDEDOR');
     return this.registrarVendedor(usuario);
   }
 
   async cerrarSesion(idUsuario: number): Promise<boolean> {
+    this.validarId(idUsuario, 'El usuario de la sesión no es válido.');
     return this.usuarioRepository.revocarRefreshToken(idUsuario);
   }
 
@@ -126,14 +129,18 @@ export class UsuarioManager {
   }
 
   async desactivarCuenta(idUsuario: number): Promise<boolean> {
+    this.validarId(idUsuario, 'El usuario no es válido.');
     return this.usuarioRepository.desactivar(idUsuario);
   }
 
   async recuperarContrasena(email: string): Promise<boolean> {
-    return this.usuarioRepository.existePorEmail(email);
+    const emailNormalizado = this.normalizarTexto(email).toLowerCase();
+    this.validarEmail(emailNormalizado);
+    return this.usuarioRepository.existePorEmail(emailNormalizado);
   }
 
   async obtenerUsuario(idUsuario: number): Promise<Usuario | null> {
+    this.validarId(idUsuario, 'El usuario no es válido.');
     return this.usuarioRepository.buscarPorId(idUsuario);
   }
 
@@ -155,8 +162,12 @@ export class UsuarioManager {
       throw new Error('El email ya está en uso.');
     }
 
-    if (await this.usuarioRepository.existePorDocumento(usuario.dniRuc)) {
-      throw new Error('El DNI/RUC ya está en uso.');
+    if (
+      await this.usuarioRepository.existePorDocumento(
+        usuario.numeroDocumento,
+      )
+    ) {
+      throw new Error('El numero de documento ya está en uso.');
     }
 
     return this.usuarioRepository.guardar(usuario);
@@ -184,37 +195,50 @@ export class UsuarioManager {
     };
   }
 
-  private async crearUsuarioDesdeDatos(
+  private crearUsuarioDesdeDatos(
     datos: RegistrarClienteDto | RegistrarVendedorDto,
     rol: Usuario['rol'],
-  ): Promise<Usuario> {
+  ): Usuario {
+    const nombres = this.normalizarTexto(datos.nombres);
+    const apellidos = this.normalizarTexto(datos.apellidos);
+    const email = this.normalizarTexto(datos.email).toLowerCase();
+    const telefono = this.normalizarTexto(datos.telefono);
+    const tipoDocumento = datos.tipoDocumento;
+    const numeroDocumento = this.normalizarTexto(datos.numeroDocumento);
+    const direccion = this.normalizarTexto(datos.direccion);
+    const contrasena = datos.contrasena;
+
+    this.validarContrasena(contrasena);
+
     return new Usuario(
       0,
-      datos.nombres?.trim(),
-      datos.apellidos?.trim(),
-      datos.email?.trim().toLowerCase(),
-      this.contrasenaService.generarHash(datos.contrasena),
-      datos.telefono?.trim(),
+      nombres,
+      apellidos,
+      email,
+      this.contrasenaService.generarHash(contrasena),
+      telefono,
       new Date(),
-      datos.dniRuc?.trim(),
-      datos.direccion?.trim(),
+      tipoDocumento,
+      numeroDocumento,
+      direccion,
       rol,
       'ACTIVO',
     );
   }
 
   private validarDatosRegistro(usuario: Usuario): void {
-    if (
-      !usuario.nombres ||
-      !usuario.apellidos ||
-      !usuario.email ||
-      !usuario.contrasenaHash ||
-      !usuario.telefono ||
-      !usuario.dniRuc ||
-      !usuario.direccion
-    ) {
-      throw new Error('Faltan datos obligatorios del usuario.');
-    }
+    this.validarTextoObligatorio(usuario.nombres, 'Los nombres son obligatorios.');
+    this.validarTextoObligatorio(
+      usuario.apellidos,
+      'Los apellidos son obligatorios.',
+    );
+    this.validarEmail(usuario.email);
+    this.validarTelefono(usuario.telefono);
+    this.validarDocumento(usuario.tipoDocumento, usuario.numeroDocumento);
+    this.validarTextoObligatorio(
+      usuario.direccion,
+      'La dirección es obligatoria.',
+    );
   }
 
   private async modificarDatosUsuario(
@@ -222,26 +246,109 @@ export class UsuarioManager {
     datos: Partial<Usuario>,
     rol: Usuario['rol'],
   ): Promise<boolean> {
+    this.validarId(idUsuario, 'El usuario no es válido.');
+
     const usuario = await this.usuarioRepository.buscarPorId(idUsuario);
 
     if (!usuario || usuario.rol !== rol) {
       return false;
     }
 
+    const email = this.normalizarTexto(datos.email ?? usuario.email).toLowerCase();
+    const tipoDocumento = datos.tipoDocumento ?? usuario.tipoDocumento;
+    const numeroDocumento = this.normalizarTexto(
+      datos.numeroDocumento ?? usuario.numeroDocumento,
+    );
+
+    if (
+      email !== usuario.email &&
+      (await this.usuarioRepository.existePorEmail(email))
+    ) {
+      throw new Error('El email ya está en uso.');
+    }
+
+    if (
+      numeroDocumento !== usuario.numeroDocumento &&
+      (await this.usuarioRepository.existePorDocumento(numeroDocumento))
+    ) {
+      throw new Error('El número de documento ya está en uso.');
+    }
+
     const usuarioActualizado = new Usuario(
       usuario.idUsuario,
-      datos.nombres ?? usuario.nombres,
-      datos.apellidos ?? usuario.apellidos,
-      datos.email ?? usuario.email,
+      this.normalizarTexto(datos.nombres ?? usuario.nombres),
+      this.normalizarTexto(datos.apellidos ?? usuario.apellidos),
+      email,
       datos.contrasenaHash ?? usuario.contrasenaHash,
-      datos.telefono ?? usuario.telefono,
+      this.normalizarTexto(datos.telefono ?? usuario.telefono),
       usuario.fechaRegistro,
-      datos.dniRuc ?? usuario.dniRuc,
-      datos.direccion ?? usuario.direccion,
+      tipoDocumento,
+      numeroDocumento,
+      this.normalizarTexto(datos.direccion ?? usuario.direccion),
       usuario.rol,
       datos.estado ?? usuario.estado,
     );
 
+    this.validarDatosRegistro(usuarioActualizado);
     return this.usuarioRepository.actualizar(usuarioActualizado);
+  }
+
+  private validarId(id: number, mensaje: string): void {
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new Error(mensaje);
+    }
+  }
+
+  private validarTextoObligatorio(valor: string, mensaje: string): void {
+    if (!valor || valor.trim().length === 0) {
+      throw new Error(mensaje);
+    }
+  }
+
+  private validarEmail(email: string): void {
+    const emailValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+    if (!emailValido) {
+      throw new Error('El email no tiene un formato válido.');
+    }
+  }
+
+  private validarTelefono(telefono: string): void {
+    if (!/^\d{9}$/.test(telefono)) {
+      throw new Error('El teléfono debe tener 9 dígitos.');
+    }
+  }
+
+  private validarDocumento(
+    tipoDocumento: TipoDocumento,
+    numeroDocumento: string,
+  ): void {
+    if (!['DNI', 'RUC'].includes(tipoDocumento)) {
+      throw new Error('El tipo de documento no es válido.');
+    }
+
+    const reglasDocumento = {
+      DNI: { patron: /^\d{8}$/, mensaje: 'El DNI debe tener 8 dígitos.' },
+      RUC: { patron: /^\d{11}$/, mensaje: 'El RUC debe tener 11 dígitos.' },
+    };
+    const regla = reglasDocumento[tipoDocumento];
+
+    if (!regla.patron.test(numeroDocumento)) {
+      throw new Error(regla.mensaje);
+    }
+  }
+
+  private validarContrasena(contrasena: string): void {
+    if (!contrasena || contrasena.length < 8) {
+      throw new Error('La contraseña debe tener al menos 8 caracteres.');
+    }
+
+    if (!/[A-Za-z]/.test(contrasena) || !/\d/.test(contrasena)) {
+      throw new Error('La contraseña debe incluir letras y números.');
+    }
+  }
+
+  private normalizarTexto(valor: string | undefined): string {
+    return valor?.trim() ?? '';
   }
 }

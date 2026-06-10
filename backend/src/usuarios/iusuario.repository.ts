@@ -7,7 +7,7 @@ export interface IUsuarioRepository {
   buscarPorId(idUsuario: number): Promise<Usuario | null>;
   buscarPorEmail(email: string): Promise<Usuario | null>;
   existePorEmail(email: string): Promise<boolean>;
-  existePorDocumento(dniRuc: string): Promise<boolean>;
+  existePorDocumento(numeroDocumento: string): Promise<boolean>;
   listarUsuarios(): Promise<Usuario[]>;
   guardarRefreshToken(
     idUsuario: number,

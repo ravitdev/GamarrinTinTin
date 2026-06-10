@@ -17,7 +17,8 @@ export class UsuarioRepository implements IUsuarioRepository {
         contrasenaHash: usuario.contrasenaHash,
         telefono: usuario.telefono,
         fechaRegistro: usuario.fechaRegistro,
-        dniRuc: usuario.dniRuc,
+        tipoDocumento: usuario.tipoDocumento,
+        numeroDocumento: usuario.numeroDocumento,
         direccion: usuario.direccion,
         rol: usuario.rol,
         estado: usuario.estado,
@@ -36,7 +37,8 @@ export class UsuarioRepository implements IUsuarioRepository {
         email: usuario.email,
         contrasenaHash: usuario.contrasenaHash,
         telefono: usuario.telefono,
-        dniRuc: usuario.dniRuc,
+        tipoDocumento: usuario.tipoDocumento,
+        numeroDocumento: usuario.numeroDocumento,
         direccion: usuario.direccion,
         rol: usuario.rol,
         estado: usuario.estado,
@@ -79,9 +81,9 @@ export class UsuarioRepository implements IUsuarioRepository {
     return total > 0;
   }
 
-  async existePorDocumento(dniRuc: string): Promise<boolean> {
+  async existePorDocumento(numeroDocumento: string): Promise<boolean> {
     const total = await this.prisma.usuario.count({
-      where: { dniRuc: dniRuc.trim() },
+      where: { numeroDocumento: numeroDocumento.trim() },
     });
 
     return total > 0;

@@ -22,6 +22,7 @@ class UsuarioRepositoryFake implements IUsuarioRepository {
         this.contrasenaService.generarHash('Cliente123'),
         '999111222',
         fechaRegistro,
+        'DNI',
         '70000001',
         'Lima',
         'CLIENTE',
@@ -35,6 +36,7 @@ class UsuarioRepositoryFake implements IUsuarioRepository {
         this.contrasenaService.generarHash('Inactivo123'),
         '999444555',
         fechaRegistro,
+        'DNI',
         '70000004',
         'Lima',
         'CLIENTE',
@@ -56,7 +58,8 @@ class UsuarioRepositoryFake implements IUsuarioRepository {
       usuario.contrasenaHash,
       usuario.telefono,
       usuario.fechaRegistro,
-      usuario.dniRuc,
+      usuario.tipoDocumento,
+      usuario.numeroDocumento,
       usuario.direccion,
       usuario.rol,
       usuario.estado,
@@ -102,8 +105,10 @@ class UsuarioRepositoryFake implements IUsuarioRepository {
     return (await this.buscarPorEmail(email)) !== null;
   }
 
-  async existePorDocumento(dniRuc: string): Promise<boolean> {
-    return this.usuarios.some((usuario) => usuario.dniRuc === dniRuc);
+  async existePorDocumento(numeroDocumento: string): Promise<boolean> {
+    return this.usuarios.some(
+      (usuario) => usuario.numeroDocumento === numeroDocumento,
+    );
   }
 
   async listarUsuarios(): Promise<Usuario[]> {
@@ -185,7 +190,8 @@ describe('UsuarioManager', () => {
       email: 'nuevo.cliente@gamarrintintin.com',
       contrasena: 'Cliente456',
       telefono: '988777666',
-      dniRuc: '70000005',
+      tipoDocumento: 'DNI',
+      numeroDocumento: '70000005',
       direccion: 'Lima',
     });
 
@@ -201,6 +207,51 @@ describe('UsuarioManager', () => {
     expect(sesion.usuario.email).toBe('nuevo.cliente@gamarrintintin.com');
   });
 
+  it('rechaza registro con email inválido', async () => {
+    await expect(
+      manager.registrarCuentaCliente({
+        nombres: 'Nuevo',
+        apellidos: 'Cliente',
+        email: 'correo-invalido',
+        contrasena: 'Cliente456',
+        telefono: '988777666',
+        tipoDocumento: 'DNI',
+        numeroDocumento: '70000005',
+        direccion: 'Lima',
+      }),
+    ).rejects.toThrow('El email no tiene un formato válido.');
+  });
+
+  it('rechaza registro con teléfono inválido', async () => {
+    await expect(
+      manager.registrarCuentaCliente({
+        nombres: 'Nuevo',
+        apellidos: 'Cliente',
+        email: 'telefono.invalido@gamarrintintin.com',
+        contrasena: 'Cliente456',
+        telefono: '98877',
+        tipoDocumento: 'DNI',
+        numeroDocumento: '70000005',
+        direccion: 'Lima',
+      }),
+    ).rejects.toThrow('El teléfono debe tener 9 dígitos.');
+  });
+
+  it('rechaza registro con documento inválido según tipo', async () => {
+    await expect(
+      manager.registrarCuentaCliente({
+        nombres: 'Nuevo',
+        apellidos: 'Cliente',
+        email: 'documento.invalido@gamarrintintin.com',
+        contrasena: 'Cliente456',
+        telefono: '988777666',
+        tipoDocumento: 'RUC',
+        numeroDocumento: '70000005',
+        direccion: 'Lima',
+      }),
+    ).rejects.toThrow('El RUC debe tener 11 dígitos.');
+  });
+
   it('registra usuario vendedor', async () => {
     const usuario = await manager.registrarUsuarioVendedor({
       nombres: 'Nuevo',
@@ -208,7 +259,8 @@ describe('UsuarioManager', () => {
       email: 'nuevo.vendedor@gamarrintintin.com',
       contrasena: 'Vendedor456',
       telefono: '977666555',
-      dniRuc: '70000006',
+      tipoDocumento: 'DNI',
+      numeroDocumento: '70000006',
       direccion: 'Gamarra',
     });
 

@@ -2,6 +2,8 @@ export type RolUsuario = 'CLIENTE' | 'VENDEDOR' | 'ADMINISTRADOR';
 
 export type EstadoUsuario = 'ACTIVO' | 'INACTIVO';
 
+export type TipoDocumento = 'DNI' | 'RUC';
+
 export class Usuario {
   constructor(
     public idUsuario: number,
@@ -11,7 +13,8 @@ export class Usuario {
     public contrasenaHash: string,
     public telefono: string,
     public fechaRegistro: Date,
-    public dniRuc: string,
+    public tipoDocumento: TipoDocumento,
+    public numeroDocumento: string,
     public direccion: string,
     public rol: RolUsuario,
     public estado: EstadoUsuario,

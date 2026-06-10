@@ -1,4 +1,9 @@
-import { EstadoUsuario, RolUsuario, Usuario } from './domain/usuario.entity';
+import {
+  EstadoUsuario,
+  RolUsuario,
+  TipoDocumento,
+  Usuario,
+} from './domain/usuario.entity';
 
 export interface UsuarioRegistro {
   idUsuario: number;
@@ -8,7 +13,8 @@ export interface UsuarioRegistro {
   contrasenaHash: string;
   telefono: string;
   fechaRegistro: Date;
-  dniRuc: string;
+  tipoDocumento: TipoDocumento;
+  numeroDocumento: string;
   direccion: string;
   rol: RolUsuario;
   estado: EstadoUsuario;
@@ -24,7 +30,8 @@ export class UsuarioDataMapper {
       registro.contrasenaHash,
       registro.telefono,
       new Date(registro.fechaRegistro),
-      registro.dniRuc,
+      registro.tipoDocumento,
+      registro.numeroDocumento,
       registro.direccion,
       registro.rol,
       registro.estado,
@@ -40,7 +47,8 @@ export class UsuarioDataMapper {
       contrasenaHash: usuario.contrasenaHash,
       telefono: usuario.telefono,
       fechaRegistro: new Date(usuario.fechaRegistro),
-      dniRuc: usuario.dniRuc,
+      tipoDocumento: usuario.tipoDocumento,
+      numeroDocumento: usuario.numeroDocumento,
       direccion: usuario.direccion,
       rol: usuario.rol,
       estado: usuario.estado,

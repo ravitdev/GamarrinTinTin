@@ -14,6 +14,8 @@ export class PedidoRepository implements IPedidoRepository {
         where: { idPedido: pedido.idPedido },
         data: {
           estado: pedido.estado,
+          subtotal: pedido.subtotal,
+          descuentoTotal: pedido.descuentoTotal,
           total: pedido.total,
         },
         include: { detalles: true },
@@ -22,25 +24,84 @@ export class PedidoRepository implements IPedidoRepository {
       return PedidoMapper.aEntidad(registro as PedidoRegistro);
     }
 
+    const cliente = await this.prisma.usuario.findUnique({
+      where: { idUsuario: pedido.idCliente },
+      select: { direccion: true },
+    });
+
+    if (!cliente) {
+      throw new Error('Cliente no encontrado para el pedido.');
+    }
+
+    const detallesPreparados = await Promise.all(
+      pedido.detalles.map(async (detalle) => {
+        const variante = await this.prisma.productoVariante.findUnique({
+          where: { idProductoVariante: detalle.idProductoVariante },
+          include: { producto: true },
+        });
+
+        if (!variante || !variante.esActivo || !variante.producto.esActivo) {
+          throw new Error('Producto no disponible para el pedido.');
+        }
+
+        const precioUnitario = variante.producto.precioBase.toNumber();
+        const subtotal = precioUnitario * detalle.cantidad;
+
+        return {
+          idProductoVariante: detalle.idProductoVariante,
+          idCotizacion: detalle.idCotizacion,
+          cantidad: detalle.cantidad,
+          precioUnitario,
+          subtotal,
+          nombreProductoSnapshot: variante.producto.nombre,
+          colorSnapshot: variante.colorNombre,
+          tallaSnapshot: variante.talla,
+        };
+      }),
+    );
+    const subtotal = detallesPreparados.reduce(
+      (acumulado, detalle) => acumulado + detalle.subtotal,
+      0,
+    );
+    const descuentoTotal = pedido.descuentoTotal;
+    const total = subtotal - descuentoTotal;
+
     const registro = await this.prisma.pedido.create({
       data: {
         idCliente: pedido.idCliente,
-        fecha: pedido.fecha,
         estado: pedido.estado,
-        total: pedido.total,
+        subtotal,
+        descuentoTotal,
+        total,
+        direccionSnapshot: cliente.direccion,
         detalles: {
-          create: pedido.detalles.map((detalle) => ({
-            idProducto: detalle.idProducto,
-            talla: detalle.talla,
-            cantidad: detalle.cantidad,
-            precioUnitario: detalle.precioUnitario,
-          })),
+          create: detallesPreparados,
         },
       },
       include: { detalles: true },
     });
 
     return PedidoMapper.aEntidad(registro as PedidoRegistro);
+  }
+
+  async registrarPago(
+    idPedido: number,
+    monto: number,
+    pagoExitoso: boolean,
+    referenciaExterna: string,
+  ): Promise<boolean> {
+    await this.prisma.pago.create({
+      data: {
+        idPedido,
+        monto,
+        metodoPago: 'TARJETA',
+        estado: pagoExitoso ? 'PAGADO' : 'FALLO',
+        referenciaExterna,
+        fechaPago: pagoExitoso ? new Date() : null,
+      },
+    });
+
+    return true;
   }
 
   async buscarPorId(idPedido: number): Promise<Pedido | null> {
@@ -56,7 +117,7 @@ export class PedidoRepository implements IPedidoRepository {
     const registros = await this.prisma.pedido.findMany({
       where: { idCliente },
       include: { detalles: true },
-      orderBy: { fecha: 'desc' },
+      orderBy: { fechaCreacion: 'desc' },
     });
 
     return registros.map((registro) =>

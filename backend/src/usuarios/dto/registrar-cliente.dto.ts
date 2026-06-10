@@ -4,6 +4,7 @@ export interface RegistrarClienteDto {
   email: string;
   contrasena: string;
   telefono: string;
-  dniRuc: string;
+  tipoDocumento: 'DNI' | 'RUC';
+  numeroDocumento: string;
   direccion: string;
 }

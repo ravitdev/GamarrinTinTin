@@ -1,10 +1,7 @@
-import { Talla } from '../domain/pedido.entity';
-
 export interface CrearPedidoDetalleDto {
-  idProducto: number;
-  talla: Talla;
+  idProductoVariante: number;
+  idCotizacion?: number;
   cantidad: number;
-  precioUnitario: number;
 }
 
 export interface CrearPedidoDto {
