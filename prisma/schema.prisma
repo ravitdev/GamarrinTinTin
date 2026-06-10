@@ -372,7 +372,6 @@ model Pedido {
   cliente Usuario @relation("PedidoCliente", fields: [idCliente], references: [idUsuario], onDelete: Restrict)
 
   detalles PedidoDetalle[]
-  pagos    Pago[]
 
   @@index([idCliente, fechaCreacion])
   @@index([estado])
@@ -416,8 +415,6 @@ model Pago {
   fechaPago             DateTime?   @map("fecha_pago")
   fechaCreacion         DateTime    @default(now()) @map("fecha_creacion")
   fechaActualizacion    DateTime    @updatedAt @map("fecha_actualizacion")
-
-  pedido Pedido @relation(fields: [idPedido], references: [idPedido], onDelete: Restrict)
 
   @@index([idPedido])
   @@index([estado])
