@@ -2,10 +2,10 @@
 
 ## Variables de entorno
 
-Todos los comandos de esta guia se ejecutan desde la carpeta del proyecto:
+Todos los comandos de esta guia se ejecutan desde la carpeta del backend:
 
 ```powershell
-cd GamarrinTinTin
+cd GamarrinTinTin/backend
 ```
 
 Crear el archivo `.env` desde el ejemplo:
