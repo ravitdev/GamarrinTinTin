@@ -2,6 +2,12 @@
 
 ## Variables de entorno
 
+Todos los comandos de esta guia se ejecutan desde la carpeta del proyecto:
+
+```powershell
+cd GamarrinTinTin
+```
+
 Crear el archivo `.env` desde el ejemplo:
 
 ```powershell
@@ -35,13 +41,13 @@ npm run db:up
 Aplicar migraciones:
 
 ```powershell
-npx prisma migrate dev --name init
+npx prisma migrate dev
 ```
 
-Si las migraciones ya existen, tambien se puede usar:
+Si alguien modifica `prisma/schema.prisma`, debe crear una nueva migracion con un nombre descriptivo:
 
 ```powershell
-npx prisma migrate dev
+npx prisma migrate dev --name nombre_del_cambio
 ```
 
 Generar cliente Prisma cuando sea necesario, por ejemplo despues de cambios en `prisma/schema.prisma`:
@@ -64,7 +70,7 @@ http://localhost:3000
 
 ## Validacion con Docker completo
 
-Cuando terminen un cambio importante, se recomienda validar que todo levante tambien con Docker completo. Esto ayuda a confirmar que el backend y la base de datos corren de forma consistente en otras PCs.
+Cuando terminen un cambio importante, se recomienda validar con Docker completo para comprobar que el proyecto levanta desde cero usando la configuracion del repositorio y las variables del `.env`.
 
 Levantar backend y base de datos:
 
@@ -78,13 +84,7 @@ Comando equivalente si tienes Node/npm instalado:
 npm run docker:up
 ```
 
-La primera vez, aplicar el esquema de Prisma en otra terminal:
-
-```powershell
-docker compose exec backend npx prisma migrate dev --name init
-```
-
-Si las migraciones ya existen, usar:
+Aplicar migraciones en otra terminal:
 
 ```powershell
 docker compose exec backend npx prisma migrate dev
