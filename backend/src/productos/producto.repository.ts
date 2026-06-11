@@ -235,4 +235,16 @@ export class ProductoRepository {
 
     return productoActualizado;
   }
+
+  async desactivar(idProducto: number): Promise<boolean> {
+  const resultado = await this.prisma.producto.updateMany({
+    where: { idProducto, esActivo: true },
+    data: {
+      esActivo: false,
+      fechaEliminacion: new Date(),
+    },
+  });
+
+  return resultado.count > 0;
+  }
 }

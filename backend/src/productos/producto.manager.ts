@@ -103,6 +103,18 @@ export class ProductoManager {
     return ProductoMapper.aDetalleDto(producto);
   }
 
+  async desactivarProducto(idProducto: number): Promise<boolean> {
+    this.validarId(idProducto, 'El producto no es válido.');
+
+    const producto = await this.productoRepository.buscarDetallePorId(idProducto);
+
+    if (!producto) {
+      throw new Error('Producto no encontrado.');
+    }
+
+    return this.productoRepository.desactivar(idProducto);
+  }
+
   private validarDatosRegistro(datos: RegistrarProductoDto): void {
     this.validarId(datos.idCategoria, 'La categoría del producto no es válida.');
     this.validarTextoObligatorio(datos.nombre, 'El nombre del producto es obligatorio.');
