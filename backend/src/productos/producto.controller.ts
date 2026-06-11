@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpException,
   HttpStatus,
@@ -88,6 +89,26 @@ export class ProductoController {
           : HttpStatus.BAD_REQUEST;
 
       throw new HttpException(error.message, estado);
+    }
+  }
+
+  @Delete(':idProducto')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('VENDEDOR', 'ADMINISTRADOR')
+    async desactivarProducto(@Param('idProducto') idProducto: string) {
+  try {
+    await this.productoManager.desactivarProducto(Number(idProducto));
+    return {
+      success: true,
+      message: 'Producto desactivado correctamente.',
+    };
+  } catch (error: any) {
+    const estado =
+      error.message === 'Producto no encontrado.'
+        ? HttpStatus.NOT_FOUND
+        : HttpStatus.BAD_REQUEST;
+
+    throw new HttpException(error.message, estado);
     }
   }
 }
