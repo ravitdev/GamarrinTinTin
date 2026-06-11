@@ -1,30 +1,66 @@
-// src/domain/producto.entity.ts
+export type Talla = 'S' | 'M' | 'L' | 'XL';
 
-export class DescuentoPorVolumen {
+export type LadoProducto = 'FRONT' | 'BACK';
+
+export class CategoriaResumen {
   constructor(
-    public idDescuento: number,
-    public cantidadMinima: number,
-    public porcentajeDescuento: number
+    public idCategoria: number,
+    public nombre: string,
   ) {}
 }
 
-export interface TallaVariedad {
-  nombre: string; // S, M, L, XL
-  precio: number;
-  stock: number;
+export class ProductoVariante {
+  constructor(
+    public idProductoVariante: number,
+    public idProducto: number,
+    public colorNombre: string,
+    public colorHex: string,
+    public talla: Talla,
+    public stock: number,
+    public esActivo: boolean,
+  ) {}
 }
 
-export type EstadoProducto = 'activo' | 'inactivo';
+export class ProductoImagen {
+  constructor(
+    public idProductoImagen: number,
+    public idProducto: number,
+    public colorHex: string,
+    public lado: LadoProducto,
+    public urlImagen: string,
+    public displayOrder: number,
+    public esActivo: boolean,
+  ) {}
+}
+
+export class DescuentoVolumen {
+  constructor(
+    public idDescuentoVolumen: number,
+    public idProducto: number,
+    public cantidadMinima: number,
+    public porcentajeDescuento: number,
+    public esActivo: boolean,
+  ) {}
+}
 
 export class Producto {
   constructor(
     public idProducto: number,
+    public idCategoria: number,
     public nombre: string,
     public descripcion: string,
-    public categoria: string, // Polos, Poleras, etc.
-    public estado: EstadoProducto,
-    public tallas: TallaVariedad[],
-    public disenos: string[], // URLs de imágenes
-    public descuentos: DescuentoPorVolumen[] = []
+    public precioBase: number,
+    public esPersonalizable: boolean,
+    public esActivo: boolean,
+    public fechaCreacion: Date,
+    public fechaActualizacion: Date,
+    public categoria?: CategoriaResumen,
+    public variantes: ProductoVariante[] = [],
+    public imagenes: ProductoImagen[] = [],
+    public descuentosVolumen: DescuentoVolumen[] = [],
   ) {}
+
+  estaActivo(): boolean {
+    return this.esActivo;
+  }
 }

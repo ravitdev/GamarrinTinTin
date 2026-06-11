@@ -1,23 +1,13 @@
-// src/productos/producto.module.ts
 import { Module } from '@nestjs/common';
-import { ProductosController } from './producto.controller';
+import { UsuarioModule } from '../usuarios/usuario.module';
+import { ProductoController } from './producto.controller';
 import { ProductoManager } from './producto.manager';
-import { ProductoRamRepository } from './producto-ram.repository';
+import { ProductoRepository } from './producto.repository';
 
 @Module({
-  controllers: [ProductosController],
-  providers: [
-    // Registramos el repositorio en RAM
-    {
-      provide: 'IProductoRepository', // Usamos un token de texto para la interfaz
-      useClass: ProductoRamRepository,
-    },
-    // Registramos el Manager e inyectamos el repositorio usando el token anterior
-    {
-      provide: ProductoManager,
-      useFactory: (repo: ProductoRamRepository) => new ProductoManager(repo),
-      inject: ['IProductoRepository'],
-    },
-  ],
+  imports: [UsuarioModule],
+  controllers: [ProductoController],
+  providers: [ProductoManager, ProductoRepository],
+  exports: [ProductoManager],
 })
 export class ProductosModule {}
