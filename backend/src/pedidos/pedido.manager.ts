@@ -13,7 +13,7 @@ export class PedidoManager {
   async crearPedido(
     idCliente: number,
     items: CrearPedidoDetalleDto[],
-  ): Promise<Pedido[]> {
+  ): Promise<Pedido> {
     if (!this.esEnteroPositivo(idCliente)) {
       throw new Error('El cliente del pedido no es válido.');
     }
@@ -42,8 +42,7 @@ export class PedidoManager {
       detalles,
     );
 
-    await this.pedidoRepo.guardar(pedido);
-    return this.pedidoRepo.listarPorCliente(idCliente);
+    return this.pedidoRepo.guardar(pedido);
   }
 
   async procesarPagoPedido(

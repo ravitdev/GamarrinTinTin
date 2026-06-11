@@ -107,7 +107,7 @@ describe('PedidoManager', () => {
   });
 
   it('crea pedido con detalles y calcula el total', async () => {
-    const pedidos = await manager.crearPedido(1, [
+    const pedido = await manager.crearPedido(1, [
       {
         idProductoVariante: 10,
         cantidad: 2,
@@ -118,11 +118,10 @@ describe('PedidoManager', () => {
       },
     ]);
 
-    expect(pedidos).toHaveLength(1);
-    expect(pedidos[0].idCliente).toBe(1);
-    expect(pedidos[0].estado).toBe('REGISTRADO');
-    expect(pedidos[0].total).toBe(120);
-    expect(pedidos[0].detalles).toHaveLength(2);
+    expect(pedido.idCliente).toBe(1);
+    expect(pedido.estado).toBe('REGISTRADO');
+    expect(pedido.total).toBe(120);
+    expect(pedido.detalles).toHaveLength(2);
   });
 
   it('confirma el pedido cuando el pago es exitoso', async () => {

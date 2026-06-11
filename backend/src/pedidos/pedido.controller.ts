@@ -28,14 +28,14 @@ export class PedidoController {
     @Body() body: CrearPedidoDto,
   ) {
     try {
-      const pedidos = await this.pedidoManager.crearPedido(
+      const pedido = await this.pedidoManager.crearPedido(
         usuario.idUsuario,
         body.items,
       );
       return {
         success: true,
         message: 'Pedido registrado correctamente.',
-        data: pedidos,
+        data: pedido,
       };
     } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
