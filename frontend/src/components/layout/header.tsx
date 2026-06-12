@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { ShoppingCart, User, Menu, X, Search, ChevronDown, LayoutDashboard } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ShoppingCart, User, Menu, X, Search, ChevronDown, LayoutDashboard, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -15,11 +15,32 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { RolUsuario } from '@/lib/types';
 
+interface MaintenanceBanner {
+  activo: boolean;
+  mensaje: string;
+  fechaInicio?: string;
+  fechaFin?: string;
+}
+
+const MAINTENANCE_KEY = 'gtt_maintenance';
+
 export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen]         = useState(false);
+  const [maintenance, setMaintenance]           = useState<MaintenanceBanner | null>(null);
 
   const { isLoggedIn, user, rol, logout, isHydrating } = useAuth();
+
+  // Read maintenance config from localStorage (set by admin config page)
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(MAINTENANCE_KEY);
+      if (stored) {
+        const cfg: MaintenanceBanner = JSON.parse(stored);
+        setMaintenance(cfg);
+      }
+    } catch { /* ignore */ }
+  }, []);
 
   // Deep-link directo al area de trabajo de cada rol
   const panelHref  = rol === RolUsuario.ADMINISTRADOR ? '/admin/productos'        : '/vendedor/cotizaciones';
@@ -30,6 +51,19 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
   const rolLabel = user?.rol ?? '';
 
   return (
+    <>
+    {/* Maintenance Banner */}
+    {maintenance?.activo && (
+      <div className="w-full bg-yellow-400 text-yellow-900 py-2 px-4 flex items-center justify-center gap-2 text-sm font-medium z-50">
+        <AlertTriangle className="w-4 h-4 shrink-0" />
+        <span>{maintenance.mensaje || 'El sistema estará en mantenimiento programado. Disculpe las molestias.'}</span>
+        {maintenance.fechaInicio && maintenance.fechaFin && (
+          <span className="hidden sm:inline opacity-75">
+            ({new Date(maintenance.fechaInicio).toLocaleString('es-PE')} – {new Date(maintenance.fechaFin).toLocaleString('es-PE')})
+          </span>
+        )}
+      </div>
+    )}
     <header className="sticky top-0 z-50 w-full border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
@@ -278,5 +312,6 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
         </nav>
       </div>
     </header>
+    </>
   );
 }

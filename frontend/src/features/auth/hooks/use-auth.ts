@@ -105,14 +105,20 @@ export function useAuth(): UseAuthReturn {
         persistUser(response.usuario);
         setUser(response.usuario);
 
-        // Redirigir según rol al panel correspondiente
-        const rol = response.usuario.rol;
-        if (rol === 'ADMINISTRADOR') {
-          router.push('/admin/productos');
-        } else if (rol === 'VENDEDOR') {
-          router.push('/vendedor/cotizaciones');
+        // Redirigir según rol al panel correspondiente o al callback si existe
+        const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+        const callback = params?.get('callback');
+        if (callback) {
+          router.push(callback);
         } else {
-          router.push('/catalogo');
+          const rol = response.usuario.rol;
+          if (rol === 'ADMINISTRADOR') {
+            router.push('/admin/productos');
+          } else if (rol === 'VENDEDOR') {
+            router.push('/vendedor/cotizaciones');
+          } else {
+            router.push('/catalogo');
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Credenciales incorrectas');

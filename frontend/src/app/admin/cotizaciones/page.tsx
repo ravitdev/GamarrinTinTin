@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -36,11 +36,13 @@ import {
   Palette,
   Ruler,
   DollarSign,
-  AlertTriangle
+  AlertTriangle,
+  Loader2
 } from "lucide-react"
-import { mockQuotations, formatPrice, getQuotationStatusColor } from "@/lib/mock-data"
+import { formatPrice, getQuotationStatusColor } from "@/lib/mock-data"
 import type { Quotation, QuotationStatus } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { QuotationService } from "@/features/quotations/services/quotation.service"
 
 const statusConfig: Record<QuotationStatus, { label: string; icon: React.ReactNode }> = {
   pendiente: { label: "Pendiente", icon: <Clock className="w-4 h-4" /> },
@@ -58,8 +60,16 @@ export default function AdminQuotationsPage() {
   const [quotationPrice, setQuotationPrice] = useState("")
   const [quotationNotes, setQuotationNotes] = useState("")
   const [validDays, setValidDays] = useState("15")
+  const [quotations, setQuotations] = useState<Quotation[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
-  const filteredQuotations = mockQuotations.filter(q => {
+  useEffect(() => {
+    QuotationService.getAllQuotations()
+      .then(setQuotations)
+      .finally(() => setIsLoading(false))
+  }, [])
+
+  const filteredQuotations = quotations.filter(q => {
     const matchesSearch = 
       q.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
       q.cliente.nombres.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -73,27 +83,44 @@ export default function AdminQuotationsPage() {
   })
 
   const counts = {
-    total: mockQuotations.length,
-    pendiente: mockQuotations.filter(q => q.estado === "pendiente").length,
-    cotizado: mockQuotations.filter(q => q.estado === "cotizado").length,
-    pagado: mockQuotations.filter(q => q.estado === "pagado").length,
+    total: quotations.length,
+    pendiente: quotations.filter(q => q.estado === "pendiente").length,
+    cotizado: quotations.filter(q => q.estado === "cotizado").length,
+    pagado: quotations.filter(q => q.estado === "pagado").length,
   }
 
-  const handleSendQuotation = () => {
-    // Logic to send quotation would go here
+  const handleSendQuotation = async () => {
+    if (!selectedQuotation || !quotationPrice) return
+    try {
+      const expiryDate = new Date(Date.now() + parseInt(validDays) * 24 * 60 * 60 * 1000).toISOString()
+      const updated = await QuotationService.updateQuotation(selectedQuotation.id, {
+        estado: 'cotizado',
+        precioSugerido: parseFloat(quotationPrice),
+        fechaVencimiento: expiryDate,
+      })
+      setQuotations(prev => prev.map(q => q.id === updated.id ? updated : q))
+    } catch (err: any) {
+      alert(err.message || "No se pudo enviar la cotizacion")
+    }
     setIsQuotingDialogOpen(false)
     setSelectedQuotation(null)
     setQuotationPrice("")
     setQuotationNotes("")
-    alert("Cotizacion enviada exitosamente")
   }
 
   const openQuotingDialog = (quotation: Quotation) => {
     setSelectedQuotation(quotation)
     setIsQuotingDialogOpen(true)
-    // Pre-fill with a suggested price (e.g., with volume discount)
     const suggestedPrice = quotation.producto.precio * 0.85 // 15% off as suggestion
     setQuotationPrice(suggestedPrice.toFixed(2))
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    )
   }
 
   return (

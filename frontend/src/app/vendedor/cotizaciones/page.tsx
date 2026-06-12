@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -36,8 +36,9 @@ import {
   Package,
   Calendar
 } from "lucide-react"
-import { mockQuotations, formatPrice } from "@/lib/mock-data"
+import { formatPrice } from "@/lib/mock-data"
 import type { Quotation, QuotationStatus } from "@/lib/types"
+import { QuotationService } from "@/features/quotations/services/quotation.service"
 
 const statusConfig: Record<QuotationStatus, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: typeof Clock }> = {
   pendiente: { label: "Pendiente", variant: "secondary", icon: Clock },
@@ -56,7 +57,16 @@ export default function VendedorCotizacionesPage() {
   const [quotedPrice, setQuotedPrice] = useState("")
   const [validityDays, setValidityDays] = useState("7")
 
-  const filteredQuotations = mockQuotations.filter(q => {
+  const [quotations, setQuotations] = useState<Quotation[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    QuotationService.getAllQuotations()
+      .then(setQuotations)
+      .finally(() => setIsLoading(false))
+  }, [])
+
+  const filteredQuotations = quotations.filter(q => {
     const matchesSearch = 
       q.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
       q.cliente.nombres.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -67,8 +77,10 @@ export default function VendedorCotizacionesPage() {
     return matchesSearch && matchesTab
   })
 
-  const pendingCount = mockQuotations.filter(q => q.estado === 'pendiente').length
-  const quotedCount = mockQuotations.filter(q => q.estado === 'cotizado').length
+  const pendingCount = quotations.filter(q => q.estado === 'pendiente').length
+  const quotedCount = quotations.filter(q => q.estado === 'cotizado').length
+  const paidCount = quotations.filter(q => q.estado === 'pagado').length
+  const totalCount = quotations.length
 
   const handleOpenQuote = (quotation: Quotation) => {
     setSelectedQuotation(quotation)
@@ -84,18 +96,17 @@ export default function VendedorCotizacionesPage() {
     setIsQuoteOpen(true)
   }
 
-  const handleSendQuote = () => {
-    // In real app, this would save to database
+  const handleSendQuote = async () => {
     if (selectedQuotation) {
-      const index = mockQuotations.findIndex(q => q.id === selectedQuotation.id)
-      if (index !== -1) {
-        mockQuotations[index] = {
-          ...mockQuotations[index],
+      try {
+        const updated = await QuotationService.updateQuotation(selectedQuotation.id, {
           estado: 'cotizado',
           precioSugerido: parseFloat(quotedPrice),
-          fechaVencimiento: new Date(Date.now() + parseInt(validityDays) * 24 * 60 * 60 * 1000),
-          updatedAt: new Date()
-        }
+          fechaVencimiento: new Date(Date.now() + parseInt(validityDays) * 24 * 60 * 60 * 1000).toISOString(),
+        });
+        setQuotations(prev => prev.map(q => q.id === updated.id ? updated : q));
+      } catch (err: any) {
+        alert(err.message || "No se pudo cotizar");
       }
     }
     setIsQuoteOpen(false)
@@ -139,7 +150,7 @@ export default function VendedorCotizacionesPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Pagadas</p>
-                <p className="text-2xl font-bold">{mockQuotations.filter(q => q.estado === 'pagado').length}</p>
+                <p className="text-2xl font-bold">{paidCount}</p>
               </div>
               <CheckCircle2 className="w-8 h-8 text-green-300" />
             </div>
@@ -150,7 +161,7 @@ export default function VendedorCotizacionesPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total</p>
-                <p className="text-2xl font-bold">{mockQuotations.length}</p>
+                <p className="text-2xl font-bold">{totalCount}</p>
               </div>
               <FileText className="w-8 h-8 text-muted-foreground/30" />
             </div>
