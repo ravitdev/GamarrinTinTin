@@ -83,7 +83,7 @@ export default function RecuperarContrasenaPage() {
                   className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
                   disabled={isLoading}
                 >
-                  {isLoading ? 'Enviando...' : 'Enviar Instrucciones'}
+                  {isLoading ? 'Enviando...' : 'Enviar Código'}
                 </Button>
               </form>
             ) : (

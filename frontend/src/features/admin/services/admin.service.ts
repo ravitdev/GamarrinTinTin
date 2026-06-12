@@ -56,6 +56,25 @@ export interface CreateProductPayload {
   descuentosVolumen?: CreateProductDiscountPayload[];
 }
 
+export interface CreateVendedorPayload {
+  nombres: string;
+  apellidos: string;
+  email: string;
+  contrasena: string;
+  telefono: string;
+  tipoDocumento: 'DNI' | 'RUC';
+  numeroDocumento: string;
+  direccion: string;
+}
+
+export interface VendedorCreated {
+  idUsuario: number;
+  nombres: string;
+  apellidos: string;
+  email: string;
+  rol: string;
+}
+
 export class AdminService {
   static async getStats() {
     return ApiClient.get('/admin/stats');
@@ -101,6 +120,10 @@ export class AdminService {
 
   static async respondToQuotation(quotationId: string, approved: boolean, price?: number) {
     return ApiClient.post(`/admin/quotations/${quotationId}/respond`, { approved, price });
+  }
+
+  static async createVendedor(data: CreateVendedorPayload): Promise<VendedorCreated> {
+    return ApiClient.post<VendedorCreated>('/usuarios/vendedores', data);
   }
 }
 

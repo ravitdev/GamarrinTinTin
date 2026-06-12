@@ -28,6 +28,7 @@ import {
   X,
   Bell,
   ChevronDown,
+  User,
   Shirt
 } from "lucide-react"
 
@@ -193,8 +194,10 @@ export default function AdminLayout({
                 <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>
-                  <Settings className="w-4 h-4 mr-2" />
-                  Configuracion
+                  <User className="w-4 h-4 mr-2" />
+                  <Link href="/mi-cuenta">
+                      Mi Perfil
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem className="text-destructive" onSelect={() => logout()}>
                   <LogOut className="w-4 h-4 mr-2" />
