@@ -1,0 +1,422 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RolUsuario {
+  CLIENTE
+  VENDEDOR
+  ADMINISTRADOR
+
+  @@map("rol_usuario")
+}
+
+enum TipoDocumento {
+  DNI
+  RUC
+
+  @@map("tipo_documento")
+}
+
+enum EstadoUsuario {
+  ACTIVO
+  INACTIVO
+
+  @@map("estado_usuario")
+}
+
+enum LadoProducto {
+  FRONT
+  BACK
+
+  @@map("lado_producto")
+}
+
+enum RazonCotizacion {
+  PERSONALIZACION
+  STOCK_INSUFICIENTE
+
+  @@map("razon_cotizacion")
+}
+
+enum EstadoCotizacion {
+  PENDIENTE
+  COTIZADO
+  PAGADO
+  EXPIRADO
+  RECHAZADO
+
+  @@map("estado_cotizacion")
+}
+
+enum TipoItemCarrito {
+  PRODUCTO
+  COTIZACION
+
+  @@map("tipo_item_carrito")
+}
+
+enum EstadoPedido {
+  REGISTRADO
+  CONFIRMADO
+  PROCESANDO
+  ENVIADO
+  ENTREGADO
+  CANCELADO
+
+  @@map("estado_pedido")
+}
+
+enum Talla {
+  S
+  M
+  L
+  XL
+
+  @@map("talla")
+}
+
+enum EstadoPago {
+  PENDIENTE
+  PAGADO
+  FALLO
+  REEMBOLSADO
+
+  @@map("estado_pago")
+}
+
+enum MetodoPago {
+  TARJETA
+  BILLETERA_DIGITAL
+
+  @@map("metodo_pago")
+}
+
+model Usuario {
+  idUsuario       Int            @id @default(autoincrement()) @map("id_usuario")
+  nombres         String
+  apellidos       String
+  email           String         @unique
+  contrasenaHash  String         @map("contrasena_hash")
+  telefono        String
+  tipoDocumento   TipoDocumento  @map("tipo_documento")
+  numeroDocumento String         @unique @map("numero_documento")
+  direccion       String
+  rol             RolUsuario
+  estado          EstadoUsuario  @default(ACTIVO)
+  fechaRegistro   DateTime       @default(now()) @map("fecha_registro")
+  fechaEliminacion DateTime?     @map("fecha_eliminacion")
+
+  
+  refreshTokens              RefreshToken[]
+  carrito                    Carrito?
+  pedidos                    Pedido[]              @relation("PedidoCliente")
+  cotizacionesCliente        Cotizacion[]          @relation("CotizacionCliente")
+  cotizacionesAtendidas      Cotizacion[]          @relation("CotizacionAtendidoPor")
+  disenosPredefinidosCreados DisenoPredefinido[]   @relation("DisenoPredefinidoCreadoPor")
+
+  @@index([rol, estado])
+  @@map("usuarios")
+}
+
+model RefreshToken {
+  idRefreshToken  Int      @id @default(autoincrement()) @map("id_refresh_token")
+  idUsuario       Int      @map("id_usuario")
+  tokenHash       String   @map("token_hash")
+  fechaCreacion   DateTime @default(now()) @map("fecha_creacion")
+  fechaExpiracion DateTime @map("fecha_expiracion")
+  revocado        Boolean  @default(false)
+
+  usuario         Usuario  @relation(fields: [idUsuario], references: [idUsuario], onDelete: Cascade)
+
+  @@index([idUsuario])
+  @@map("refresh_tokens")
+}
+
+model Categoria {
+  idCategoria        Int       @id @default(autoincrement()) @map("id_categoria")
+  nombre             String    @unique
+  descripcion        String?
+  esActivo           Boolean   @default(true) @map("es_activo")
+  fechaEliminacion   DateTime? @map("fecha_eliminacion")
+  fechaCreacion      DateTime  @default(now()) @map("fecha_creacion")
+  fechaActualizacion DateTime  @updatedAt @map("fecha_actualizacion")
+
+  productos Producto[]
+
+  @@map("categorias")
+}
+
+model Producto {
+  idProducto         Int       @id @default(autoincrement()) @map("id_producto")
+  idCategoria        Int       @map("id_categoria")
+  nombre             String
+  descripcion        String    @db.Text
+  precioBase         Decimal   @db.Decimal(12, 2) @map("precio_base")
+  esPersonalizable   Boolean   @default(false) @map("es_personalizable")
+  esActivo           Boolean   @default(true) @map("es_activo")
+  fechaEliminacion   DateTime? @map("fecha_eliminacion")
+  fechaCreacion      DateTime  @default(now()) @map("fecha_creacion")
+  fechaActualizacion DateTime  @updatedAt @map("fecha_actualizacion")
+
+  categoria          Categoria          @relation(fields: [idCategoria], references: [idCategoria], onDelete: Restrict)
+  variantes          ProductoVariante[]
+  imagenes           ProductoImagen[]
+  descuentosVolumen  DescuentoVolumen[]
+
+  @@index([idCategoria, esActivo])
+  @@index([nombre])
+  @@map("productos")
+}
+
+model ProductoVariante {
+  idProductoVariante Int       @id @default(autoincrement()) @map("id_producto_variante")
+  idProducto         Int       @map("id_producto")
+  colorNombre        String    @map("color_nombre")
+  colorHex           String    @map("color_hex")   
+  talla              Talla
+  stock              Int       @default(0)
+  esActivo           Boolean   @default(true) @map("es_activo")
+  fechaEliminacion   DateTime? @map("fecha_eliminacion")
+  fechaCreacion      DateTime  @default(now()) @map("fecha_creacion")
+  fechaActualizacion DateTime  @updatedAt @map("fecha_actualizacion")
+
+  producto     Producto        @relation(fields: [idProducto], references: [idProducto], onDelete: Restrict)
+  cotizaciones Cotizacion[]
+  itemsCarrito ItemCarrito[]
+  detallesPedido PedidoDetalle[]
+
+  @@unique([idProducto, colorHex, talla])
+  @@index([idProducto])
+  @@map("producto_variantes")
+}
+
+model ProductoImagen {
+  idProductoImagen   Int          @id @default(autoincrement()) @map("id_producto_imagen")
+  idProducto         Int          @map("id_producto")
+  colorHex           String       @map("color_hex")
+  lado               LadoProducto
+  urlImagen          String       @map("url_imagen")
+  displayOrder       Int          @default(0) @map("display_order")
+  esActivo           Boolean      @default(true) @map("es_activo")
+  fechaEliminacion   DateTime?    @map("fecha_eliminacion")
+  fechaCreacion      DateTime     @default(now()) @map("fecha_creacion")
+  fechaActualizacion DateTime     @updatedAt @map("fecha_actualizacion")
+
+  producto Producto @relation(fields: [idProducto], references: [idProducto], onDelete: Restrict)
+
+  @@unique([idProducto, colorHex, lado])
+  @@index([idProducto, colorHex])
+  @@map("producto_imagenes")
+}
+
+model DescuentoVolumen {
+  idDescuentoVolumen  Int       @id @default(autoincrement()) @map("id_descuento_volumen")
+  idProducto          Int       @map("id_producto")
+  cantidadMinima      Int       @map("cantidad_minima")
+  porcentajeDescuento Decimal   @db.Decimal(5, 2) @map("porcentaje_descuento")
+  esActivo            Boolean   @default(true) @map("es_activo")
+  fechaEliminacion    DateTime? @map("fecha_eliminacion")
+  fechaCreacion       DateTime  @default(now()) @map("fecha_creacion")
+  fechaActualizacion  DateTime  @updatedAt @map("fecha_actualizacion")
+
+  producto Producto @relation(fields: [idProducto], references: [idProducto], onDelete: Restrict)
+
+  @@unique([idProducto, cantidadMinima])
+  @@index([idProducto, cantidadMinima])
+  @@map("descuentos_volumen")
+}
+
+model DisenoPredefinido {
+  idDisenoPredefinido Int       @id @default(autoincrement()) @map("id_diseno_predefinido")
+  creadoPorId         Int       @map("creado_por_id")
+  nombre              String
+  urlImagen           String    @map("url_imagen")
+  esActivo            Boolean   @default(true) @map("es_activo")
+  fechaEliminacion    DateTime? @map("fecha_eliminacion")
+  fechaCreacion       DateTime  @default(now()) @map("fecha_creacion")
+  fechaActualizacion  DateTime  @updatedAt @map("fecha_actualizacion")
+
+  creadoPor Usuario @relation("DisenoPredefinidoCreadoPor", fields: [creadoPorId], references: [idUsuario], onDelete: Restrict)
+
+  imagenesPersonalizadas ImagenPersonalizada[]
+
+  @@index([creadoPorId])
+  @@index([esActivo])
+  @@map("disenos_predefinidos")
+}
+
+model Cotizacion {
+  idCotizacion           Int              @id @default(autoincrement()) @map("id_cotizacion")
+  idCliente              Int              @map("id_cliente")
+  atendidoPorId          Int?             @map("atendido_por_id")
+  idProductoVariante     Int              @map("id_producto_variante")
+  cantidad               Int
+  razon                  RazonCotizacion
+  estado                 EstadoCotizacion @default(PENDIENTE)
+  precioCotizado         Decimal?         @db.Decimal(12, 2) @map("precio_cotizado")
+  fechaCotizacion        DateTime?        @map("fecha_cotizacion")
+  fechaExpiracion        DateTime?        @map("fecha_expiracion")
+  nombreProductoSnapshot String           @map("nombre_producto_snapshot")
+  colorSnapshot          String           @map("color_snapshot")
+  tallaSnapshot          Talla            @map("talla_snapshot")
+  precioBaseSnapshot     Decimal          @db.Decimal(12, 2) @map("precio_base_snapshot")
+  fechaCreacion          DateTime         @default(now()) @map("fecha_creacion")
+  fechaActualizacion     DateTime         @updatedAt @map("fecha_actualizacion")
+
+  cliente Usuario @relation("CotizacionCliente", fields: [idCliente], references: [idUsuario], onDelete: Restrict)
+
+  atendidoPor Usuario? @relation("CotizacionAtendidoPor", fields: [atendidoPorId], references: [idUsuario], onDelete: SetNull)
+
+  productoVariante ProductoVariante @relation(fields: [idProductoVariante], references: [idProductoVariante], onDelete: Restrict)
+
+  personalizacion Personalizacion?
+  itemsCarrito    ItemCarrito[]
+  detallesPedido  PedidoDetalle[]
+
+  @@index([idCliente, estado])
+  @@index([atendidoPorId])
+  @@index([idProductoVariante])
+  @@map("cotizaciones")
+}
+
+model Personalizacion {
+  idPersonalizacion  Int      @id @default(autoincrement()) @map("id_personalizacion")
+  idCotizacion       Int      @unique @map("id_cotizacion")
+  fechaCreacion      DateTime @default(now()) @map("fecha_creacion")
+  fechaActualizacion DateTime @updatedAt @map("fecha_actualizacion")
+
+  cotizacion Cotizacion @relation(fields: [idCotizacion], references: [idCotizacion], onDelete: Cascade)
+  imagenes   ImagenPersonalizada[]
+
+  @@map("personalizaciones")
+}
+
+model ImagenPersonalizada {
+  idImagenPersonalizada Int          @id @default(autoincrement()) @map("id_imagen_personalizada")
+  idPersonalizacion     Int          @map("id_personalizacion")
+  idDisenoPredefinido   Int?         @map("id_diseno_predefinido")
+  urlImagen             String       @map("url_imagen")
+  lado                  LadoProducto
+  xPosicion             Decimal      @db.Decimal(5, 2) @map("x_posicion")
+  yPosicion             Decimal      @db.Decimal(5, 2) @map("y_posicion")
+  anchoPorcentaje       Decimal      @db.Decimal(5, 2) @map("ancho_porcentaje")
+  altoPorcentaje        Decimal      @db.Decimal(5, 2) @map("alto_porcentaje")
+  displayOrder          Int          @default(0) @map("display_order")
+  fechaCreacion         DateTime     @default(now()) @map("fecha_creacion")
+  fechaActualizacion    DateTime     @updatedAt @map("fecha_actualizacion")
+
+  personalizacion Personalizacion @relation(fields: [idPersonalizacion], references: [idPersonalizacion], onDelete: Cascade)
+
+  disenoPredefinido DisenoPredefinido? @relation(fields: [idDisenoPredefinido], references: [idDisenoPredefinido], onDelete: SetNull)
+
+  @@index([idPersonalizacion])
+  @@index([idDisenoPredefinido])
+  @@map("imagenes_personalizadas")
+}
+
+model Carrito {
+  idCarrito          Int      @id @default(autoincrement()) @map("id_carrito")
+  idUsuario          Int      @unique @map("id_usuario")
+  fechaCreacion      DateTime @default(now()) @map("fecha_creacion")
+  fechaActualizacion DateTime @updatedAt @map("fecha_actualizacion")
+
+  usuario Usuario       @relation(fields: [idUsuario], references: [idUsuario], onDelete: Cascade)
+  items   ItemCarrito[]
+
+  @@map("carritos")
+}
+
+model ItemCarrito {
+  idItemCarrito      Int             @id @default(autoincrement()) @map("id_item_carrito")
+  idCarrito          Int             @map("id_carrito")
+  tipoItem           TipoItemCarrito @map("tipo_item")
+  idProductoVariante Int?            @map("id_producto_variante")
+  idCotizacion       Int?            @unique @map("id_cotizacion")
+  cantidad           Int
+  fechaCreacion      DateTime        @default(now()) @map("fecha_creacion")
+  fechaActualizacion DateTime        @updatedAt @map("fecha_actualizacion")
+
+  carrito Carrito @relation(fields: [idCarrito], references: [idCarrito], onDelete: Cascade)
+
+  productoVariante ProductoVariante? @relation(fields: [idProductoVariante], references: [idProductoVariante], onDelete: Restrict)
+
+  cotizacion Cotizacion? @relation(fields: [idCotizacion], references: [idCotizacion], onDelete: Restrict)
+
+  @@index([idCarrito])
+  @@index([idProductoVariante])
+  @@index([idCotizacion])
+  @@index([tipoItem])
+  @@map("items_carrito")
+}
+
+model Pedido {
+  idPedido            Int          @id @default(autoincrement()) @map("id_pedido")
+  idCliente           Int          @map("id_cliente")
+  estado              EstadoPedido @default(REGISTRADO)
+  subtotal            Decimal      @db.Decimal(12, 2)
+  descuentoTotal      Decimal      @default(0) @db.Decimal(12, 2) @map("descuento_total")
+  total               Decimal      @db.Decimal(12, 2)
+  direccionSnapshot   String       @db.Text @map("direccion_snapshot")
+  fechaCreacion       DateTime     @default(now()) @map("fecha_creacion")
+  fechaActualizacion  DateTime     @updatedAt @map("fecha_actualizacion")
+
+  cliente Usuario @relation("PedidoCliente", fields: [idCliente], references: [idUsuario], onDelete: Restrict)
+
+  detalles PedidoDetalle[]
+
+  @@index([idCliente, fechaCreacion])
+  @@index([estado])
+  @@map("pedidos")
+}
+
+model PedidoDetalle {
+  idPedidoDetalle       Int      @id @default(autoincrement()) @map("id_pedido_detalle")
+  idPedido              Int      @map("id_pedido")
+  idProductoVariante    Int      @map("id_producto_variante")
+  idCotizacion          Int?     @unique @map("id_cotizacion")
+  cantidad              Int
+  precioUnitario        Decimal  @db.Decimal(12, 2) @map("precio_unitario")
+  subtotal              Decimal  @db.Decimal(12, 2)
+  nombreProductoSnapshot String  @map("nombre_producto_snapshot")
+  colorSnapshot         String   @map("color_snapshot")
+  tallaSnapshot         Talla    @map("talla_snapshot")
+  fechaCreacion         DateTime @default(now()) @map("fecha_creacion")
+
+  pedido Pedido @relation(fields: [idPedido], references: [idPedido], onDelete: Cascade)
+
+  productoVariante ProductoVariante @relation(fields: [idProductoVariante], references: [idProductoVariante], onDelete: Restrict)
+
+  cotizacion Cotizacion? @relation(fields: [idCotizacion], references: [idCotizacion], onDelete: Restrict)
+
+  @@index([idPedido])
+  @@index([idProductoVariante])
+  @@index([idCotizacion])
+  @@map("pedido_detalles")
+}
+
+model Pago {
+  idPago                Int         @id @default(autoincrement()) @map("id_pago")
+  idPedido              Int         @map("id_pedido")
+  monto                 Decimal     @db.Decimal(12, 2)
+  metodoPago            MetodoPago  @map("metodo_pago")
+  estado                EstadoPago  @default(PENDIENTE)
+  idTransaccionExterna  String?     @unique @map("id_transaccion_externa")
+  referenciaExterna     String?     @map("referencia_externa")
+  gatewayResponse       Json?       @map("gateway_response")
+  fechaPago             DateTime?   @map("fecha_pago")
+  fechaCreacion         DateTime    @default(now()) @map("fecha_creacion")
+  fechaActualizacion    DateTime    @updatedAt @map("fecha_actualizacion")
+
+  @@index([idPedido])
+  @@index([estado])
+  @@map("pagos")
+}
