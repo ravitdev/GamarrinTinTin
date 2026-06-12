@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -65,6 +65,9 @@ import {
   Clock,
   ArrowLeft
 } from "lucide-react"
+import { AdminService } from "@/features/admin/services/admin.service"
+import { UserService, type UserProfile } from "@/features/user/services/user.service"
+import { toast } from "@/hooks/use-toast"
 
 interface Client {
   id: string
@@ -192,8 +195,32 @@ const estadoConfig = {
   cancelado: { label: "Cancelado", color: "bg-red-100 text-red-700", icon: XCircle },
 }
 
+function mapProfileToClient(
+  profile: UserProfile,
+  deactivationRequest = false,
+): Client {
+  return {
+    id: String(profile.idUsuario),
+    name: `${profile.nombres} ${profile.apellidos}`,
+    email: profile.email,
+    phone: profile.telefono,
+    type: profile.tipoDocumento === "RUC" ? "business" : "individual",
+    company: profile.tipoDocumento === "RUC" ? `${profile.nombres} ${profile.apellidos}` : undefined,
+    ruc: profile.tipoDocumento === "RUC" ? profile.numeroDocumento : undefined,
+    totalOrders: 0,
+    totalSpent: 0,
+    lastOrder: profile.fechaRegistro,
+    createdAt: profile.fechaRegistro,
+    status: profile.estado === "ACTIVO" ? "active" : "inactive",
+    hasPendingOrders: profile.puedeDesactivarse === false,
+    deactivationRequest,
+  }
+}
+
 export default function AdminClientsPage() {
-  const [clientsList, setClientsList] = useState(clients)
+  const [clientsList, setClientsList] = useState<Client[]>([])
+  const [isLoadingClients, setIsLoadingClients] = useState(true)
+  const [pendingDeactivationMap, setPendingDeactivationMap] = useState<Record<string, number>>({})
   const [searchTerm, setSearchTerm] = useState("")
   const [typeFilter, setTypeFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -201,6 +228,41 @@ export default function AdminClientsPage() {
   const [viewMode, setViewMode] = useState<"profile" | "orders">("profile")
   const [clientToDeactivate, setClientToDeactivate] = useState<Client | null>(null)
   const [deactivationError, setDeactivationError] = useState<string | null>(null)
+  const [isProcessingDeactivation, setIsProcessingDeactivation] = useState(false)
+
+  useEffect(() => {
+    const loadClients = async () => {
+      setIsLoadingClients(true)
+      try {
+        const [profiles, pendingRequests] = await Promise.all([
+          AdminService.getClients(),
+          AdminService.getPendingDeactivationRequests(),
+        ])
+
+        const pendingMap: Record<string, number> = {}
+        pendingRequests.forEach((request) => {
+          pendingMap[String(request.idUsuario)] = request.idSolicitud
+        })
+        setPendingDeactivationMap(pendingMap)
+
+        setClientsList(
+          profiles.map((profile) =>
+            mapProfileToClient(profile, Boolean(pendingMap[String(profile.idUsuario)])),
+          ),
+        )
+      } catch (error) {
+        toast({
+          title: "Error al cargar clientes",
+          description: error instanceof Error ? error.message : "Intenta nuevamente.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoadingClients(false)
+      }
+    }
+
+    loadClients()
+  }, [])
 
   const filteredClients = clientsList.filter(client => {
     const matchesSearch = 
@@ -229,33 +291,60 @@ export default function AdminClientsPage() {
     setViewMode("profile")
   }
 
-  const handleDeactivateAccount = (client: Client) => {
+  const handleDeactivateAccount = async (client: Client) => {
     setDeactivationError(null)
-    
-    // Check for pending orders
-    const clientOrders = mockOrders[client.id] || []
-    const hasPendingOrders = clientOrders.some(order => 
-      ["pendiente", "confirmado", "en_produccion", "enviado"].includes(order.estado)
-    )
-    
-    if (hasPendingOrders) {
-      setDeactivationError("No se puede desactivar esta cuenta porque tiene pedidos en proceso. Espere a que todos los pedidos sean entregados o cancelados.")
-      setClientToDeactivate(client)
-      return
+
+    try {
+      const validation = await UserService.canDeactivateUser(Number(client.id))
+      if (!validation.puede) {
+        setDeactivationError(
+          validation.motivo ??
+            "No se puede desactivar esta cuenta porque tiene pedidos en proceso.",
+        )
+        setClientToDeactivate(client)
+        return
+      }
+    } catch {
+      if (client.hasPendingOrders) {
+        setDeactivationError(
+          "No se puede desactivar esta cuenta porque tiene pedidos en proceso. Espere a que todos los pedidos sean entregados o cancelados.",
+        )
+        setClientToDeactivate(client)
+        return
+      }
     }
-    
+
     setClientToDeactivate(client)
   }
 
-  const confirmDeactivation = () => {
-    if (clientToDeactivate && !deactivationError) {
-      setClientsList(clientsList.map(c => 
-        c.id === clientToDeactivate.id 
-          ? { ...c, status: "inactive" as const, deactivationRequest: false }
-          : c
-      ))
+  const confirmDeactivation = async () => {
+    if (!clientToDeactivate || deactivationError) return
+
+    setIsProcessingDeactivation(true)
+    try {
+      const idSolicitud = pendingDeactivationMap[clientToDeactivate.id]
+      await AdminService.deactivateUser(Number(clientToDeactivate.id), idSolicitud)
+      setClientsList((prev) =>
+        prev.map((c) =>
+          c.id === clientToDeactivate.id
+            ? { ...c, status: "inactive" as const, deactivationRequest: false }
+            : c,
+        ),
+      )
       setClientToDeactivate(null)
       setSelectedClient(null)
+      toast({
+        title: "Cuenta desactivada",
+        description: "La cuenta del cliente fue desactivada correctamente.",
+      })
+    } catch (error) {
+      toast({
+        title: "No se pudo desactivar",
+        description: error instanceof Error ? error.message : "Intenta nuevamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessingDeactivation(false)
     }
   }
 

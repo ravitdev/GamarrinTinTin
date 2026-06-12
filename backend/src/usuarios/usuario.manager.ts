@@ -1,10 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { ActualizarPerfilDto, CambiarContrasenaDto, UsuarioPerfilDto } from './dto/perfil.dto';
 import type { IniciarSesionDto } from './dto/iniciar-sesion.dto';
 import type { RefreshTokenDto } from './dto/refresh-token.dto';
 import type { RegistrarClienteDto } from './dto/registrar-cliente.dto';
 import type { RegistrarVendedorDto } from './dto/registrar-vendedor.dto';
 import type { SesionDto } from './dto/sesion.dto';
-import { TipoDocumento, Usuario } from './domain/usuario.entity';
+import type { SolicitarCambioDocumentoDto, SolicitudCambioDocumentoDto } from './dto/solicitud-cambio-documento.dto';
+import type { SolicitudDesactivacionDto } from './dto/solicitud-desactivacion.dto';
+import { SolicitudCambioDocumento, SolicitudDesactivacion } from './domain/solicitud.entity';
+import { RolUsuario, TipoDocumento, Usuario } from './domain/usuario.entity';
 import type { IUsuarioRepository } from './iusuario.repository';
 import { ContrasenaService } from './seguridad/contrasena.service';
 import { JwtService } from './seguridad/jwt.service';
@@ -110,27 +114,346 @@ export class UsuarioManager {
   async modificarDatosCliente(
     idUsuario: number,
     datos: Partial<Usuario>,
+    permitirCambioDocumento = false,
   ): Promise<boolean> {
-    return this.modificarDatosUsuario(idUsuario, datos, 'CLIENTE');
+    return this.modificarDatosUsuario(idUsuario, datos, 'CLIENTE', permitirCambioDocumento);
   }
 
   async modificarDatosVendedor(
     idUsuario: number,
     datos: Partial<Usuario>,
+    permitirCambioDocumento = false,
   ): Promise<boolean> {
-    return this.modificarDatosUsuario(idUsuario, datos, 'VENDEDOR');
+    return this.modificarDatosUsuario(idUsuario, datos, 'VENDEDOR', permitirCambioDocumento);
   }
 
   async modificarDatosAdmin(
     idUsuario: number,
     datos: Partial<Usuario>,
   ): Promise<boolean> {
-    return this.modificarDatosUsuario(idUsuario, datos, 'ADMINISTRADOR');
+    return this.modificarDatosUsuario(idUsuario, datos, 'ADMINISTRADOR', false);
   }
 
-  async desactivarCuenta(idUsuario: number): Promise<boolean> {
-    this.validarId(idUsuario, 'El usuario no es válido.');
-    return this.usuarioRepository.desactivar(idUsuario);
+  async obtenerPerfil(idUsuario: number): Promise<UsuarioPerfilDto> {
+    const usuario = await this.obtenerUsuario(idUsuario);
+    if (!usuario) {
+      throw new Error('El usuario no existe.');
+    }
+
+    const validacion = await this.validarPuedeDesactivarse(idUsuario);
+    const solicitudDocumento =
+      await this.usuarioRepository.buscarSolicitudCambioDocumentoPendiente(idUsuario);
+    const solicitudDesactivacion =
+      await this.usuarioRepository.buscarSolicitudDesactivacionPendiente(idUsuario);
+
+    return UsuarioMapper.aPerfilDto(usuario, {
+      solicitudCambioDocumentoPendiente: solicitudDocumento !== null,
+      solicitudDesactivacionPendiente: solicitudDesactivacion !== null,
+      puedeDesactivarse: validacion.puede,
+      motivoNoDesactivacion: validacion.motivo,
+    });
+  }
+
+  async actualizarPerfil(
+    idSolicitante: number,
+    rolSolicitante: RolUsuario,
+    idObjetivo: number,
+    datos: ActualizarPerfilDto,
+  ): Promise<Usuario> {
+    this.validarAutorizacionEdicion(idSolicitante, rolSolicitante, idObjetivo);
+
+    const usuario = await this.usuarioRepository.buscarPorId(idObjetivo);
+    if (!usuario) {
+      throw new Error('El usuario no existe.');
+    }
+
+    const esAdminEditando = rolSolicitante === 'ADMINISTRADOR' && idSolicitante !== idObjetivo;
+    const cambioDocumentoSolicitado =
+      (datos.tipoDocumento !== undefined &&
+        datos.tipoDocumento !== usuario.tipoDocumento) ||
+      (datos.numeroDocumento !== undefined &&
+        this.normalizarTexto(datos.numeroDocumento) !== usuario.numeroDocumento);
+
+    if (cambioDocumentoSolicitado && !esAdminEditando) {
+      throw new Error(
+        'Para modificar el documento debe solicitar el cambio y esperar la aprobación de un administrador.',
+      );
+    }
+
+    const actualizado = await this.modificarDatosUsuario(
+      idObjetivo,
+      {
+        nombres: datos.nombres,
+        apellidos: datos.apellidos,
+        email: datos.email,
+        telefono: datos.telefono,
+        direccion: datos.direccion,
+        tipoDocumento: datos.tipoDocumento,
+        numeroDocumento: datos.numeroDocumento,
+      },
+      usuario.rol,
+      esAdminEditando,
+    );
+
+    if (!actualizado) {
+      throw new Error('No fue posible actualizar el perfil.');
+    }
+
+    const usuarioActualizado = await this.usuarioRepository.buscarPorId(idObjetivo);
+    if (!usuarioActualizado) {
+      throw new Error('El usuario no existe.');
+    }
+
+    return usuarioActualizado;
+  }
+
+  async cambiarContrasena(
+    idUsuario: number,
+    datos: CambiarContrasenaDto,
+  ): Promise<boolean> {
+    const usuario = await this.usuarioRepository.buscarPorId(idUsuario);
+    if (!usuario) {
+      throw new Error('El usuario no existe.');
+    }
+
+    if (
+      !this.contrasenaService.verificar(
+        datos.contrasenaActual,
+        usuario.contrasenaHash,
+      )
+    ) {
+      throw new Error('La contraseña actual no es correcta.');
+    }
+
+    this.validarContrasena(datos.contrasenaNueva);
+
+    return this.modificarDatosUsuario(
+      idUsuario,
+      { contrasenaHash: this.contrasenaService.generarHash(datos.contrasenaNueva) },
+      usuario.rol,
+      false,
+    );
+  }
+
+  async solicitarCambioDocumento(
+    idUsuario: number,
+    datos: SolicitarCambioDocumentoDto,
+  ): Promise<SolicitudCambioDocumentoDto> {
+    const usuario = await this.usuarioRepository.buscarPorId(idUsuario);
+    if (!usuario) {
+      throw new Error('El usuario no existe.');
+    }
+
+    if (usuario.rol === 'ADMINISTRADOR') {
+      throw new Error('Los administradores no pueden solicitar cambio de documento.');
+    }
+
+    const tipoDocumento = datos.tipoDocumento;
+    const numeroDocumento = this.normalizarTexto(datos.numeroDocumento);
+    this.validarDocumento(tipoDocumento, numeroDocumento);
+
+    if (
+      tipoDocumento === usuario.tipoDocumento &&
+      numeroDocumento === usuario.numeroDocumento
+    ) {
+      throw new Error('El nuevo documento debe ser diferente al actual.');
+    }
+
+    if (await this.usuarioRepository.existePorDocumento(numeroDocumento)) {
+      throw new Error('El número de documento ya está en uso.');
+    }
+
+    const pendiente =
+      await this.usuarioRepository.buscarSolicitudCambioDocumentoPendiente(idUsuario);
+    if (pendiente) {
+      throw new Error('Ya existe una solicitud de cambio de documento pendiente.');
+    }
+
+    const solicitud = await this.usuarioRepository.crearSolicitudCambioDocumento(
+      new SolicitudCambioDocumento(
+        0,
+        idUsuario,
+        tipoDocumento,
+        numeroDocumento,
+        'PENDIENTE',
+        new Date(),
+      ),
+    );
+
+    return UsuarioMapper.aSolicitudCambioDocumentoDto(solicitud, usuario);
+  }
+
+  async aprobarSolicitudCambioDocumento(
+    idSolicitud: number,
+    idAdmin: number,
+  ): Promise<Usuario> {
+    const solicitudes =
+      await this.usuarioRepository.listarSolicitudesCambioDocumentoPendientes();
+    const solicitudConUsuario = solicitudes.find((s) => s.idSolicitud === idSolicitud);
+
+    if (!solicitudConUsuario) {
+      throw new Error('La solicitud de cambio de documento no existe o ya fue procesada.');
+    }
+
+    const { usuario } = solicitudConUsuario;
+
+    if (
+      await this.usuarioRepository.existePorDocumento(
+        solicitudConUsuario.numeroDocumento,
+      )
+    ) {
+      throw new Error('El número de documento ya está en uso.');
+    }
+
+    await this.modificarDatosUsuario(
+      usuario.idUsuario,
+      {
+        tipoDocumento: solicitudConUsuario.tipoDocumento,
+        numeroDocumento: solicitudConUsuario.numeroDocumento,
+      },
+      usuario.rol,
+      true,
+    );
+
+    await this.usuarioRepository.resolverSolicitudCambioDocumento(
+      idSolicitud,
+      'APROBADA',
+      idAdmin,
+    );
+
+    const actualizado = await this.usuarioRepository.buscarPorId(usuario.idUsuario);
+    if (!actualizado) {
+      throw new Error('El usuario no existe.');
+    }
+
+    return actualizado;
+  }
+
+  async listarSolicitudesCambioDocumentoPendientes(): Promise<SolicitudCambioDocumentoDto[]> {
+    const solicitudes =
+      await this.usuarioRepository.listarSolicitudesCambioDocumentoPendientes();
+
+    return solicitudes.map((solicitud) =>
+      UsuarioMapper.aSolicitudCambioDocumentoDto(solicitud, solicitud.usuario),
+    );
+  }
+
+  async solicitarDesactivacion(idUsuario: number): Promise<SolicitudDesactivacionDto> {
+    const usuario = await this.usuarioRepository.buscarPorId(idUsuario);
+    if (!usuario) {
+      throw new Error('El usuario no existe.');
+    }
+
+    if (!usuario.estaActivo()) {
+      throw new Error('La cuenta ya se encuentra inactiva.');
+    }
+
+    const pendiente =
+      await this.usuarioRepository.buscarSolicitudDesactivacionPendiente(idUsuario);
+    if (pendiente) {
+      throw new Error('Ya existe una solicitud de desactivación pendiente.');
+    }
+
+    const validacion = await this.validarPuedeDesactivarse(idUsuario);
+    if (!validacion.puede) {
+      throw new Error(validacion.motivo ?? 'La cuenta no puede ser desactivada.');
+    }
+
+    const solicitud = await this.usuarioRepository.crearSolicitudDesactivacion(
+      new SolicitudDesactivacion(0, idUsuario, 'PENDIENTE', new Date()),
+    );
+
+    return UsuarioMapper.aSolicitudDesactivacionDto(
+      solicitud,
+      usuario,
+      validacion.puede,
+      validacion.motivo,
+    );
+  }
+
+  async listarSolicitudesDesactivacionPendientes(): Promise<SolicitudDesactivacionDto[]> {
+    const solicitudes =
+      await this.usuarioRepository.listarSolicitudesDesactivacionPendientes();
+
+    return Promise.all(
+      solicitudes.map(async (solicitud) => {
+        const validacion = await this.validarPuedeDesactivarse(solicitud.usuario.idUsuario);
+        return UsuarioMapper.aSolicitudDesactivacionDto(
+          solicitud,
+          solicitud.usuario,
+          validacion.puede,
+          validacion.motivo,
+        );
+      }),
+    );
+  }
+
+  async procesarDesactivacionCuenta(
+    idUsuario: number,
+    idAdmin: number,
+    idSolicitud?: number,
+  ): Promise<boolean> {
+    const usuario = await this.usuarioRepository.buscarPorId(idUsuario);
+    if (!usuario) {
+      throw new Error('El usuario no existe.');
+    }
+
+    if (!usuario.estaActivo()) {
+      throw new Error('La cuenta ya se encuentra inactiva.');
+    }
+
+    const validacion = await this.validarPuedeDesactivarse(idUsuario);
+    if (!validacion.puede) {
+      throw new Error(validacion.motivo ?? 'La cuenta no puede ser desactivada.');
+    }
+
+    const desactivado = await this.usuarioRepository.desactivar(idUsuario);
+    if (!desactivado) {
+      throw new Error('No fue posible desactivar la cuenta.');
+    }
+
+    await this.usuarioRepository.revocarRefreshToken(idUsuario);
+
+    if (idSolicitud) {
+      await this.usuarioRepository.resolverSolicitudDesactivacion(
+        idSolicitud,
+        'PROCESADA',
+        idAdmin,
+      );
+    }
+
+    return true;
+  }
+
+  async validarPuedeDesactivarse(
+    idUsuario: number,
+  ): Promise<{ puede: boolean; motivo?: string }> {
+    const usuario = await this.usuarioRepository.buscarPorId(idUsuario);
+    if (!usuario) {
+      return { puede: false, motivo: 'El usuario no existe.' };
+    }
+
+    if (!usuario.estaActivo()) {
+      return { puede: false, motivo: 'La cuenta ya se encuentra inactiva.' };
+    }
+
+    if (usuario.rol === 'CLIENTE') {
+      const pedidosEnProceso =
+        await this.usuarioRepository.contarPedidosEnProceso(idUsuario);
+      if (pedidosEnProceso > 0) {
+        return {
+          puede: false,
+          motivo:
+            'La cuenta tiene pedidos en proceso. Debe esperar a que se entreguen o cancelen.',
+        };
+      }
+    }
+
+    return { puede: true };
+  }
+
+  async listarUsuariosPorRol(rol: RolUsuario): Promise<Usuario[]> {
+    return this.usuarioRepository.listarPorRol(rol);
   }
 
   async recuperarContrasena(email: string): Promise<boolean> {
@@ -245,6 +568,7 @@ export class UsuarioManager {
     idUsuario: number,
     datos: Partial<Usuario>,
     rol: Usuario['rol'],
+    permitirCambioDocumento = false,
   ): Promise<boolean> {
     this.validarId(idUsuario, 'El usuario no es válido.');
 
@@ -259,6 +583,16 @@ export class UsuarioManager {
     const numeroDocumento = this.normalizarTexto(
       datos.numeroDocumento ?? usuario.numeroDocumento,
     );
+
+    const cambioDocumento =
+      tipoDocumento !== usuario.tipoDocumento ||
+      numeroDocumento !== usuario.numeroDocumento;
+
+    if (cambioDocumento && !permitirCambioDocumento) {
+      throw new Error(
+        'Para modificar el documento debe solicitar el cambio y esperar la aprobación de un administrador.',
+      );
+    }
 
     if (
       email !== usuario.email &&
@@ -291,6 +625,20 @@ export class UsuarioManager {
 
     this.validarDatosRegistro(usuarioActualizado);
     return this.usuarioRepository.actualizar(usuarioActualizado);
+  }
+
+  private validarAutorizacionEdicion(
+    idSolicitante: number,
+    rolSolicitante: RolUsuario,
+    idObjetivo: number,
+  ): void {
+    if (idSolicitante === idObjetivo) {
+      return;
+    }
+
+    if (rolSolicitante !== 'ADMINISTRADOR') {
+      throw new Error('No tiene permisos para modificar este usuario.');
+    }
   }
 
   private validarId(id: number, mensaje: string): void {

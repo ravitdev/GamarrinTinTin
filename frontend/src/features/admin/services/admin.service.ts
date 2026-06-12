@@ -1,6 +1,13 @@
 import { ApiClient } from '@/lib/api-client';
 import { mapBackendProductToFrontend } from '@/lib/product-adapter';
-import type { Producto } from '@/lib/types';
+import type { Producto, RolUsuario } from '@/lib/types';
+import {
+  UserService,
+  type DeactivationRequest,
+  type DocumentChangeRequest,
+  type UpdateProfilePayload,
+  type UserProfile,
+} from '@/features/user/services/user.service';
 
 export interface AdminStats {
   monthlySales: string;
@@ -114,8 +121,32 @@ export class AdminService {
     return ApiClient.delete(`/productos/${id}`);
   }
 
-  static async getClients() {
-    return ApiClient.get('/admin/clients');
+  static async getClients(): Promise<UserProfile[]> {
+    return UserService.listUsersByRole('CLIENTE' as RolUsuario);
+  }
+
+  static async getVendedores(): Promise<UserProfile[]> {
+    return UserService.listUsersByRole('VENDEDOR' as RolUsuario);
+  }
+
+  static async updateUser(id: number, data: UpdateProfilePayload): Promise<UserProfile> {
+    return UserService.updateUserById(id, data);
+  }
+
+  static async deactivateUser(id: number, idSolicitud?: number): Promise<void> {
+    return UserService.deactivateUser(id, idSolicitud);
+  }
+
+  static async getPendingDocumentRequests(): Promise<DocumentChangeRequest[]> {
+    return UserService.listPendingDocumentRequests();
+  }
+
+  static async approveDocumentRequest(idSolicitud: number): Promise<UserProfile> {
+    return UserService.approveDocumentRequest(idSolicitud);
+  }
+
+  static async getPendingDeactivationRequests(): Promise<DeactivationRequest[]> {
+    return UserService.listPendingDeactivationRequests();
   }
 
   static async respondToQuotation(quotationId: string, approved: boolean, price?: number) {
