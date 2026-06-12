@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -29,7 +29,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -48,12 +47,21 @@ import {
   X,
   Percent
 } from "lucide-react"
-import { products as initialProducts, formatPrice, categorias } from "@/lib/mock-data"
+import { formatPrice, categorias } from "@/lib/mock-data"
 import type { Producto, DescuentoVolumen } from "@/lib/types"
+import { AdminService, type CreateProductPayload } from "@/features/admin/services/admin.service"
 import { Talla } from "@/lib/types"
 
 // Helper to calculate total stock for a product
 function getTotalStock(product: Producto): number {
+  const variantes = (product as any).variantes || []
+
+  if (variantes.length > 0) {
+    return variantes.reduce((total: number, variante: any) => {
+      return total + (Number(variante.stock) || 0)
+    }, 0)
+  }
+
   return product.stock || 0
 }
 
@@ -98,7 +106,8 @@ const defaultFormData: ProductFormData = {
 const availableSizes: Talla[] = [Talla.S, Talla.M, Talla.L, Talla.XL]
 
 export default function VendedorProductsPage() {
-  const [products, setProducts] = useState(initialProducts)
+  const [products, setProducts] = useState<Producto[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
@@ -106,6 +115,22 @@ export default function VendedorProductsPage() {
   const [selectedProduct, setSelectedProduct] = useState<Producto | null>(null)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [formData, setFormData] = useState<ProductFormData>(defaultFormData)
+
+  useEffect(() => {
+    async function loadProducts() {
+      try {
+        setIsLoading(true)
+        const data = await AdminService.getProducts()
+        setProducts(data)
+      } catch (error) {
+        console.error("Error al cargar productos del vendedor:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadProducts()
+  }, [])
 
   const filteredProducts = products.filter(product => {
     const matchesSearch = 
@@ -115,7 +140,7 @@ export default function VendedorProductsPage() {
   })
 
   const totalProducts = products.length
-  const activeProducts = products.filter(p => p.estado === 'ACTIVO').length
+  const activeProducts = products.filter(p => p.estado === 'activo').length
   const lowStockProducts = products.filter(p => isLowStock(p)).length
 
   const handleToggleSize = (size: Talla) => {
@@ -155,25 +180,79 @@ export default function VendedorProductsPage() {
     }))
   }
 
-  const handleSaveProduct = () => {
-    if (selectedProduct && isEditDialogOpen) {
-      setProducts(products.map(p => 
-        p.idProducto === selectedProduct.idProducto 
-          ? {
-              ...p,
-              nombre: formData.nombre,
-              descripcion: formData.descripcion,
-              precioBase: formData.precioBase,
-              esPersonalizable: formData.esPersonalizable,
-              tallas: formData.tallas,
-              descuentosVolumen: formData.descuentosVolumen,
-            }
-          : p
-      ))
-      setIsEditDialogOpen(false)
+  const buildCreateProductPayload = (values: ProductFormData): CreateProductPayload => ({
+    idCategoria: values.categoria === "polera" ? 2 : 1,
+    nombre: values.nombre,
+    descripcion: values.descripcion,
+    precioBase: values.precioBase || values.precio || 0,
+    esPersonalizable: values.tipoDiseno === "personalizable" || values.esPersonalizable,
+    variantes: values.tallas.length
+      ? values.tallas.map((talla, index) => ({
+          colorNombre: `Color ${index + 1}`,
+          colorHex: "#000000",
+          talla,
+          stock: 50,
+        }))
+      : [
+          {
+            colorNombre: "Negro",
+            colorHex: "#000000",
+            talla: Talla.M,
+            stock: 50,
+          },
+        ],
+    imagenes: [
+      {
+        colorHex: "#000000",
+        lado: "FRONT",
+        urlImagen: "/placeholder.svg",
+        displayOrder: 0,
+      },
+    ],
+    descuentosVolumen: values.descuentosVolumen.map((discount) => ({
+      cantidadMinima: discount.cantidadMinima,
+      porcentajeDescuento: discount.porcentajeDescuento,
+    })),
+  })
+
+  const handleSaveProduct = async () => {
+    try {
+      if (selectedProduct && isEditDialogOpen) {
+        const updatedProduct = await AdminService.updateProduct(
+          String(selectedProduct.idProducto),
+          {
+            idCategoria: formData.categoria === "polera" ? 2 : 1,
+            nombre: formData.nombre,
+            descripcion: formData.descripcion,
+            precioBase: formData.precioBase || formData.precio || 0,
+            esPersonalizable:
+              formData.tipoDiseno === "personalizable" || formData.esPersonalizable,
+          }
+        )
+
+        setProducts((prevProducts) =>
+          prevProducts.map((product) =>
+            product.idProducto === selectedProduct.idProducto
+              ? updatedProduct
+              : product
+          )
+        )
+
+        setIsEditDialogOpen(false)
+      } else {
+        const newProduct = await AdminService.createProduct(
+          buildCreateProductPayload(formData)
+        )
+
+        setProducts((prevProducts) => [newProduct, ...prevProducts])
+        setIsAddDialogOpen(false)
+      }
+
+      setFormData(defaultFormData)
+      setSelectedProduct(null)
+    } catch (error) {
+      console.error("Error al guardar producto del vendedor:", error)
     }
-    setFormData(defaultFormData)
-    setSelectedProduct(null)
   }
 
   const handleOpenEdit = (product: Producto) => {
@@ -184,7 +263,11 @@ export default function VendedorProductsPage() {
       precioBase: product.precioBase,
       esPersonalizable: product.esPersonalizable,
       tallas: (product.tallas || []).map(t => t as Talla),
-      descuentosVolumen: product.descuentosVolumen || []
+      descuentosVolumen: product.descuentosVolumen || [],
+      categoria: product.categoria?.nombre?.toLowerCase() === "poleras" ? "polera" : "polo",
+      precio: product.precioBase,
+      tipoDiseno: product.esPersonalizable ? "personalizable" : "predefinido",
+      estado: "activo",
     })
     setIsEditDialogOpen(true)
   }
@@ -193,6 +276,18 @@ export default function VendedorProductsPage() {
     setFormData(defaultFormData)
     setSelectedProduct(null)
     setIsAddDialogOpen(true)
+  }
+
+  const handleDeleteProduct = async (product: Producto) => {
+    try {
+      await AdminService.deleteProduct(String(product.idProducto))
+
+      setProducts((prevProducts) =>
+        prevProducts.filter((p) => p.idProducto !== product.idProducto)
+      )
+    } catch (error) {
+      console.error("Error al eliminar producto del vendedor:", error)
+    }
   }
 
   // Reusable form component for both add and edit
@@ -578,7 +673,10 @@ export default function VendedorProductsPage() {
                               Editar
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive">
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => handleDeleteProduct(product)}
+                            >
                               <Trash2 className="w-4 h-4 mr-2" />
                               Eliminar
                             </DropdownMenuItem>
@@ -592,12 +690,16 @@ export default function VendedorProductsPage() {
             </Table>
           </div>
 
-          {filteredProducts.length === 0 && (
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground text-center py-8">
+              Cargando productos...
+            </p>
+          ) : filteredProducts.length === 0 ? (
             <div className="text-center py-12">
               <Package className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
               <p className="text-muted-foreground">No se encontraron productos</p>
             </div>
-          )}
+          ) : null}
         </CardContent>
       </Card>
 
@@ -615,7 +717,10 @@ export default function VendedorProductsPage() {
             <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSaveProduct} disabled={!formData.nombre || !formData.precioBase}>
+            <Button
+              onClick={handleSaveProduct}
+              disabled={!formData.nombre || !(formData.precioBase || formData.precio)}
+            >
               Guardar Producto
             </Button>
           </DialogFooter>
@@ -636,7 +741,10 @@ export default function VendedorProductsPage() {
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSaveProduct} disabled={!formData.nombre || !formData.precioBase}>
+            <Button
+              onClick={handleSaveProduct}
+              disabled={!formData.nombre || !(formData.precioBase || formData.precio)}
+            >
               Guardar Cambios
             </Button>
           </DialogFooter>
