@@ -144,16 +144,6 @@ export function CheckoutScreen() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="district">Distrito</Label>
-                  <Input
-                    id="district"
-                    name="district"
-                    value={formData.district}
-                    onChange={handleChange}
-                    placeholder="San Isidro"
-                  />
-                </div>
-                <div>
                   <Label htmlFor="zipCode">Código postal</Label>
                   <Input
                     id="zipCode"

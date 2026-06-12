@@ -33,6 +33,15 @@ enum EstadoUsuario {
   @@map("estado_usuario")
 }
 
+enum EstadoSolicitud {
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+  PROCESADA
+
+  @@map("estado_solicitud")
+}
+
 enum LadoProducto {
   FRONT
   BACK
@@ -122,9 +131,41 @@ model Usuario {
   cotizacionesCliente        Cotizacion[]          @relation("CotizacionCliente")
   cotizacionesAtendidas      Cotizacion[]          @relation("CotizacionAtendidoPor")
   disenosPredefinidosCreados DisenoPredefinido[]   @relation("DisenoPredefinidoCreadoPor")
+  solicitudesCambioDocumento SolicitudCambioDocumento[]
+  solicitudesDesactivacion   SolicitudDesactivacion[]
 
   @@index([rol, estado])
   @@map("usuarios")
+}
+
+model SolicitudCambioDocumento {
+  idSolicitud      Int             @id @default(autoincrement()) @map("id_solicitud")
+  idUsuario        Int             @map("id_usuario")
+  tipoDocumento    TipoDocumento   @map("tipo_documento")
+  numeroDocumento  String          @map("numero_documento")
+  estado           EstadoSolicitud @default(PENDIENTE)
+  fechaSolicitud   DateTime        @default(now()) @map("fecha_solicitud")
+  fechaResolucion  DateTime?       @map("fecha_resolucion")
+  idAdminResolvio  Int?            @map("id_admin_resolvio")
+
+  usuario Usuario @relation(fields: [idUsuario], references: [idUsuario], onDelete: Cascade)
+
+  @@index([idUsuario, estado])
+  @@map("solicitudes_cambio_documento")
+}
+
+model SolicitudDesactivacion {
+  idSolicitud     Int             @id @default(autoincrement()) @map("id_solicitud")
+  idUsuario       Int             @map("id_usuario")
+  estado          EstadoSolicitud @default(PENDIENTE)
+  fechaSolicitud  DateTime        @default(now()) @map("fecha_solicitud")
+  fechaResolucion DateTime?       @map("fecha_resolucion")
+  idAdminResolvio Int?            @map("id_admin_resolvio")
+
+  usuario Usuario @relation(fields: [idUsuario], references: [idUsuario], onDelete: Cascade)
+
+  @@index([idUsuario, estado])
+  @@map("solicitudes_desactivacion")
 }
 
 model RefreshToken {

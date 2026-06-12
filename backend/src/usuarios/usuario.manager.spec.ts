@@ -1,4 +1,8 @@
-import { Usuario } from './domain/usuario.entity';
+import { Usuario, RolUsuario } from './domain/usuario.entity';
+import {
+  SolicitudCambioDocumento,
+  SolicitudDesactivacion,
+} from './domain/solicitud.entity';
 import { IUsuarioRepository } from './iusuario.repository';
 import { ContrasenaService } from './seguridad/contrasena.service';
 import { JwtService } from './seguridad/jwt.service';
@@ -113,6 +117,90 @@ class UsuarioRepositoryFake implements IUsuarioRepository {
 
   async listarUsuarios(): Promise<Usuario[]> {
     return [...this.usuarios];
+  }
+
+  async listarPorRol(rol: RolUsuario): Promise<Usuario[]> {
+    return this.usuarios.filter((usuario) => usuario.rol === rol);
+  }
+
+  async contarPedidosEnProceso(_idCliente: number): Promise<number> {
+    return 0;
+  }
+
+  async crearSolicitudCambioDocumento(
+    solicitud: SolicitudCambioDocumento,
+  ): Promise<SolicitudCambioDocumento> {
+    return new SolicitudCambioDocumento(
+      1,
+      solicitud.idUsuario,
+      solicitud.tipoDocumento,
+      solicitud.numeroDocumento,
+      solicitud.estado,
+      solicitud.fechaSolicitud,
+    );
+  }
+
+  async buscarSolicitudCambioDocumentoPendiente(): Promise<SolicitudCambioDocumento | null> {
+    return null;
+  }
+
+  async listarSolicitudesCambioDocumentoPendientes(): Promise<
+    Array<SolicitudCambioDocumento & { usuario: Usuario }>
+  > {
+    return [];
+  }
+
+  async resolverSolicitudCambioDocumento(
+    idSolicitud: number,
+    estado: 'APROBADA' | 'RECHAZADA',
+    idAdmin: number,
+  ): Promise<SolicitudCambioDocumento | null> {
+    return new SolicitudCambioDocumento(
+      idSolicitud,
+      1,
+      'DNI',
+      '70000002',
+      estado,
+      new Date(),
+      new Date(),
+      idAdmin,
+    );
+  }
+
+  async crearSolicitudDesactivacion(
+    solicitud: SolicitudDesactivacion,
+  ): Promise<SolicitudDesactivacion> {
+    return new SolicitudDesactivacion(
+      1,
+      solicitud.idUsuario,
+      solicitud.estado,
+      solicitud.fechaSolicitud,
+    );
+  }
+
+  async buscarSolicitudDesactivacionPendiente(): Promise<SolicitudDesactivacion | null> {
+    return null;
+  }
+
+  async listarSolicitudesDesactivacionPendientes(): Promise<
+    Array<SolicitudDesactivacion & { usuario: Usuario }>
+  > {
+    return [];
+  }
+
+  async resolverSolicitudDesactivacion(
+    idSolicitud: number,
+    estado: 'PROCESADA' | 'RECHAZADA',
+    idAdmin: number,
+  ): Promise<SolicitudDesactivacion | null> {
+    return new SolicitudDesactivacion(
+      idSolicitud,
+      1,
+      estado,
+      new Date(),
+      new Date(),
+      idAdmin,
+    );
   }
 
   async guardarRefreshToken(

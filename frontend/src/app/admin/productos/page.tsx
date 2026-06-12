@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -48,13 +48,21 @@ import {
   X,
   Percent
 } from "lucide-react"
-import { products as initialProducts, formatPrice, categorias } from "@/lib/mock-data"
-import { ProductService } from "@/features/product/services/product.service"
+import { formatPrice, categorias } from "@/lib/mock-data"
+import { AdminService, type CreateProductPayload } from "@/features/admin/services/admin.service"
 import type { Producto, DescuentoVolumen } from "@/lib/types"
 import { Talla } from "@/lib/types"
 
 // Helper to calculate total stock for a product
 function getTotalStock(product: Producto): number {
+  const variantes = (product as any).variantes || []
+
+  if (variantes.length > 0) {
+    return variantes.reduce((total: number, variante: any) => {
+      return total + (Number(variante.stock) || 0)
+    }, 0)
+  }
+
   return product.stock || 0
 }
 
@@ -70,6 +78,7 @@ function getOutOfStockVariants(product: Producto): string[] {
 }
 
 interface ProductFormData {
+  idCategoria: number
   nombre: string
   descripcion: string
   precioBase: number
@@ -79,6 +88,7 @@ interface ProductFormData {
 }
 
 const defaultFormData: ProductFormData = {
+  idCategoria: categorias[0]?.idCategoria ?? 1,
   nombre: "",
   descripcion: "",
   precioBase: 0,
@@ -90,13 +100,31 @@ const defaultFormData: ProductFormData = {
 const availableSizes: Talla[] = [Talla.S, Talla.M, Talla.L, Talla.XL]
 
 export default function AdminProductsPage() {
-  const [products, setProducts] = useState(initialProducts)
+  const [products, setProducts] = useState<Producto[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Producto | null>(null)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [formData, setFormData] = useState<ProductFormData>(defaultFormData)
+  const [loadingProducts, setLoadingProducts] = useState(false)
+  const [isSavingProduct, setIsSavingProduct] = useState(false)
+
+  useEffect(() => {
+    const loadProducts = async () => {
+      setLoadingProducts(true)
+      try {
+        const backendProducts = await AdminService.getProducts()
+        setProducts(backendProducts)
+      } catch (error) {
+        console.error('Error al cargar productos:', error)
+      } finally {
+        setLoadingProducts(false)
+      }
+    }
+
+    loadProducts()
+  }, [])
 
   const filteredProducts = products.filter(product => {
     const matchesSearch = 
@@ -105,7 +133,7 @@ export default function AdminProductsPage() {
   })
 
   const totalProducts = products.length
-  const activeProducts = products.filter(p => p.estado === 'ACTIVO').length
+  const activeProducts = products.filter(p => p.esActivo === true || p.estado === 'ACTIVO').length
   const lowStockProducts = products.filter(p => isLowStock(p)).length
 
   const handleToggleSize = (size: Talla) => {
@@ -145,35 +173,94 @@ export default function AdminProductsPage() {
     }))
   }
 
-  const handleSaveProduct = () => {
-    // For edit mode
+  const buildCreateProductPayload = (values: ProductFormData): CreateProductPayload => ({
+    idCategoria: values.idCategoria,
+    nombre: values.nombre,
+    descripcion: values.descripcion,
+    precioBase: values.precioBase,
+    esPersonalizable: values.esPersonalizable,
+    variantes: values.tallas.length
+      ? values.tallas.map((talla, index) => ({
+          colorNombre: `Color ${index + 1}`,
+          colorHex: '#000000',
+          talla,
+          stock: 50,
+        }))
+      : [
+          {
+            colorNombre: 'Negro',
+            colorHex: '#000000',
+            talla: Talla.M,
+            stock: 50,
+          },
+        ],
+    imagenes: [
+      {
+        colorHex: '#000000',
+        lado: 'FRONT',
+        urlImagen: '/placeholder.svg',
+        displayOrder: 0,
+      },
+    ],
+    descuentosVolumen: values.descuentosVolumen.map((discount) => ({
+      cantidadMinima: discount.cantidadMinima,
+      porcentajeDescuento: discount.porcentajeDescuento,
+    })),
+  })
+
+  const handleSaveProduct = async () => {
     if (selectedProduct && isEditDialogOpen) {
-      setProducts(products.map(p => 
-        p.idProducto === selectedProduct.idProducto 
-          ? {
-              ...p,
-              nombre: formData.nombre,
-              descripcion: formData.descripcion,
-              precioBase: formData.precioBase,
-              esPersonalizable: formData.esPersonalizable,
-              tallas: formData.tallas,
-              descuentosVolumen: formData.descuentosVolumen,
-            }
-          : p
-      ))
-      setIsEditDialogOpen(false)
+      try {
+        setIsSavingProduct(true)
+
+        const updatedProduct = await AdminService.updateProduct(
+          String(selectedProduct.idProducto),
+          {
+            idCategoria: formData.idCategoria,
+            nombre: formData.nombre,
+            descripcion: formData.descripcion,
+            precioBase: formData.precioBase,
+            esPersonalizable: formData.esPersonalizable,
+          },
+        )
+
+        setProducts((prevProducts) =>
+          prevProducts.map((product) =>
+            product.idProducto === selectedProduct.idProducto ? updatedProduct : product,
+          ),
+        )
+      } catch (error: any) {
+        console.error('Error al actualizar el producto:', error)
+        console.error('Status:', error?.status)
+        console.error('Body:', error?.body)
+        console.error('Message:', error?.message)
+      } finally {
+        setIsSavingProduct(false)
+        setIsEditDialogOpen(false)
+        setSelectedProduct(null)
+        setFormData(defaultFormData)
+      }
     } else {
-      // For add mode
-      console.log("Creating product:", formData)
-      setIsAddDialogOpen(false)
+      try {
+        setIsSavingProduct(true)
+        const payload = buildCreateProductPayload(formData)
+        const createdProduct = await AdminService.createProduct(payload)
+        setProducts((prevProducts) => [createdProduct, ...prevProducts])
+        setIsAddDialogOpen(false)
+      } catch (error) {
+        console.error('Error al crear el producto:', error)
+      } finally {
+        setIsSavingProduct(false)
+        setSelectedProduct(null)
+        setFormData(defaultFormData)
+      }
     }
-    setFormData(defaultFormData)
-    setSelectedProduct(null)
   }
 
   const handleOpenEdit = (product: Producto) => {
     setSelectedProduct(product)
     setFormData({
+      idCategoria: product.idCategoria,
       nombre: product.nombre,
       descripcion: product.descripcion,
       precioBase: product.precioBase,
@@ -213,6 +300,23 @@ export default function AdminProductsPage() {
             value={formData.precioBase || ""}
             onChange={(e) => setFormData({ ...formData, precioBase: parseFloat(e.target.value) || 0 })}
           />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="categoria">Categoría</Label>
+          <Select value={String(formData.idCategoria)} onValueChange={(value) => setFormData({ ...formData, idCategoria: Number(value) })}>
+            <SelectTrigger id="categoria">
+              <SelectValue placeholder="Selecciona una categoría" />
+            </SelectTrigger>
+            <SelectContent>
+              {categorias.map((categoria) => (
+                <SelectItem key={categoria.idCategoria} value={String(categoria.idCategoria)}>
+                  {categoria.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -489,8 +593,8 @@ export default function AdminProductsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={product.estado === 'activo' ? "default" : "secondary"}>
-                          {product.estado === 'activo' ? "Activo" : "Inactivo"}
+                        <Badge variant={(product.esActivo === true || product.estado === 'ACTIVO') ? "default" : "secondary"}>
+                          {(product.esActivo === true || product.estado === 'ACTIVO') ? "Activo" : "Inactivo"}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
@@ -515,7 +619,20 @@ export default function AdminProductsPage() {
                               Editar
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive">
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={async () => {
+                                try {
+                                  await AdminService.deleteProduct(String(product.idProducto));
+
+                                  setProducts((prevProducts) =>
+                                    prevProducts.filter((p) => p.idProducto !== product.idProducto)
+                                  );
+                                } catch (error) {
+                                  console.error('Error al eliminar el producto:', error);
+                                }
+                              }}
+                            >
                               <Trash2 className="w-4 h-4 mr-2" />
                               Eliminar
                             </DropdownMenuItem>
@@ -552,8 +669,8 @@ export default function AdminProductsPage() {
             <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSaveProduct} disabled={!formData.nombre || !formData.precioBase}>
-              Guardar Producto
+            <Button onClick={handleSaveProduct} disabled={!formData.nombre || !formData.precioBase || isSavingProduct}>
+              {isSavingProduct ? 'Guardando...' : 'Guardar Producto'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -573,8 +690,8 @@ export default function AdminProductsPage() {
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSaveProduct} disabled={!formData.nombre || !formData.precioBase}>
-              Guardar Cambios
+            <Button onClick={handleSaveProduct} disabled={!formData.nombre || !formData.precioBase || isSavingProduct}>
+              {isSavingProduct ? 'Guardando...' : 'Guardar Cambios'}
             </Button>
           </DialogFooter>
         </DialogContent>

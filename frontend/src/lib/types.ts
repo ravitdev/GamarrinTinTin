@@ -426,7 +426,6 @@ export interface AuthCredentials {
 
 /**
  * Datos que captura el formulario de registro (frontend).
- * Se transforman en RegistroPayload antes de enviar al backend.
  */
 export interface RegistroData {
   nombres:         string;
@@ -438,23 +437,6 @@ export interface RegistroData {
   direccion:       string;
   password:        string;
   confirmPassword: string;
-  distrito?:       string;
-  provincia?:      string;
-  departamento?:   string;
-}
-
-/**
- * RegistroPayload — shape que se envía al backend POST /usuarios/clientes.
- * Mapeado desde RegistroData con nombres según la API backend.
- */
-export interface RegistroPayload {
-  nombres:   string;
-  apellidos: string;
-  email:     string;
-  contrasena: string;     // del password
-  telefono:  string;      // del celular
-  dniRuc:    string;      // del numeroDocumento
-  direccion: string;
 }
 
 /**

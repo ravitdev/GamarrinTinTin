@@ -8,7 +8,7 @@
 // ============================================================================
 
 import { ApiClient } from '@/lib/api-client';
-import type { AuthResponse, Usuario, RegistroData, RegistroPayload } from '@/lib/types';
+import type { AuthResponse, RegistroData } from '@/lib/types';
 
 export interface AuthCredentials {
   email:    string;
