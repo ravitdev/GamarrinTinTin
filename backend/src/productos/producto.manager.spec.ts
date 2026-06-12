@@ -207,6 +207,20 @@ class ProductoRepositoryFake {
 
     return productoActualizado;
   }
+
+  async desactivar(idProducto: number): Promise<boolean> {
+    const index = this.productos.findIndex(
+      (producto) => producto.idProducto === idProducto && producto.esActivo,
+    );
+
+    if (index === -1) return false;
+
+    this.productos[index].esActivo = false;
+    return true;
+
+  }
+
+
 }
 
 describe('ProductoManager', () => {
@@ -366,4 +380,25 @@ describe('ProductoManager', () => {
       }),
     ).rejects.toThrow('Producto no encontrado.');
   });
+
+  it('desactiva producto del catálogo', async () => {
+  const resultado = await manager.desactivarProducto(1);
+
+  expect(resultado).toBe(true);
+});
+
+  it('no muestra producto desactivado en el catálogo', async () => {
+    await manager.desactivarProducto(1);
+
+    const productos = await manager.consultarCatalogo();
+
+    expect(productos.find((p) => p.idProducto === 1)).toBeUndefined();
+  });
+
+  it('rechaza desactivar producto inexistente', async () => {
+    await expect(manager.desactivarProducto(999)).rejects.toThrow(
+      'Producto no encontrado.',
+    );
+  });
+
 });
