@@ -1,4 +1,5 @@
 import { ApiClient } from '@/lib/api-client';
+import { apiClient } from '@/lib/api-client';
 import { products } from '@/lib/mock-data';
 import { mapBackendProductToFrontend } from '@/lib/product-adapter';
 import type { Producto } from '@/lib/types';
@@ -24,6 +25,12 @@ export interface PersonalizationOptions {
   estimatedPrice?: number;
 }
 
+export interface AdicionarStockVariantePayload {
+  colorHex: string;
+  talla: 'S' | 'M' | 'L' | 'XL';
+  stockAdicional: number;
+}
+
 export class ProductService {
   static async getProductDetail(id: number): Promise<Producto> {
     try {
@@ -45,5 +52,41 @@ export class ProductService {
       // Fallback a mock-data
       return products.filter((p) => p.idProducto !== id).map(mapBackendProductToFrontend).slice(0, 4);
     }
+  }
+
+  /**
+   * P19: Desactiva (eliminación lógica) un producto del catálogo.
+   * Rechazado si el producto tiene pedidos en proceso (P21).
+   */
+  static async desactivarProducto(idProducto: number): Promise<{ message: string }> {
+    return apiClient<{ message: string }>(`/productos/${idProducto}`, {
+      method: 'DELETE',
+      auth: true,
+    });
+  }
+
+  /**
+   * P20: Reactiva un producto previamente desactivado.
+   */
+  static async activarProducto(idProducto: number): Promise<{ message: string }> {
+    return apiClient<{ message: string }>(`/productos/${idProducto}/activar`, {
+      method: 'PATCH',
+      auth: true,
+    });
+  }
+
+  /**
+   * P16: Adiciona stock de forma incremental a variantes existentes.
+   */
+  static async adicionarStock(
+    idProducto: number,
+    variantes: AdicionarStockVariantePayload[],
+  ): Promise<Producto> {
+    const raw = await apiClient<any>(`/productos/${idProducto}/stock`, {
+      method: 'PATCH',
+      auth: true,
+      body: { variantes },
+    });
+    return mapBackendProductToFrontend(raw.data ?? raw);
   }
 }

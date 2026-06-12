@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ModificarProductoDto } from './dto/modificar-producto.dto';
+import { AdicionarStockDto } from './dto/adicionar-stock.dto';
 import {
   ProductoCatalogoResponseDto,
   ProductoDetalleResponseDto,
@@ -36,9 +37,17 @@ export class ProductoManager {
   ): Promise<ProductoDetalleResponseDto> {
     this.validarDatosRegistro(datos);
 
+    // P11: Validar que el nombre no esté ya registrado en el catálogo
+    const nombreNormalizado = this.normalizarTexto(datos.nombre);
+    const productoExistente = await this.productoRepository.buscarPorNombre(nombreNormalizado);
+
+    if (productoExistente) {
+      throw new Error('El nombre del producto ya se encuentra registrado en el catálogo.');
+    }
+
     const producto = await this.productoRepository.registrar({
       idCategoria: datos.idCategoria,
-      nombre: this.normalizarTexto(datos.nombre),
+      nombre: nombreNormalizado,
       descripcion: this.normalizarTexto(datos.descripcion),
       precioBase: datos.precioBase,
       esPersonalizable: datos.esPersonalizable,
@@ -70,12 +79,24 @@ export class ProductoManager {
     this.validarId(idProducto, 'El producto no es válido.');
     this.validarDatosModificacion(datos);
 
+    // P17: Validar que el nuevo nombre no esté ya en uso por otro producto
+    if (datos.nombre !== undefined) {
+      const nombreNormalizado = this.normalizarTexto(datos.nombre);
+      const productoConMismoNombre = await this.productoRepository.buscarPorNombre(
+        nombreNormalizado,
+        idProducto, // excluir el propio producto
+      );
+
+      if (productoConMismoNombre) {
+        throw new Error('El nombre del producto ya se encuentra registrado en el catálogo.');
+      }
+
+      datos = { ...datos, nombre: nombreNormalizado };
+    }
+
     const producto = await this.productoRepository.modificar(idProducto, {
       idCategoria: datos.idCategoria,
-      nombre:
-        datos.nombre !== undefined
-          ? this.normalizarTexto(datos.nombre)
-          : undefined,
+      nombre: datos.nombre,
       descripcion:
         datos.descripcion !== undefined
           ? this.normalizarTexto(datos.descripcion)
@@ -103,6 +124,24 @@ export class ProductoManager {
     return ProductoMapper.aDetalleDto(producto);
   }
 
+  /**
+   * P16: Adiciona stock de forma incremental a variantes existentes.
+   * No reemplaza variantes; solo incrementa el campo stock.
+   */
+  async adicionarStockProducto(
+    idProducto: number,
+    datos: AdicionarStockDto,
+  ): Promise<ProductoDetalleResponseDto> {
+    this.validarId(idProducto, 'El producto no es válido.');
+    this.validarAdicionStock(datos);
+
+    const producto = await this.productoRepository.adicionarStock(idProducto, datos);
+    return ProductoMapper.aDetalleDto(producto);
+  }
+
+  /**
+   * P21: Desactiva el producto solo si no tiene pedidos activos asociados.
+   */
   async desactivarProducto(idProducto: number): Promise<boolean> {
     this.validarId(idProducto, 'El producto no es válido.');
 
@@ -112,8 +151,34 @@ export class ProductoManager {
       throw new Error('Producto no encontrado.');
     }
 
+    // P21: Verificar pedidos activos antes de desactivar
+    const tienePedidosActivos = await this.productoRepository.verificarPedidosActivos(idProducto);
+
+    if (tienePedidosActivos) {
+      throw new Error(
+        'No es posible desactivar el producto porque tiene pedidos en proceso asociados.',
+      );
+    }
+
     return this.productoRepository.desactivar(idProducto);
   }
+
+  /**
+   * P20: Reactiva un producto que estaba en estado inactivo.
+   */
+  async activarProducto(idProducto: number): Promise<boolean> {
+    this.validarId(idProducto, 'El producto no es válido.');
+
+    const activado = await this.productoRepository.activar(idProducto);
+
+    if (!activado) {
+      throw new Error('Producto no encontrado o ya se encuentra activo.');
+    }
+
+    return activado;
+  }
+
+  // ── Validaciones privadas ───────────────────────────────────────────────
 
   private validarDatosRegistro(datos: RegistrarProductoDto): void {
     this.validarId(datos.idCategoria, 'La categoría del producto no es válida.');
@@ -186,6 +251,24 @@ export class ProductoManager {
 
     if (datos.descuentosVolumen !== undefined) {
       this.validarDescuentos(datos.descuentosVolumen);
+    }
+  }
+
+  private validarAdicionStock(datos: AdicionarStockDto): void {
+    if (!datos.variantes || datos.variantes.length === 0) {
+      throw new Error('Debe indicar al menos una variante para adicionar stock.');
+    }
+
+    for (const variante of datos.variantes) {
+      this.validarColorHex(variante.colorHex);
+
+      if (!['S', 'M', 'L', 'XL'].includes(variante.talla)) {
+        throw new Error('La talla de la variante no es válida.');
+      }
+
+      if (!Number.isInteger(variante.stockAdicional) || variante.stockAdicional <= 0) {
+        throw new Error('El stock adicional debe ser un entero mayor a cero.');
+      }
     }
   }
 
@@ -279,8 +362,9 @@ export class ProductoManager {
         throw new Error('El porcentaje de descuento debe ser mayor a 0 y menor o igual a 100.');
       }
 
+      // P8/P18: Mensaje alineado con el documento de pruebas
       if (cantidades.has(descuento.cantidadMinima)) {
-        throw new Error('No se permiten descuentos duplicados por cantidad mínima.');
+        throw new Error('Los rangos de volumen no pueden superponerse.');
       }
 
       cantidades.add(descuento.cantidadMinima);

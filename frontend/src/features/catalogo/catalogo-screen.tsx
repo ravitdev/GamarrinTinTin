@@ -212,7 +212,18 @@ export function CatalogoScreen() {
               {/* Productos */}
               <ProductGrid
                 products={products}
-                emptyMessage="No se encontraron productos con los filtros seleccionados"
+                emptyMessage={
+                  filters.categorias.length > 0
+                    ? 'No hay productos disponibles en esta categoría por el momento.'
+                    : 'No se encontraron productos con los filtros seleccionados.'
+                }
+                emptySubMessage={
+                  activeFiltersCount > 0
+                    ? undefined
+                    : 'Intenta explorar otras categorías o ajusta los filtros.'
+                }
+                onEmptyAction={activeFiltersCount > 0 ? clearFilters : undefined}
+                emptyActionLabel={activeFiltersCount > 0 ? 'Explorar todas las categorías' : undefined}
                 viewMode={viewMode}
               />
             </div>

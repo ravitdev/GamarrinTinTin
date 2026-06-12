@@ -78,6 +78,16 @@ export async function fetchCatalogo(
         p.tallas.some((t: any) => query.tallas!.includes(t as Talla))
       );
     }
+    // P4: Filtro por tipo de diseño (personalizable / predefinido)
+    if (query.tipoDiseno?.length) {
+      data = data.filter((p) =>
+        query.tipoDiseno!.some((tipo) => {
+          if (tipo === 'personalizable') return p.esPersonalizable === true;
+          if (tipo === 'predefinido') return p.esPersonalizable === false;
+          return true;
+        })
+      );
+    }
     if (query.precioMin != null) {
       data = data.filter((p) => p.precioBase >= query.precioMin!);
     }
@@ -117,6 +127,16 @@ export async function fetchCatalogo(
     if (query.tallas?.length) {
       data = data.filter((p) =>
         (p.tallas || []).some((t) => query.tallas!.includes(t as Talla))
+      );
+    }
+    // P4: Filtro por tipo de diseño en fallback
+    if (query.tipoDiseno?.length) {
+      data = data.filter((p) =>
+        query.tipoDiseno!.some((tipo) => {
+          if (tipo === 'personalizable') return p.esPersonalizable === true;
+          if (tipo === 'predefinido') return p.esPersonalizable === false;
+          return true;
+        })
       );
     }
     if (query.precioMin != null) {

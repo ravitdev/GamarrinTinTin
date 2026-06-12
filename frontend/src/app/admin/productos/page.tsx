@@ -42,11 +42,13 @@ import {
   Trash2,
   Eye,
   Package,
-  Filter,
   AlertCircle,
   CheckCircle2,
   X,
-  Percent
+  Percent,
+  PowerOff,
+  Power,
+  PackagePlus
 } from "lucide-react"
 import { products as initialProducts, formatPrice, categorias } from "@/lib/mock-data"
 import { ProductService } from "@/features/product/services/product.service"
@@ -96,7 +98,13 @@ export default function AdminProductsPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Producto | null>(null)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
+  const [isStockDialogOpen, setIsStockDialogOpen] = useState(false)
   const [formData, setFormData] = useState<ProductFormData>(defaultFormData)
+  const [stockColorHex, setStockColorHex] = useState("")
+  const [stockTalla, setStockTalla] = useState<Talla>(Talla.M)
+  const [stockCantidad, setStockCantidad] = useState(0)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [actionMessage, setActionMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   const filteredProducts = products.filter(product => {
     const matchesSearch = 
@@ -188,6 +196,62 @@ export default function AdminProductsPage() {
     setFormData(defaultFormData)
     setSelectedProduct(null)
     setIsAddDialogOpen(true)
+  }
+
+  // P19: Desactivar producto
+  const handleDesactivar = async (product: Producto) => {
+    setActionLoading(true)
+    setActionMessage(null)
+    try {
+      await ProductService.desactivarProducto(product.idProducto)
+      setProducts(products.map(p =>
+        p.idProducto === product.idProducto
+          ? { ...p, estado: 'INACTIVO' as any }
+          : p
+      ))
+      setActionMessage({ text: 'El producto ha sido desactivado del catálogo exitosamente.', type: 'success' })
+    } catch (error: any) {
+      setActionMessage({ text: error?.message || 'No es posible desactivar el producto.', type: 'error' })
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  // P20: Activar producto
+  const handleActivar = async (product: Producto) => {
+    setActionLoading(true)
+    setActionMessage(null)
+    try {
+      await ProductService.activarProducto(product.idProducto)
+      setProducts(products.map(p =>
+        p.idProducto === product.idProducto
+          ? { ...p, estado: 'ACTIVO' as any }
+          : p
+      ))
+      setActionMessage({ text: 'El producto ha sido activado en el catálogo exitosamente.', type: 'success' })
+    } catch (error: any) {
+      setActionMessage({ text: error?.message || 'No es posible activar el producto.', type: 'error' })
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  // P16: Adicionar inventario
+  const handleAdicionarStock = async () => {
+    if (!selectedProduct) return
+    setActionLoading(true)
+    setActionMessage(null)
+    try {
+      await ProductService.adicionarStock(selectedProduct.idProducto, [
+        { colorHex: stockColorHex, talla: stockTalla, stockAdicional: stockCantidad }
+      ])
+      setActionMessage({ text: 'Inventario actualizado exitosamente.', type: 'success' })
+      setIsStockDialogOpen(false)
+    } catch (error: any) {
+      setActionMessage({ text: error?.message || 'Error al adicionar stock.', type: 'error' })
+    } finally {
+      setActionLoading(false)
+    }
   }
 
   // Reusable form component for both add and edit
@@ -489,8 +553,8 @@ export default function AdminProductsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={product.estado === 'activo' ? "default" : "secondary"}>
-                          {product.estado === 'activo' ? "Activo" : "Inactivo"}
+                        <Badge variant={product.estado === 'ACTIVO' || product.estado === 'activo' ? "default" : "secondary"}>
+                          {product.estado === 'ACTIVO' || product.estado === 'activo' ? "Activo" : "Inactivo"}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
@@ -514,11 +578,38 @@ export default function AdminProductsPage() {
                               <Edit className="w-4 h-4 mr-2" />
                               Editar
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive">
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Eliminar
+                            {/* P16: Adicionar inventario */}
+                            <DropdownMenuItem onClick={() => {
+                              setSelectedProduct(product)
+                              setStockColorHex("")
+                              setStockTalla(Talla.M)
+                              setStockCantidad(0)
+                              setIsStockDialogOpen(true)
+                            }}>
+                              <PackagePlus className="w-4 h-4 mr-2" />
+                              Adicionar Inventario
                             </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            {/* P19/P20: Activar o Desactivar */}
+                            {(product.estado === 'ACTIVO' || product.estado === 'activo') ? (
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => handleDesactivar(product)}
+                                disabled={actionLoading}
+                              >
+                                <PowerOff className="w-4 h-4 mr-2" />
+                                Desactivar producto
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem
+                                className="text-green-600"
+                                onClick={() => handleActivar(product)}
+                                disabled={actionLoading}
+                              >
+                                <Power className="w-4 h-4 mr-2" />
+                                Activar producto
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -588,7 +679,8 @@ export default function AdminProductsPage() {
               <DialogHeader>
                 <DialogTitle className="text-xl">{selectedProduct.nombre}</DialogTitle>
                 <DialogDescription>
-                  Codigo: {selectedProduct.codigo}
+                  {/* P14: El campo 'codigo' no existe en el modelo real. Se muestra el ID interno. */}
+                  ID interno: #{selectedProduct.idProducto}
                 </DialogDescription>
               </DialogHeader>
               
@@ -725,6 +817,108 @@ export default function AdminProductsPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* P16: Modal Adicionar Inventario */}
+      <Dialog open={isStockDialogOpen} onOpenChange={setIsStockDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PackagePlus className="w-5 h-5 text-accent" />
+              Adicionar Inventario
+            </DialogTitle>
+            <DialogDescription>
+              {selectedProduct && <>Agregar stock al producto: <strong>{selectedProduct.nombre}</strong></>}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="stock-color">Color (Hex)</Label>
+              <Input
+                id="stock-color"
+                placeholder="Ej: #000000"
+                value={stockColorHex}
+                onChange={(e) => setStockColorHex(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Ingresa el código hexadecimal del color de la variante existente.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="stock-talla">Talla</Label>
+              <select
+                id="stock-talla"
+                value={stockTalla}
+                onChange={(e) => setStockTalla(e.target.value as Talla)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {([Talla.S, Talla.M, Talla.L, Talla.XL] as Talla[]).map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="stock-cantidad">Unidades a Adicionar</Label>
+              <Input
+                id="stock-cantidad"
+                type="number"
+                min="1"
+                value={stockCantidad || ""}
+                onChange={(e) => setStockCantidad(parseInt(e.target.value) || 0)}
+              />
+            </div>
+
+            {actionMessage && (
+              <div className={`flex items-center gap-2 p-3 rounded-lg text-sm ${
+                actionMessage.type === 'success'
+                  ? 'bg-green-50 text-green-700 border border-green-200'
+                  : 'bg-red-50 text-red-700 border border-red-200'
+              }`}>
+                {actionMessage.type === 'success'
+                  ? <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  : <AlertCircle className="w-4 h-4 shrink-0" />
+                }
+                {actionMessage.text}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setIsStockDialogOpen(false)
+              setActionMessage(null)
+            }}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleAdicionarStock}
+              disabled={actionLoading || !stockColorHex || stockCantidad <= 0}
+            >
+              {actionLoading ? 'Guardando...' : 'Confirmar Adición'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Banner de mensajes de acción (P19/P20) */}
+      {actionMessage && !isStockDialogOpen && (
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-xl shadow-lg text-sm font-medium transition-all ${
+          actionMessage.type === 'success'
+            ? 'bg-green-600 text-white'
+            : 'bg-red-600 text-white'
+        }`}>
+          {actionMessage.type === 'success'
+            ? <CheckCircle2 className="w-4 h-4" />
+            : <AlertCircle className="w-4 h-4" />
+          }
+          {actionMessage.text}
+          <button onClick={() => setActionMessage(null)} className="ml-2 opacity-80 hover:opacity-100">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
