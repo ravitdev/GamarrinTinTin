@@ -1,30 +1,107 @@
 import { ApiClient } from '@/lib/api-client';
 import { mockOrders } from '@/lib/mock-data';
-import type { Order } from '@/lib/types';
+import type { Order, OrderStatus } from '@/lib/types';
+
+type BackendPedidoEstado =
+  | 'REGISTRADO'
+  | 'CONFIRMADO'
+  | 'PROCESANDO'
+  | 'ENVIADO'
+  | 'ENTREGADO'
+  | 'CANCELADO';
+
+interface BackendPedidoDetalle {
+  idPedidoDetalle: number;
+  idProductoVariante: number;
+  idCotizacion: number | null;
+  cantidad: number;
+  precioUnitario: number;
+  subtotal: number;
+  nombreProductoSnapshot: string;
+  colorSnapshot: string;
+  tallaSnapshot: string;
+}
+
+interface BackendPedido {
+  idPedido: number;
+  idCliente: number;
+  fechaCreacion: string | Date;
+  estado: BackendPedidoEstado;
+  subtotal: number;
+  descuentoTotal: number;
+  total: number;
+  direccionSnapshot: string;
+  detalles: BackendPedidoDetalle[];
+}
+
+function mapEstadoPedido(estado: BackendPedidoEstado): OrderStatus {
+  const estados: Record<BackendPedidoEstado, OrderStatus> = {
+    REGISTRADO: 'registrado',
+    CONFIRMADO: 'confirmado',
+    PROCESANDO: 'en_proceso',
+    ENVIADO: 'enviado',
+    ENTREGADO: 'entregado',
+    CANCELADO: 'cancelado',
+  };
+
+  return estados[estado];
+}
+
+function mapBackendOrderToFrontend(pedido: BackendPedido): Order {
+  return {
+    id: pedido.idPedido,
+    codigo: `PED-${String(pedido.idPedido).padStart(5, '0')}`,
+    cliente: {
+      nombres: '',
+      apellidos: '',
+      correo: '',
+      celular: '',
+      tipoDocumento: '',
+      documento: '',
+      direccion: pedido.direccionSnapshot,
+    },
+    direccionEnvio: pedido.direccionSnapshot,
+    metodoPago: 'No especificado',
+    items: pedido.detalles.map((detalle) => ({
+      id: detalle.idPedidoDetalle,
+      producto: {
+        nombre: detalle.nombreProductoSnapshot,
+        precio: detalle.precioUnitario,
+      },
+      colorSeleccionado: {
+        nombre: detalle.colorSnapshot,
+        hexCode: '#000000',
+      },
+      tallaSeleccionada: detalle.tallaSnapshot,
+      cantidad: detalle.cantidad,
+      precioUnitario: detalle.precioUnitario,
+    })),
+    subtotal: pedido.subtotal,
+    descuento: pedido.descuentoTotal,
+    total: pedido.total,
+    estado: mapEstadoPedido(pedido.estado),
+    createdAt: pedido.fechaCreacion,
+    updatedAt: pedido.fechaCreacion,
+  };
+}
 
 export class OrderService {
-  /**
-   * GET /pedidos/propios
-   * Lista los pedidos propios del cliente autenticado.
-   */
   static async getMyOrders(): Promise<Order[]> {
     try {
-      return await ApiClient.get<Order[]>('/pedidos/propios');
-    } catch {
+      const pedidos = await ApiClient.get<BackendPedido[]>('/pedidos/propios');
+      return pedidos.map(mapBackendOrderToFrontend);
+    } catch (error) {
+      console.error('Error al cargar pedidos propios:', error);
       return mockOrders;
     }
   }
 
-  /**
-   * GET /pedidos/propios/:idPedido
-   * Obtiene el detalle de un pedido propio del cliente.
-   */
   static async getOrderDetail(id: string): Promise<Order> {
-    return ApiClient.get<Order>(`/pedidos/propios/${id}`);
+    const pedido = await ApiClient.get<BackendPedido>(`/pedidos/propios/${id}`);
+    return mapBackendOrderToFrontend(pedido);
   }
 
   static async cancelOrder(id: string): Promise<void> {
-    // El backend no soporta cancelación aún, se silencia
     return;
   }
 
