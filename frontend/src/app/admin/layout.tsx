@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { useAuth } from '@/features/auth/hooks/use-auth';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,6 +48,7 @@ export default function AdminLayout({
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
+  const {logout} = useAuth();
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -163,12 +165,6 @@ export default function AdminLayout({
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">Nuevo pedido #1234</p>
-                    <p className="text-xs text-muted-foreground">Hace 5 minutos</p>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <div className="space-y-1">
                     <p className="text-sm font-medium">Cotizacion pendiente</p>
                     <p className="text-xs text-muted-foreground">Hace 1 hora</p>
                   </div>
@@ -187,7 +183,6 @@ export default function AdminLayout({
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="gap-2">
                   <Avatar className="w-8 h-8">
-                    <AvatarImage src="/placeholder-avatar.jpg" />
                     <AvatarFallback className="bg-primary text-primary-foreground">AD</AvatarFallback>
                   </Avatar>
                   <span className="hidden sm:inline font-medium">Admin</span>
@@ -201,9 +196,9 @@ export default function AdminLayout({
                   <Settings className="w-4 h-4 mr-2" />
                   Configuracion
                 </DropdownMenuItem>
-                <DropdownMenuItem className="text-destructive">
+                <DropdownMenuItem className="text-destructive" onSelect={() => logout()}>
                   <LogOut className="w-4 h-4 mr-2" />
-                  Cerrar Sesion
+                    Cerrar Sesión
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

@@ -108,17 +108,6 @@ const mockOrders: Record<string, Order[]> = {
     { id: "ord-7", codigo: "PED-2024-0039", fecha: "2024-01-10", estado: "enviado", total: 1800, items: 30, productos: ["Polo Uniforme Restaurant"] },
     { id: "ord-8", codigo: "PED-2024-0022", fecha: "2023-12-28", estado: "entregado", total: 2400, items: 40, productos: ["Polo Uniforme Restaurant"] },
   ],
-  "CLI-004": [
-    { id: "ord-9", codigo: "PED-2024-0035", fecha: "2024-01-08", estado: "entregado", total: 280, items: 2, productos: ["Polo Casual"] },
-    { id: "ord-10", codigo: "PED-2023-0412", fecha: "2023-11-15", estado: "entregado", total: 370, items: 3, productos: ["Polera Basica", "Polo Premium"] },
-  ],
-  "CLI-005": [
-    { id: "ord-11", codigo: "PED-2024-0030", fecha: "2024-01-05", estado: "pendiente", total: 8500, items: 150, productos: ["Polo Escolar San Martin"] },
-    { id: "ord-12", codigo: "PED-2023-0380", fecha: "2023-09-01", estado: "entregado", total: 14000, items: 280, productos: ["Polo Escolar San Martin", "Polera Escolar"] },
-  ],
-  "CLI-006": [
-    { id: "ord-13", codigo: "PED-2023-0398", fecha: "2023-12-20", estado: "entregado", total: 180, items: 1, productos: ["Polo Basico"] },
-  ],
 }
 
 const clients: Client[] = [
@@ -191,18 +180,6 @@ const clients: Client[] = [
     status: "active",
     hasPendingOrders: true,
     deactivationRequest: true
-  },
-  {
-    id: "CLI-006",
-    name: "Luis Vargas",
-    email: "luis@email.com",
-    phone: "+51 955 123 456",
-    type: "individual",
-    totalOrders: 1,
-    totalSpent: 180,
-    lastOrder: "2023-12-20",
-    createdAt: "2023-12-20",
-    status: "inactive"
   },
 ]
 

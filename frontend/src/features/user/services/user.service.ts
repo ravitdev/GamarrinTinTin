@@ -9,9 +9,6 @@ export interface UserProfile {
   tipoDocumento: 'DNI' | 'RUC';
   documento: string;
   direccion: string;
-  distrito: string;
-  provincia: string;
-  departamento: string;
   rol: 'cliente' | 'vendedor' | 'administrador';
   estado: 'activo' | 'inactivo';
   createdAt: string;

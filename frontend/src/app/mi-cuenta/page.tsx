@@ -8,9 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
 import {
   Dialog,
   DialogContent,
@@ -67,9 +66,6 @@ const mockUser = {
   documento: "12345678",
   tipoDocumento: TipoDocumento.DNI,
   direccion: "Av. Javier Prado 1234, San Isidro",
-  distrito: "San Isidro",
-  provincia: "Lima",
-  departamento: "Lima",
   rol: "cliente" as const,
   estado: "activo" as const,
   createdAt: new Date("2024-01-15"),
@@ -148,7 +144,6 @@ export default function MiCuentaPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
             <div className="flex items-center gap-4">
               <Avatar className="w-20 h-20 border-4 border-background shadow-lg">
-                <AvatarImage src={user.avatarUrl} />
                 <AvatarFallback className="text-2xl font-semibold bg-primary text-primary-foreground">
                   {getInitials()}
                 </AvatarFallback>
@@ -410,39 +405,12 @@ export default function MiCuentaPage() {
                           onChange={(e) => setEditForm({ ...editForm, direccion: e.target.value })}
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="distrito">Distrito</Label>
-                        <Input
-                          id="distrito"
-                          value={editForm.distrito}
-                          onChange={(e) => setEditForm({ ...editForm, distrito: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="provincia">Provincia</Label>
-                        <Input
-                          id="provincia"
-                          value={editForm.provincia}
-                          onChange={(e) => setEditForm({ ...editForm, provincia: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="departamento">Departamento</Label>
-                        <Input
-                          id="departamento"
-                          value={editForm.departamento}
-                          onChange={(e) => setEditForm({ ...editForm, departamento: e.target.value })}
-                        />
-                      </div>
                     </div>
                   ) : (
                     <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
                       <MapPin className="w-5 h-5 text-muted-foreground mt-0.5" />
                       <div>
                         <p className="font-medium">{user.direccion}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {user.distrito}, {user.provincia}, {user.departamento}
-                        </p>
                       </div>
                     </div>
                   )}

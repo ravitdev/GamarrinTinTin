@@ -1,4 +1,6 @@
 import { ApiClient } from '@/lib/api-client';
+import { mapBackendProductToFrontend } from '@/lib/product-adapter';
+import type { Producto } from '@/lib/types';
 
 export interface AdminStats {
   monthlySales: string;
@@ -24,14 +26,34 @@ export interface AdminQuotation {
   priority: 'high' | 'medium' | 'low';
 }
 
-export interface Product {
-  id: string;
+export interface CreateProductVariantPayload {
+  colorNombre: string;
+  colorHex: string;
+  talla: string;
+  stock: number;
+}
+
+export interface CreateProductImagePayload {
+  colorHex: string;
+  lado: 'FRONT' | 'BACK';
+  urlImagen: string;
+  displayOrder?: number;
+}
+
+export interface CreateProductDiscountPayload {
+  cantidadMinima: number;
+  porcentajeDescuento: number;
+}
+
+export interface CreateProductPayload {
+  idCategoria: number;
   nombre: string;
   descripcion: string;
-  precio: number;
-  stock: number;
-  imagen: string;
-  categoria: 'polo' | 'polera' | 'otro';
+  precioBase: number;
+  esPersonalizable: boolean;
+  variantes: CreateProductVariantPayload[];
+  imagenes: CreateProductImagePayload[];
+  descuentosVolumen?: CreateProductDiscountPayload[];
 }
 
 export class AdminService {
@@ -47,20 +69,23 @@ export class AdminService {
     return ApiClient.get('/admin/quotations/pending');
   }
 
-  static async getProducts() {
-    return ApiClient.get('/admin/products');
+  static async getProducts(): Promise<Producto[]> {
+    const rawProducts = await ApiClient.get<any[]>('/productos');
+    return rawProducts.map(mapBackendProductToFrontend);
   }
 
-  static async createProduct(data: Omit<Product, 'id'>) {
-    return ApiClient.post('/admin/products', data);
+  static async createProduct(data: CreateProductPayload): Promise<Producto> {
+    const rawProduct = await ApiClient.post<any>('/productos', data);
+    return mapBackendProductToFrontend(rawProduct);
   }
 
-  static async updateProduct(id: string, data: Partial<Product>) {
-    return ApiClient.put(`/admin/products/${id}`, data);
+  static async updateProduct(id: string, data: Partial<CreateProductPayload>): Promise<Producto> {
+    const rawProduct = await ApiClient.put<any>(`/productos/${id}`, data);
+    return mapBackendProductToFrontend(rawProduct);
   }
 
   static async deleteProduct(id: string) {
-    return ApiClient.delete(`/admin/products/${id}`);
+    return ApiClient.delete(`/productos/${id}`);
   }
 
   static async getClients() {
@@ -71,3 +96,4 @@ export class AdminService {
     return ApiClient.post(`/admin/quotations/${quotationId}/respond`, { approved, price });
   }
 }
+

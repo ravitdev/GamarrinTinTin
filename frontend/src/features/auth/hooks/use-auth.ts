@@ -113,9 +113,9 @@ export function useAuth(): UseAuthReturn {
         } else {
           const rol = response.usuario.rol;
           if (rol === 'ADMINISTRADOR') {
-            router.push('/admin/productos');
+            router.push('/admin');
           } else if (rol === 'VENDEDOR') {
-            router.push('/vendedor/cotizaciones');
+            router.push('/vendedor');
           } else {
             router.push('/catalogo');
           }

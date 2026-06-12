@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { useAuth } from '@/features/auth/hooks/use-auth';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,6 +44,7 @@ export default function VendedorLayout({
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
+  const {logout} = useAuth();
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -199,9 +201,9 @@ export default function VendedorLayout({
                   <User className="w-4 h-4 mr-2" />
                   Mi Perfil
                 </DropdownMenuItem>
-                <DropdownMenuItem className="text-destructive">
+                <DropdownMenuItem className="text-destructive" onSelect={() => logout()}>
                   <LogOut className="w-4 h-4 mr-2" />
-                  Cerrar Sesion
+                  Cerrar Sesión
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

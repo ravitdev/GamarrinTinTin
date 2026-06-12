@@ -43,8 +43,8 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
   }, []);
 
   // Deep-link directo al area de trabajo de cada rol
-  const panelHref  = rol === RolUsuario.ADMINISTRADOR ? '/admin/productos'        : '/vendedor/cotizaciones';
-  const panelLabel = rol === RolUsuario.ADMINISTRADOR ? 'Volver al Panel Admin'   : 'Volver al Panel';
+  const panelHref  = rol === RolUsuario.ADMINISTRADOR ? '/admin'        : '/vendedor';
+  const panelLabel = rol === RolUsuario.ADMINISTRADOR ? 'Volver al Panel Admin'   : 'Volver al Panel Vendedor';
   const showPanel  = isLoggedIn && (rol === RolUsuario.ADMINISTRADOR || rol === RolUsuario.VENDEDOR);
 
   const userName = user ? `${user.nombres} ${user.apellidos}` : '';
@@ -192,7 +192,7 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
                       className="text-destructive focus:text-destructive"
                       onSelect={() => logout()}
                     >
-                      Cerrar Sesion
+                      Cerrar Sesión
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
