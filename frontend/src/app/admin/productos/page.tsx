@@ -619,7 +619,20 @@ export default function AdminProductsPage() {
                               Editar
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive">
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={async () => {
+                                try {
+                                  await AdminService.deleteProduct(String(product.idProducto));
+
+                                  setProducts((prevProducts) =>
+                                    prevProducts.filter((p) => p.idProducto !== product.idProducto)
+                                  );
+                                } catch (error) {
+                                  console.error('Error al eliminar el producto:', error);
+                                }
+                              }}
+                            >
                               <Trash2 className="w-4 h-4 mr-2" />
                               Eliminar
                             </DropdownMenuItem>
