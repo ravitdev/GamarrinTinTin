@@ -173,14 +173,14 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
           </Button>
         </form>
 
-        {/* Divider */}
+        {/* Divider
         <div className="my-6 flex items-center gap-4">
           <div className="h-px flex-1 bg-border" />
           <span className="text-xs text-muted-foreground">O continua con</span>
           <div className="h-px flex-1 bg-border" />
         </div>
 
-        {/* Social Login */}
+        Social Login
         <div className="grid grid-cols-2 gap-3">
           <Button variant="outline" className="w-full" disabled={isLoading}>
             Google
@@ -188,7 +188,7 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
           <Button variant="outline" className="w-full" disabled={isLoading}>
             Facebook
           </Button>
-        </div>
+        </div>*/}
 
         {/* Register Link */}
         <p className="mt-6 text-center text-sm text-muted-foreground">

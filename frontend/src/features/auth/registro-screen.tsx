@@ -34,9 +34,6 @@ type FormData = {
   celular:         string;
   email:           string;
   direccion:       string;
-  distrito:        string;
-  provincia:       string;
-  departamento:    string;
   password:        string;
   confirmPassword: string;
 };
@@ -107,9 +104,6 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
     celular:         '',
     email:           '',
     direccion:       '',
-    distrito:        '',
-    provincia:       '',
-    departamento:    '',
     password:        '',
     confirmPassword: '',
   });
@@ -155,9 +149,6 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
         password:        formData.password,
         confirmPassword: formData.confirmPassword,
         direccion:       formData.direccion,
-        distrito:        formData.distrito || undefined,
-        provincia:       formData.provincia || undefined,
-        departamento:    formData.departamento || undefined,
       });
       onSuccess?.();
     } catch (err) {
@@ -362,20 +353,6 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
               {fieldErrors.direccion && (
                 <p className="mt-1 text-xs text-destructive">{fieldErrors.direccion}</p>
               )}
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-3">
-              {(['distrito', 'provincia', 'departamento'] as const).map((field) => (
-                <div key={field}>
-                  <Label htmlFor={field} className="capitalize">{field}</Label>
-                  <Input
-                    id={field}
-                    value={formData[field]}
-                    onChange={handleChange}
-                    disabled={isLoading}
-                  />
-                </div>
-              ))}
             </div>
           </div>
 
