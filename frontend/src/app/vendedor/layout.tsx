@@ -199,11 +199,13 @@ export default function VendedorLayout({
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>
                   <User className="w-4 h-4 mr-2" />
-                  Mi Perfil
+                  <Link href="/mi-cuenta">
+                      Mi Perfil
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem className="text-destructive" onSelect={() => logout()}>
                   <LogOut className="w-4 h-4 mr-2" />
-                  Cerrar Sesión
+                    Cerrar Sesión
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
