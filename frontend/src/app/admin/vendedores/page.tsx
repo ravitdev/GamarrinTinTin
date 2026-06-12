@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -62,8 +62,11 @@ import {
 } from "lucide-react"
 import { formatPrice } from "@/lib/mock-data"
 import { AdminService } from "@/features/admin/services/admin.service"
+import type { UserProfile } from "@/features/user/services/user.service"
+import { UserService } from "@/features/user/services/user.service"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
+import { TipoDocumento } from "@/lib/types"
 
 // ---------------------------------------------------------------------------
 // Reglas de validación idénticas al Registro de Usuarios
@@ -93,55 +96,49 @@ interface VendorMock {
   };
 }
 
-const mockVendors: VendorMock[] = [
-  {
-    id: "vendor-1",
-    nombres: "Maria",
-    apellidos: "Garcia Lopez",
-    correo: "maria.garcia@gamarrintintin.com",
-    celular: "987654321",
-    documento: "45678901",
+const emptyStats = {
+  cotizacionesAtendidas: 0,
+  cotizacionesPendientes: 0,
+  pedidosGestionados: 0,
+  ventasTotales: 0,
+  tasaConversion: 0,
+}
+
+function mapProfileToVendor(profile: UserProfile): VendorMock {
+  return {
+    id: String(profile.idUsuario),
+    nombres: profile.nombres,
+    apellidos: profile.apellidos,
+    correo: profile.email,
+    celular: profile.telefono,
+    documento: profile.numeroDocumento,
     tipoDocumento: "DNI",
     rol: "vendedor",
-    estado: "activo",
-    createdAt: new Date("2023-06-15"),
-    stats: {
-      cotizacionesAtendidas: 156,
-      cotizacionesPendientes: 3,
-      pedidosGestionados: 89,
-      ventasTotales: 45600,
-      tasaConversion: 78,
-    }
-  },
-  {
-    id: "vendor-2",
-    nombres: "Carlos",
-    apellidos: "Martinez Ruiz",
-    correo: "carlos.martinez@gamarrintintin.com",
-    celular: "976543210",
-    documento: "34567890",
-    tipoDocumento: "DNI",
-    rol: "vendedor",
-    estado: "activo",
-    createdAt: new Date("2023-09-20"),
-    stats: {
-      cotizacionesAtendidas: 98,
-      cotizacionesPendientes: 5,
-      pedidosGestionados: 67,
-      ventasTotales: 32400,
-      tasaConversion: 72,
-    }
+    estado: profile.estado === "ACTIVO" ? "activo" : "inactivo",
+    createdAt: new Date(profile.fechaRegistro),
+    stats: emptyStats,
   }
-]
+}
 
 export default function AdminVendedoresPage() {
   const { toast } = useToast()
-  const [vendors, setVendors] = useState<VendorMock[]>(mockVendors)
+  const [vendors, setVendors] = useState<VendorMock[]>([])
+  const [isLoadingVendors, setIsLoadingVendors] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [selectedVendor, setSelectedVendor] = useState<VendorMock | null>(null)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isSavingEdit, setIsSavingEdit] = useState(false)
+  const [editVendor, setEditVendor] = useState({
+    nombres: "",
+    apellidos: "",
+    correo: "",
+    celular: "",
+    documento: "",
+    direccion: "",
+  })
   const [isAddingVendor, setIsAddingVendor] = useState(false)
   
   const [showPassword, setShowPassword] = useState(false)
@@ -177,6 +174,87 @@ export default function AdminVendedoresPage() {
     setNewVendor((prev) => ({ ...prev, [id]: value }))
     if (fieldErrors[id]) {
       setFieldErrors((prev) => ({ ...prev, [id]: "" }))
+    }
+  }
+
+  useEffect(() => {
+    const loadVendors = async () => {
+      setIsLoadingVendors(true)
+      try {
+        const profiles = await AdminService.getVendedores()
+        setVendors(profiles.map(mapProfileToVendor))
+      } catch (error) {
+        toast({
+          title: "Error al cargar vendedores",
+          description: error instanceof Error ? error.message : "Intenta nuevamente.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoadingVendors(false)
+      }
+    }
+
+    loadVendors()
+  }, [toast])
+
+  const openEditDialog = async (vendor: VendorMock) => {
+    setSelectedVendor(vendor)
+    try {
+      const profile = await UserService.getUserById(Number(vendor.id))
+      setEditVendor({
+        nombres: profile.nombres,
+        apellidos: profile.apellidos,
+        correo: profile.email,
+        celular: profile.telefono,
+        documento: profile.numeroDocumento,
+        direccion: profile.direccion,
+      })
+      setIsEditDialogOpen(true)
+    } catch (error) {
+      toast({
+        title: "Error al cargar vendedor",
+        description: error instanceof Error ? error.message : "Intenta nuevamente.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleSaveEdit = async () => {
+    if (!selectedVendor) return
+
+    setIsSavingEdit(true)
+    try {
+      const updated = await AdminService.updateUser(Number(selectedVendor.id), {
+        nombres: editVendor.nombres.trim(),
+        apellidos: editVendor.apellidos.trim(),
+        email: editVendor.correo.trim(),
+        telefono: editVendor.celular.replace(/\D/g, ""),
+        numeroDocumento: editVendor.documento.trim(),
+        tipoDocumento: TipoDocumento.DNI,
+        ...(editVendor.direccion.trim() ? { direccion: editVendor.direccion.trim() } : {}),
+      })
+
+      const mapped = mapProfileToVendor(updated)
+      setVendors((prev) =>
+        prev.map((vendor) =>
+          vendor.id === selectedVendor.id
+            ? { ...vendor, ...mapped, stats: vendor.stats }
+            : vendor,
+        ),
+      )
+      setIsEditDialogOpen(false)
+      toast({
+        title: "Vendedor actualizado",
+        description: "Los datos del vendedor fueron actualizados correctamente.",
+      })
+    } catch (error) {
+      toast({
+        title: "Error al actualizar vendedor",
+        description: error instanceof Error ? error.message : "Revisa los datos ingresados.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSavingEdit(false)
     }
   }
 
@@ -232,12 +310,33 @@ export default function AdminVendedoresPage() {
     return matchesSearch && matchesStatus
   })
 
-  const handleToggleStatus = (vendorId: string) => {
-    setVendors(vendors.map(v => 
-      v.id === vendorId 
-        ? { ...v, estado: v.estado === 'activo' ? 'inactivo' as const : 'activo' as const }
-        : v
-    ))
+  const handleToggleStatus = async (vendor: VendorMock) => {
+    if (vendor.estado === "activo") {
+      try {
+        await AdminService.deactivateUser(Number(vendor.id))
+        setVendors((prev) =>
+          prev.map((v) =>
+            v.id === vendor.id ? { ...v, estado: "inactivo" as const } : v,
+          ),
+        )
+        toast({
+          title: "Cuenta desactivada",
+          description: `${vendor.nombres} ${vendor.apellidos} fue desactivado.`,
+        })
+      } catch (error) {
+        toast({
+          title: "No se pudo desactivar",
+          description: error instanceof Error ? error.message : "Intenta nuevamente.",
+          variant: "destructive",
+        })
+      }
+      return
+    }
+
+    toast({
+      title: "Reactivacion no disponible",
+      description: "Contacta soporte para reactivar la cuenta del vendedor.",
+    })
   }
 
   const handleAddVendor = async () => {
@@ -259,7 +358,7 @@ export default function AdminVendedoresPage() {
         email: newVendor.correo.trim(),
         contrasena: newVendor.contrasena,
         telefono: newVendor.celular.trim(),
-        tipoDocumento: "DNI",
+        tipoDocumento: TipoDocumento.DNI,
         numeroDocumento: newVendor.documento.trim(),
         direccion: "No aplica",
       })
@@ -271,7 +370,7 @@ export default function AdminVendedoresPage() {
         correo: created.email,
         celular: newVendor.celular.trim(),
         documento: newVendor.documento.trim(),
-        tipoDocumento: "DNI",
+        tipoDocumento: TipoDocumento.DNI,
         rol: "vendedor",
         estado: "activo",
         createdAt: new Date(),
@@ -572,8 +671,15 @@ export default function AdminVendedoresPage() {
       {/* Table */}
       <Card className="border-2">
         <CardContent className="pt-6">
-          <div className="overflow-x-auto">
-            <Table>
+          {isLoadingVendors ? (
+            <div className="text-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+              <p className="text-muted-foreground">Cargando vendedores...</p>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Vendedor</TableHead>
@@ -610,7 +716,7 @@ export default function AdminVendedoresPage() {
                       <div className="flex items-center gap-2">
                         <Switch
                           checked={vendor.estado === 'activo'}
-                          onCheckedChange={() => handleToggleStatus(vendor.id)}
+                          onCheckedChange={() => handleToggleStatus(vendor)}
                         />
                         <Badge variant={vendor.estado === 'activo' ? "default" : "secondary"}>
                           {vendor.estado === 'activo' ? "Activo" : "Inactivo"}
@@ -633,12 +739,12 @@ export default function AdminVendedoresPage() {
                           }}>
                             <Eye className="w-4 h-4 mr-2" /> Ver Detalles
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openEditDialog(vendor)}>
                             <Edit className="w-4 h-4 mr-2" /> Editar
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem 
-                            onClick={() => handleToggleStatus(vendor.id)}
+                          <DropdownMenuItem
+                            onClick={() => handleToggleStatus(vendor)}
                             className={vendor.estado === 'activo' ? "text-destructive" : "text-green-600"}
                           >
                             {vendor.estado === 'activo' ? (
@@ -657,14 +763,16 @@ export default function AdminVendedoresPage() {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
-          </div>
+                </Table>
+              </div>
 
-          {filteredVendors.length === 0 && (
-            <div className="text-center py-12">
-              <Users className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
-              <p className="text-muted-foreground">No se encontraron vendedores</p>
-            </div>
+              {filteredVendors.length === 0 && (
+                <div className="text-center py-12">
+                  <Users className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+                  <p className="text-muted-foreground">No se encontraron vendedores</p>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
@@ -718,7 +826,7 @@ export default function AdminVendedoresPage() {
                 <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>
                   Cerrar
                 </Button>
-                <Button onClick={() => handleToggleStatus(selectedVendor.id)}>
+                <Button onClick={() => selectedVendor && handleToggleStatus(selectedVendor)}>
                   {selectedVendor.estado === 'activo' ? (
                     <>
                       <UserX className="w-4 h-4 mr-2" /> Desactivar Cuenta
@@ -732,6 +840,85 @@ export default function AdminVendedoresPage() {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Modificar vendedor</DialogTitle>
+            <DialogDescription>
+              Actualiza los datos del vendedor seleccionado.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-nombres">Nombres</Label>
+                <Input
+                  id="edit-nombres"
+                  value={editVendor.nombres}
+                  onChange={(e) => setEditVendor({ ...editVendor, nombres: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-apellidos">Apellidos</Label>
+                <Input
+                  id="edit-apellidos"
+                  value={editVendor.apellidos}
+                  onChange={(e) => setEditVendor({ ...editVendor, apellidos: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-correo">Correo</Label>
+              <Input
+                id="edit-correo"
+                type="email"
+                value={editVendor.correo}
+                onChange={(e) => setEditVendor({ ...editVendor, correo: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-celular">Celular</Label>
+              <Input
+                id="edit-celular"
+                value={editVendor.celular}
+                onChange={(e) => setEditVendor({ ...editVendor, celular: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-documento">DNI</Label>
+              <Input
+                id="edit-documento"
+                value={editVendor.documento}
+                onChange={(e) => setEditVendor({ ...editVendor, documento: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-direccion">Direccion</Label>
+              <Input
+                id="edit-direccion"
+                value={editVendor.direccion}
+                onChange={(e) => setEditVendor({ ...editVendor, direccion: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={isSavingEdit}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={isSavingEdit}>
+              {isSavingEdit ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                "Guardar cambios"
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

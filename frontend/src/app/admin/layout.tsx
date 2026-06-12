@@ -34,8 +34,8 @@ import {
 
 const navigation = [
   { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
-  { name: "Pedidos", href: "/admin/pedidos", icon: ShoppingBag, badge: 12 },
-  { name: "Cotizaciones", href: "/admin/cotizaciones", icon: FileText, badge: 5 },
+  { name: "Pedidos", href: "/admin/pedidos", icon: ShoppingBag },
+  { name: "Cotizaciones", href: "/admin/cotizaciones", icon: FileText },
   { name: "Productos", href: "/admin/productos", icon: Package },
   { name: "Clientes", href: "/admin/clientes", icon: Users },
   { name: "Vendedores", href: "/admin/vendedores", icon: Users },
@@ -107,17 +107,6 @@ export default function AdminLayout({
                     <item.icon className="w-5 h-5" />
                     {item.name}
                   </div>
-                  {item.badge && (
-                    <Badge 
-                      variant={isActive ? "secondary" : "default"}
-                      className={cn(
-                        "text-xs",
-                        isActive && "bg-sidebar-primary-foreground/20 text-sidebar-primary-foreground"
-                      )}
-                    >
-                      {item.badge}
-                    </Badge>
-                  )}
                 </Link>
               )
             })}

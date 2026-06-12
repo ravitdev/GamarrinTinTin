@@ -1,4 +1,8 @@
-import { Usuario } from './domain/usuario.entity';
+import { Usuario, RolUsuario } from './domain/usuario.entity';
+import {
+  SolicitudCambioDocumento,
+  SolicitudDesactivacion,
+} from './domain/solicitud.entity';
 
 export interface IUsuarioRepository {
   guardar(usuario: Usuario): Promise<Usuario>;
@@ -9,6 +13,8 @@ export interface IUsuarioRepository {
   existePorEmail(email: string): Promise<boolean>;
   existePorDocumento(numeroDocumento: string): Promise<boolean>;
   listarUsuarios(): Promise<Usuario[]>;
+  listarPorRol(rol: RolUsuario): Promise<Usuario[]>;
+  contarPedidosEnProceso(idCliente: number): Promise<number>;
   guardarRefreshToken(
     idUsuario: number,
     refreshTokenHash: string,
@@ -18,4 +24,32 @@ export interface IUsuarioRepository {
     idUsuario: number,
   ): Promise<{ refreshTokenHash: string; fechaExpiracion: Date } | null>;
   revocarRefreshToken(idUsuario: number): Promise<boolean>;
+  crearSolicitudCambioDocumento(
+    solicitud: SolicitudCambioDocumento,
+  ): Promise<SolicitudCambioDocumento>;
+  buscarSolicitudCambioDocumentoPendiente(
+    idUsuario: number,
+  ): Promise<SolicitudCambioDocumento | null>;
+  listarSolicitudesCambioDocumentoPendientes(): Promise<
+    Array<SolicitudCambioDocumento & { usuario: Usuario }>
+  >;
+  resolverSolicitudCambioDocumento(
+    idSolicitud: number,
+    estado: 'APROBADA' | 'RECHAZADA',
+    idAdmin: number,
+  ): Promise<SolicitudCambioDocumento | null>;
+  crearSolicitudDesactivacion(
+    solicitud: SolicitudDesactivacion,
+  ): Promise<SolicitudDesactivacion>;
+  buscarSolicitudDesactivacionPendiente(
+    idUsuario: number,
+  ): Promise<SolicitudDesactivacion | null>;
+  listarSolicitudesDesactivacionPendientes(): Promise<
+    Array<SolicitudDesactivacion & { usuario: Usuario }>
+  >;
+  resolverSolicitudDesactivacion(
+    idSolicitud: number,
+    estado: 'PROCESADA' | 'RECHAZADA',
+    idAdmin: number,
+  ): Promise<SolicitudDesactivacion | null>;
 }

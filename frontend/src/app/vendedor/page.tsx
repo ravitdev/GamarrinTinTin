@@ -147,11 +147,12 @@ export default function VendedorDashboardPage() {
               <CardTitle className="text-lg">Pedidos Recientes</CardTitle>
               <CardDescription>Ultimos pedidos recibidos</CardDescription>
             </div>
-            <Link href="/vendedor/pedidos">
-              <Button variant="ghost" size="sm">
-                Ver Todos <ArrowRight className="w-4 h-4 ml-1" />
-              </Button>
-            </Link>
+            <Button variant="ghost" asChild>
+              <Link href="/vendedor/pedidos">
+                Ver todos
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Link>
+            </Button>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">

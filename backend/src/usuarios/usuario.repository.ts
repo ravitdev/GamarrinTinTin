@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Usuario } from './domain/usuario.entity';
+import { Usuario, RolUsuario } from './domain/usuario.entity';
+import {
+  SolicitudCambioDocumento,
+  SolicitudDesactivacion,
+  EstadoSolicitud,
+} from './domain/solicitud.entity';
 import { IUsuarioRepository } from './iusuario.repository';
 import { UsuarioDataMapper } from './usuario-data.mapper';
 
@@ -51,7 +56,10 @@ export class UsuarioRepository implements IUsuarioRepository {
   async desactivar(idUsuario: number): Promise<boolean> {
     const resultado = await this.prisma.usuario.updateMany({
       where: { idUsuario },
-      data: { estado: 'INACTIVO' },
+      data: {
+        estado: 'INACTIVO',
+        fechaEliminacion: new Date(),
+      },
     });
 
     return resultado.count > 0;
@@ -92,6 +100,25 @@ export class UsuarioRepository implements IUsuarioRepository {
   async listarUsuarios(): Promise<Usuario[]> {
     const registros = await this.prisma.usuario.findMany();
     return registros.map((registro) => UsuarioDataMapper.aEntidad(registro));
+  }
+
+  async listarPorRol(rol: RolUsuario): Promise<Usuario[]> {
+    const registros = await this.prisma.usuario.findMany({
+      where: { rol },
+      orderBy: { fechaRegistro: 'desc' },
+    });
+    return registros.map((registro) => UsuarioDataMapper.aEntidad(registro));
+  }
+
+  async contarPedidosEnProceso(idCliente: number): Promise<number> {
+    return this.prisma.pedido.count({
+      where: {
+        idCliente,
+        estado: {
+          in: ['REGISTRADO', 'CONFIRMADO', 'PROCESANDO', 'ENVIADO'],
+        },
+      },
+    });
   }
 
   async guardarRefreshToken(
@@ -144,5 +171,161 @@ export class UsuarioRepository implements IUsuarioRepository {
     });
 
     return resultado.count > 0;
+  }
+
+  async crearSolicitudCambioDocumento(
+    solicitud: SolicitudCambioDocumento,
+  ): Promise<SolicitudCambioDocumento> {
+    const registro = await this.prisma.solicitudCambioDocumento.create({
+      data: {
+        idUsuario: solicitud.idUsuario,
+        tipoDocumento: solicitud.tipoDocumento,
+        numeroDocumento: solicitud.numeroDocumento,
+        estado: solicitud.estado,
+        fechaSolicitud: solicitud.fechaSolicitud,
+      },
+    });
+
+    return this.aSolicitudCambioDocumento(registro);
+  }
+
+  async buscarSolicitudCambioDocumentoPendiente(
+    idUsuario: number,
+  ): Promise<SolicitudCambioDocumento | null> {
+    const registro = await this.prisma.solicitudCambioDocumento.findFirst({
+      where: { idUsuario, estado: 'PENDIENTE' },
+      orderBy: { fechaSolicitud: 'desc' },
+    });
+
+    return registro ? this.aSolicitudCambioDocumento(registro) : null;
+  }
+
+  async listarSolicitudesCambioDocumentoPendientes(): Promise<
+    Array<SolicitudCambioDocumento & { usuario: Usuario }>
+  > {
+    const registros = await this.prisma.solicitudCambioDocumento.findMany({
+      where: { estado: 'PENDIENTE' },
+      include: { usuario: true },
+      orderBy: { fechaSolicitud: 'asc' },
+    });
+
+    return registros.map((registro) => ({
+      ...this.aSolicitudCambioDocumento(registro),
+      usuario: UsuarioDataMapper.aEntidad(registro.usuario),
+    }));
+  }
+
+  async resolverSolicitudCambioDocumento(
+    idSolicitud: number,
+    estado: 'APROBADA' | 'RECHAZADA',
+    idAdmin: number,
+  ): Promise<SolicitudCambioDocumento | null> {
+    const registro = await this.prisma.solicitudCambioDocumento.update({
+      where: { idSolicitud },
+      data: {
+        estado,
+        fechaResolucion: new Date(),
+        idAdminResolvio: idAdmin,
+      },
+    });
+
+    return registro ? this.aSolicitudCambioDocumento(registro) : null;
+  }
+
+  async crearSolicitudDesactivacion(
+    solicitud: SolicitudDesactivacion,
+  ): Promise<SolicitudDesactivacion> {
+    const registro = await this.prisma.solicitudDesactivacion.create({
+      data: {
+        idUsuario: solicitud.idUsuario,
+        estado: solicitud.estado,
+        fechaSolicitud: solicitud.fechaSolicitud,
+      },
+    });
+
+    return this.aSolicitudDesactivacion(registro);
+  }
+
+  async buscarSolicitudDesactivacionPendiente(
+    idUsuario: number,
+  ): Promise<SolicitudDesactivacion | null> {
+    const registro = await this.prisma.solicitudDesactivacion.findFirst({
+      where: { idUsuario, estado: 'PENDIENTE' },
+      orderBy: { fechaSolicitud: 'desc' },
+    });
+
+    return registro ? this.aSolicitudDesactivacion(registro) : null;
+  }
+
+  async listarSolicitudesDesactivacionPendientes(): Promise<
+    Array<SolicitudDesactivacion & { usuario: Usuario }>
+  > {
+    const registros = await this.prisma.solicitudDesactivacion.findMany({
+      where: { estado: 'PENDIENTE' },
+      include: { usuario: true },
+      orderBy: { fechaSolicitud: 'asc' },
+    });
+
+    return registros.map((registro) => ({
+      ...this.aSolicitudDesactivacion(registro),
+      usuario: UsuarioDataMapper.aEntidad(registro.usuario),
+    }));
+  }
+
+  async resolverSolicitudDesactivacion(
+    idSolicitud: number,
+    estado: 'PROCESADA' | 'RECHAZADA',
+    idAdmin: number,
+  ): Promise<SolicitudDesactivacion | null> {
+    const registro = await this.prisma.solicitudDesactivacion.update({
+      where: { idSolicitud },
+      data: {
+        estado,
+        fechaResolucion: new Date(),
+        idAdminResolvio: idAdmin,
+      },
+    });
+
+    return registro ? this.aSolicitudDesactivacion(registro) : null;
+  }
+
+  private aSolicitudCambioDocumento(registro: {
+    idSolicitud: number;
+    idUsuario: number;
+    tipoDocumento: SolicitudCambioDocumento['tipoDocumento'];
+    numeroDocumento: string;
+    estado: EstadoSolicitud;
+    fechaSolicitud: Date;
+    fechaResolucion: Date | null;
+    idAdminResolvio: number | null;
+  }): SolicitudCambioDocumento {
+    return new SolicitudCambioDocumento(
+      registro.idSolicitud,
+      registro.idUsuario,
+      registro.tipoDocumento,
+      registro.numeroDocumento,
+      registro.estado,
+      registro.fechaSolicitud,
+      registro.fechaResolucion,
+      registro.idAdminResolvio,
+    );
+  }
+
+  private aSolicitudDesactivacion(registro: {
+    idSolicitud: number;
+    idUsuario: number;
+    estado: EstadoSolicitud;
+    fechaSolicitud: Date;
+    fechaResolucion: Date | null;
+    idAdminResolvio: number | null;
+  }): SolicitudDesactivacion {
+    return new SolicitudDesactivacion(
+      registro.idSolicitud,
+      registro.idUsuario,
+      registro.estado,
+      registro.fechaSolicitud,
+      registro.fechaResolucion,
+      registro.idAdminResolvio,
+    );
   }
 }
