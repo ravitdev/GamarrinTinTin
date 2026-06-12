@@ -27,19 +27,24 @@ export interface PersonalizationOptions {
 export class ProductService {
   static async getProductDetail(id: number): Promise<Producto> {
     try {
-      const rawProduct = await ApiClient.get<any>(`/productos/${id}`);
+      const rawProduct = await ApiClient.get<any>(`/productos/${id}`, {
+        auth: false,
+      });
       return mapBackendProductToFrontend(rawProduct);
-    } catch {
-      // Fallback a mock-data en desarrollo
+    } catch (error) {
+      console.error('Error conectando detalle de producto con backend:', error);
+
       const product = products.find((p) => p.idProducto === id);
       if (!product) throw new Error(`Producto con id ${id} no encontrado`);
       return product;
-    }
+    } 
   }
 
   static async getRelatedProducts(id: number): Promise<Producto[]> {
     try {
-      const rawProducts = await ApiClient.get<any[]>(`/productos/${id}/relacionados`);
+      const rawProducts = await ApiClient.get<any[]>(`/productos/${id}/relacionados`, {
+        auth: false,
+      });
       return rawProducts.map(mapBackendProductToFrontend);
     } catch {
       // Fallback a mock-data

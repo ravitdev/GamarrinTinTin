@@ -100,7 +100,8 @@ export async function fetchCatalogo(
       page,
       limit,
     };
-  } catch {
+  } catch (error) {
+    console.error('Error conectando catálogo con backend:', error);
     // Fallback a mock-data cuando el backend no esta disponible.
     let data = [...products];
 

@@ -41,6 +41,7 @@ export function mapBackendProductToFrontend(backendProduct: any): any {
           idColor: index + 1,
           nombre: v.colorNombre,
           codigoHex: v.colorHex,
+          hexCode: v.colorHex,
           urlImagen: matchingImg?.urlImagen || backendProduct.imagenPrincipal || '/placeholder.svg',
         });
       }
@@ -55,6 +56,7 @@ export function mapBackendProductToFrontend(backendProduct: any): any {
           idColor: index + 1,
           nombre: img.colorHex === '#FFFFFF' ? 'Blanco' : 'Color ' + (index + 1),
           codigoHex: colorHex,
+          hexCode: colorHex,
           urlImagen: img.urlImagen || '/placeholder.svg',
         });
       }
@@ -67,6 +69,7 @@ export function mapBackendProductToFrontend(backendProduct: any): any {
         idColor: 1,
         nombre: 'Blanco',
         codigoHex: '#FFFFFF',
+        hexCode: '#FFFFFF',
         urlImagen: backendProduct.imagenPrincipal || '/placeholder.svg',
       },
     ];

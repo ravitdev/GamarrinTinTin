@@ -93,10 +93,10 @@ export default function ProductDetailPage() {
     );
   }
 
-  const selectedColor = product.colores?.[selectedColorIndex];
+  const selectedColor = product.colores?.[selectedColorIndex] ?? {nombre: 'Blanco', codigoHex: '#FFFFFF', hexCode: '#FFFFFF', urlImagen: '/placeholder.svg',};
   const selectedVariant = product.variantes?.find(
     (v: any) =>
-      v.colorHex.toUpperCase() === selectedColor?.codigoHex.toUpperCase() &&
+      v.colorHex.toUpperCase() === selectedColor.codigoHex.toUpperCase() &&
       v.talla === selectedSize
   );
   const currentStock = selectedVariant ? selectedVariant.stock : 0;
@@ -326,7 +326,11 @@ export default function ProductDetailPage() {
                 </label>
                 <div className="flex gap-3">
                   {product.tallas.map((size: any) => {
-                    const sizeStock = checkStock(product, selectedColor, size);
+                    const sizeStock = product.variantes?.find(
+                                                              (v: any) =>
+                                                                v.colorHex.toUpperCase() === selectedColor.codigoHex.toUpperCase() &&
+                                                                v.talla === size,
+                                                            )?.stock ?? 0;
                     return (
                       <button
                         key={size}

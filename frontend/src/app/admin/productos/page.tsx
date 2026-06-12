@@ -55,6 +55,14 @@ import { Talla } from "@/lib/types"
 
 // Helper to calculate total stock for a product
 function getTotalStock(product: Producto): number {
+  const variantes = (product as any).variantes || []
+
+  if (variantes.length > 0) {
+    return variantes.reduce((total: number, variante: any) => {
+      return total + (Number(variante.stock) || 0)
+    }, 0)
+  }
+
   return product.stock || 0
 }
 
@@ -213,24 +221,6 @@ export default function AdminProductsPage() {
             descripcion: formData.descripcion,
             precioBase: formData.precioBase,
             esPersonalizable: formData.esPersonalizable,
-            variantes: formData.tallas.map((talla, index) => ({
-              colorNombre: `Color ${index + 1}`,
-              colorHex: '#000000',
-              talla,
-              stock: 50,
-            })),
-            imagenes: [
-              {
-                colorHex: '#000000',
-                lado: 'FRONT',
-                urlImagen: '/placeholder.svg',
-                displayOrder: 0,
-              },
-            ],
-            descuentosVolumen: formData.descuentosVolumen.map((discount) => ({
-              cantidadMinima: discount.cantidadMinima,
-              porcentajeDescuento: discount.porcentajeDescuento,
-            })),
           },
         )
 
@@ -239,8 +229,11 @@ export default function AdminProductsPage() {
             product.idProducto === selectedProduct.idProducto ? updatedProduct : product,
           ),
         )
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error al actualizar el producto:', error)
+        console.error('Status:', error?.status)
+        console.error('Body:', error?.body)
+        console.error('Message:', error?.message)
       } finally {
         setIsSavingProduct(false)
         setIsEditDialogOpen(false)
