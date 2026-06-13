@@ -325,6 +325,21 @@ describe('UsuarioManager', () => {
     ).rejects.toThrow('El teléfono debe tener 9 dígitos.');
   });
 
+  it('rechaza registro con teléfono que no empieza con 9', async () => {
+    await expect(
+      manager.registrarCuentaCliente({
+        nombres: 'Nuevo',
+        apellidos: 'Cliente',
+        email: 'telefono.inicio.invalido@gamarrintintin.com',
+        contrasena: 'Cliente456',
+        telefono: '888777666',
+        tipoDocumento: 'DNI',
+        numeroDocumento: '70000005',
+        direccion: 'Lima',
+      }),
+    ).rejects.toThrow('El teléfono debe empezar con 9.');
+  });
+
   it('rechaza registro con documento inválido según tipo', async () => {
     await expect(
       manager.registrarCuentaCliente({
@@ -338,6 +353,21 @@ describe('UsuarioManager', () => {
         direccion: 'Lima',
       }),
     ).rejects.toThrow('El RUC debe tener 11 dígitos.');
+  });
+
+  it('rechaza registro con RUC que no empieza con 10 o 20', async () => {
+    await expect(
+      manager.registrarCuentaCliente({
+        nombres: 'Nuevo',
+        apellidos: 'Cliente',
+        email: 'ruc.inicio.invalido@gamarrintintin.com',
+        contrasena: 'Cliente456',
+        telefono: '988777666',
+        tipoDocumento: 'RUC',
+        numeroDocumento: '30123456789',
+        direccion: 'Lima',
+      }),
+    ).rejects.toThrow('El RUC debe empezar con 10 o 20.');
   });
 
   it('registra usuario vendedor', async () => {

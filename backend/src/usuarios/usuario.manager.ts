@@ -665,6 +665,10 @@ export class UsuarioManager {
     if (!/^\d{9}$/.test(telefono)) {
       throw new Error('El teléfono debe tener 9 dígitos.');
     }
+
+    if (!telefono.startsWith('9')) {
+      throw new Error('El teléfono debe empezar con 9.');
+    }
   }
 
   private validarDocumento(
@@ -675,14 +679,19 @@ export class UsuarioManager {
       throw new Error('El tipo de documento no es válido.');
     }
 
-    const reglasDocumento = {
-      DNI: { patron: /^\d{8}$/, mensaje: 'El DNI debe tener 8 dígitos.' },
-      RUC: { patron: /^\d{11}$/, mensaje: 'El RUC debe tener 11 dígitos.' },
-    };
-    const regla = reglasDocumento[tipoDocumento];
+    if (tipoDocumento === 'DNI') {
+      if (!/^\d{8}$/.test(numeroDocumento)) {
+        throw new Error('El DNI debe tener 8 dígitos.');
+      }
+      return;
+    }
 
-    if (!regla.patron.test(numeroDocumento)) {
-      throw new Error(regla.mensaje);
+    if (!/^\d{11}$/.test(numeroDocumento)) {
+      throw new Error('El RUC debe tener 11 dígitos.');
+    }
+
+    if (!numeroDocumento.startsWith('10') && !numeroDocumento.startsWith('20')) {
+      throw new Error('El RUC debe empezar con 10 o 20.');
     }
   }
 

@@ -21,9 +21,9 @@ interface RegistroScreenProps {
 // Reglas de validación
 // ---------------------------------------------------------------------------
 const EMAIL_REGEX    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const CELULAR_REGEX  = /^[0-9]{9}$/;
+const CELULAR_DIGITOS_REGEX = /^[0-9]{9}$/;
 const DNI_REGEX      = /^[0-9]{8}$/;
-const RUC_REGEX      = /^[0-9]{11}$/;
+const RUC_DIGITOS_REGEX = /^[0-9]{11}$/;
 const PASSWORD_REGEX = /^(?=.*[0-9]).{8,}$/; // min 8 chars + al menos 1 número
 
 type FormData = {
@@ -51,14 +51,22 @@ function validateForm(data: FormData): Record<string, string> {
     e.numeroDocumento = `El ${data.tipoDocumento} es obligatorio`;
   } else if (data.tipoDocumento === TipoDocumento.DNI && !DNI_REGEX.test(data.numeroDocumento)) {
     e.numeroDocumento = 'El DNI debe tener exactamente 8 digitos';
-  } else if (data.tipoDocumento === TipoDocumento.RUC && !RUC_REGEX.test(data.numeroDocumento)) {
+  } else if (data.tipoDocumento === TipoDocumento.RUC && !RUC_DIGITOS_REGEX.test(data.numeroDocumento)) {
     e.numeroDocumento = 'El RUC debe tener exactamente 11 digitos';
+  } else if (
+    data.tipoDocumento === TipoDocumento.RUC &&
+    !data.numeroDocumento.startsWith('10') &&
+    !data.numeroDocumento.startsWith('20')
+  ) {
+    e.numeroDocumento = 'El RUC debe empezar con 10 o 20';
   }
 
   if (!data.celular.trim()) {
     e.celular = 'El celular es obligatorio';
-  } else if (!CELULAR_REGEX.test(data.celular)) {
+  } else if (!CELULAR_DIGITOS_REGEX.test(data.celular)) {
     e.celular = 'El celular debe tener exactamente 9 digitos numericos';
+  } else if (!data.celular.startsWith('9')) {
+    e.celular = 'El celular debe empezar con 9';
   }
 
   if (!data.email.trim()) {
