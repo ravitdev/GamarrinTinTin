@@ -52,6 +52,7 @@ import { formatPrice, categorias } from "@/lib/mock-data"
 import { AdminService, type CreateProductPayload } from "@/features/admin/services/admin.service"
 import type { Producto, DescuentoVolumen } from "@/lib/types"
 import { Talla } from "@/lib/types"
+import { toast } from "@/hooks/use-toast"
 
 // Helper to calculate total stock for a product
 function getTotalStock(product: Producto): number {
@@ -99,6 +100,196 @@ const defaultFormData: ProductFormData = {
 
 const availableSizes: Talla[] = [Talla.S, Talla.M, Talla.L, Talla.XL]
 
+type ProductStatusFilter = "todos" | "activos" | "inactivos"
+
+interface ProductFormProps {
+  formData: ProductFormData
+  fieldErrors: Record<string, string>
+  onChange: (values: ProductFormData) => void
+  onToggleSize: (size: Talla) => void
+  onAddDiscount: () => void
+  onUpdateDiscount: (index: number, field: 'cantidadMinima' | 'porcentajeDescuento', value: number) => void
+  onRemoveDiscount: (index: number) => void
+}
+
+function RequiredMark() {
+  return <span className="text-destructive">*</span>
+}
+
+function ProductForm({
+  formData,
+  fieldErrors,
+  onChange,
+  onToggleSize,
+  onAddDiscount,
+  onUpdateDiscount,
+  onRemoveDiscount,
+}: ProductFormProps) {
+  return (
+    <div className="space-y-6 py-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="nombre">Nombre del Producto <RequiredMark /></Label>
+          <Input
+            id="nombre"
+            placeholder="Ej: Polo Premium"
+            value={formData.nombre}
+            onChange={(e) => onChange({ ...formData, nombre: e.target.value })}
+            className={fieldErrors.nombre ? "border-destructive" : undefined}
+          />
+          {fieldErrors.nombre && <p className="text-xs text-destructive">{fieldErrors.nombre}</p>}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="precioBase">Precio Base (S/) <RequiredMark /></Label>
+          <Input
+            id="precioBase"
+            type="number"
+            step="0.01"
+            placeholder="0.00"
+            value={formData.precioBase || ""}
+            onChange={(e) => onChange({ ...formData, precioBase: parseFloat(e.target.value) || 0 })}
+            className={fieldErrors.precioBase ? "border-destructive" : undefined}
+          />
+          {fieldErrors.precioBase && <p className="text-xs text-destructive">{fieldErrors.precioBase}</p>}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="categoria">Categoria <RequiredMark /></Label>
+          <Select value={String(formData.idCategoria)} onValueChange={(value) => onChange({ ...formData, idCategoria: Number(value) })}>
+            <SelectTrigger id="categoria" className={fieldErrors.idCategoria ? "border-destructive" : undefined}>
+              <SelectValue placeholder="Selecciona una categoria" />
+            </SelectTrigger>
+            <SelectContent>
+              {categorias.map((categoria) => (
+                <SelectItem key={categoria.idCategoria} value={String(categoria.idCategoria)}>
+                  {categoria.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {fieldErrors.idCategoria && <p className="text-xs text-destructive">{fieldErrors.idCategoria}</p>}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="descripcion">Descripcion <RequiredMark /></Label>
+        <Textarea
+          id="descripcion"
+          placeholder="Descripcion del producto..."
+          rows={3}
+          value={formData.descripcion}
+          onChange={(e) => onChange({ ...formData, descripcion: e.target.value })}
+          className={fieldErrors.descripcion ? "border-destructive" : undefined}
+        />
+        {fieldErrors.descripcion && <p className="text-xs text-destructive">{fieldErrors.descripcion}</p>}
+      </div>
+
+      <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+        <div>
+          <Label htmlFor="personalizable">Producto Personalizable</Label>
+          <p className="text-sm text-muted-foreground">Permite diseno personalizado</p>
+        </div>
+        <Switch
+          id="personalizable"
+          checked={formData.esPersonalizable}
+          onCheckedChange={(checked) => onChange({ ...formData, esPersonalizable: checked })}
+        />
+      </div>
+
+      <div className="space-y-4">
+        <Label>Tallas Disponibles <RequiredMark /></Label>
+        <div className="flex flex-wrap gap-2">
+          {availableSizes.map(size => (
+            <Badge
+              key={size}
+              variant={formData.tallas.includes(size) ? "default" : "outline"}
+              className="cursor-pointer hover:bg-accent hover:text-accent-foreground px-4 py-2"
+              onClick={() => onToggleSize(size)}
+            >
+              {size}
+            </Badge>
+          ))}
+        </div>
+        {fieldErrors.tallas && <p className="text-xs text-destructive">{fieldErrors.tallas}</p>}
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Label className="flex items-center gap-2">
+            <Percent className="w-4 h-4" />
+            Descuentos por Volumen
+          </Label>
+          <Button type="button" variant="outline" size="sm" onClick={onAddDiscount}>
+            <Plus className="w-4 h-4 mr-1" />
+            Agregar Descuento
+          </Button>
+        </div>
+
+        {formData.descuentosVolumen.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4 border rounded-lg border-dashed">
+            No hay descuentos configurados. Agrega descuentos para pedidos por volumen.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {formData.descuentosVolumen.map((discount, index) => (
+              <div key={discount.idDescuento ?? `descuento-${index}`} className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30">
+                <div className="flex-1 grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Cantidad Minima</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={discount.cantidadMinima}
+                      onChange={(e) => onUpdateDiscount(index, 'cantidadMinima', parseInt(e.target.value) || 0)}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Descuento (%)</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={discount.porcentajeDescuento}
+                      onChange={(e) => onUpdateDiscount(index, 'porcentajeDescuento', parseInt(e.target.value) || 0)}
+                      className="h-9"
+                    />
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => onRemoveDiscount(index)}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {formData.descuentosVolumen.length > 0 && (
+          <div className="p-3 bg-accent/10 rounded-lg">
+            <p className="text-sm text-muted-foreground">
+              <strong>Vista previa:</strong>{" "}
+              {[...formData.descuentosVolumen]
+                .sort((a, b) => a.cantidadMinima - b.cantidadMinima)
+                .map(d => `${d.cantidadMinima}+ uds = ${d.porcentajeDescuento}% desc.`)
+                .join(" | ")}
+            </p>
+          </div>
+        )}
+        {fieldErrors.descuentosVolumen && (
+          <p className="text-xs text-destructive">{fieldErrors.descuentosVolumen}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<Producto[]>([])
   const [searchTerm, setSearchTerm] = useState("")
@@ -107,6 +298,8 @@ export default function AdminProductsPage() {
   const [selectedProduct, setSelectedProduct] = useState<Producto | null>(null)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [formData, setFormData] = useState<ProductFormData>(defaultFormData)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [statusFilter, setStatusFilter] = useState<ProductStatusFilter>("todos")
   const [loadingProducts, setLoadingProducts] = useState(false)
   const [isSavingProduct, setIsSavingProduct] = useState(false)
 
@@ -129,7 +322,13 @@ export default function AdminProductsPage() {
   const filteredProducts = products.filter(product => {
     const matchesSearch = 
       product.nombre.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchesSearch
+    const isActive = product.esActivo === true || product.estado === 'ACTIVO'
+    const matchesStatus =
+      statusFilter === "todos" ||
+      (statusFilter === "activos" && isActive) ||
+      (statusFilter === "inactivos" && !isActive)
+
+    return matchesSearch && matchesStatus
   })
 
   const totalProducts = products.length
@@ -179,21 +378,12 @@ export default function AdminProductsPage() {
     descripcion: values.descripcion,
     precioBase: values.precioBase,
     esPersonalizable: values.esPersonalizable,
-    variantes: values.tallas.length
-      ? values.tallas.map((talla, index) => ({
-          colorNombre: `Color ${index + 1}`,
-          colorHex: '#000000',
-          talla,
-          stock: 50,
-        }))
-      : [
-          {
-            colorNombre: 'Negro',
-            colorHex: '#000000',
-            talla: Talla.M,
-            stock: 50,
-          },
-        ],
+    variantes: values.tallas.map((talla) => ({
+      colorNombre: 'Negro',
+      colorHex: '#000000',
+      talla,
+      stock: 50,
+    })),
     imagenes: [
       {
         colorHex: '#000000',
@@ -208,20 +398,44 @@ export default function AdminProductsPage() {
     })),
   })
 
+  const validateProductForm = () => {
+    const errors: Record<string, string> = {}
+
+    if (!formData.nombre.trim()) errors.nombre = "El nombre del producto es obligatorio."
+    if (!formData.descripcion.trim()) errors.descripcion = "La descripción del producto es obligatoria."
+    if (!formData.idCategoria) errors.idCategoria = "La categoría del producto es obligatoria."
+    if (!formData.precioBase || formData.precioBase <= 0) errors.precioBase = "El precio base debe ser mayor a cero."
+    if (formData.tallas.length === 0) errors.tallas = "Selecciona al menos una talla."
+
+    const cantidades = new Set<number>()
+    for (const descuento of formData.descuentosVolumen) {
+      if (!Number.isInteger(descuento.cantidadMinima) || descuento.cantidadMinima <= 0) {
+        errors.descuentosVolumen = "La cantidad mínima del descuento debe ser mayor a cero."
+      }
+      if (descuento.porcentajeDescuento <= 0 || descuento.porcentajeDescuento > 100) {
+        errors.descuentosVolumen = "El porcentaje de descuento debe ser mayor a 0 y menor o igual a 100."
+      }
+      if (cantidades.has(descuento.cantidadMinima)) {
+        errors.descuentosVolumen = "No se permiten descuentos duplicados por cantidad mínima."
+      }
+      cantidades.add(descuento.cantidadMinima)
+    }
+
+    setFieldErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
   const handleSaveProduct = async () => {
+    if (!validateProductForm()) return
+
     if (selectedProduct && isEditDialogOpen) {
       try {
         setIsSavingProduct(true)
+        const payload = buildCreateProductPayload(formData)
 
         const updatedProduct = await AdminService.updateProduct(
           String(selectedProduct.idProducto),
-          {
-            idCategoria: formData.idCategoria,
-            nombre: formData.nombre,
-            descripcion: formData.descripcion,
-            precioBase: formData.precioBase,
-            esPersonalizable: formData.esPersonalizable,
-          },
+          payload,
         )
 
         setProducts((prevProducts) =>
@@ -229,16 +443,23 @@ export default function AdminProductsPage() {
             product.idProducto === selectedProduct.idProducto ? updatedProduct : product,
           ),
         )
-      } catch (error: any) {
-        console.error('Error al actualizar el producto:', error)
-        console.error('Status:', error?.status)
-        console.error('Body:', error?.body)
-        console.error('Message:', error?.message)
-      } finally {
-        setIsSavingProduct(false)
+        toast({
+          title: "Producto actualizado",
+          description: "Los cambios se guardaron correctamente.",
+        })
         setIsEditDialogOpen(false)
         setSelectedProduct(null)
         setFormData(defaultFormData)
+        setFieldErrors({})
+      } catch (error: any) {
+        console.error('Error al actualizar el producto:', error)
+        toast({
+          title: "Error al actualizar producto",
+          description: error instanceof Error ? error.message : "Revisa los datos ingresados.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsSavingProduct(false)
       }
     } else {
       try {
@@ -246,19 +467,30 @@ export default function AdminProductsPage() {
         const payload = buildCreateProductPayload(formData)
         const createdProduct = await AdminService.createProduct(payload)
         setProducts((prevProducts) => [createdProduct, ...prevProducts])
+        toast({
+          title: "Producto creado",
+          description: "El producto se registro correctamente.",
+        })
         setIsAddDialogOpen(false)
+        setFormData(defaultFormData)
+        setFieldErrors({})
       } catch (error) {
         console.error('Error al crear el producto:', error)
+        toast({
+          title: "Error al crear producto",
+          description: error instanceof Error ? error.message : "Revisa los datos ingresados.",
+          variant: "destructive",
+        })
       } finally {
         setIsSavingProduct(false)
         setSelectedProduct(null)
-        setFormData(defaultFormData)
       }
     }
   }
 
   const handleOpenEdit = (product: Producto) => {
     setSelectedProduct(product)
+    setFieldErrors({})
     setFormData({
       idCategoria: product.idCategoria,
       nombre: product.nombre,
@@ -273,171 +505,10 @@ export default function AdminProductsPage() {
 
   const handleOpenAdd = () => {
     setFormData(defaultFormData)
+    setFieldErrors({})
     setSelectedProduct(null)
     setIsAddDialogOpen(true)
   }
-
-  // Reusable form component for both add and edit
-  const ProductForm = ({ isEdit = false }: { isEdit?: boolean }) => (
-    <div className="space-y-6 py-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="nombre">Nombre del Producto *</Label>
-          <Input 
-            id="nombre" 
-            placeholder="Ej: Polo Premium" 
-            value={formData.nombre}
-            onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="precioBase">Precio Base (S/) *</Label>
-          <Input 
-            id="precioBase" 
-            type="number" 
-            step="0.01" 
-            placeholder="0.00" 
-            value={formData.precioBase || ""}
-            onChange={(e) => setFormData({ ...formData, precioBase: parseFloat(e.target.value) || 0 })}
-          />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="categoria">Categoría</Label>
-          <Select value={String(formData.idCategoria)} onValueChange={(value) => setFormData({ ...formData, idCategoria: Number(value) })}>
-            <SelectTrigger id="categoria">
-              <SelectValue placeholder="Selecciona una categoría" />
-            </SelectTrigger>
-            <SelectContent>
-              {categorias.map((categoria) => (
-                <SelectItem key={categoria.idCategoria} value={String(categoria.idCategoria)}>
-                  {categoria.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="descripcion">Descripcion</Label>
-        <Textarea 
-          id="descripcion" 
-          placeholder="Descripcion del producto..." 
-          rows={3} 
-          value={formData.descripcion}
-          onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-        />
-      </div>
-
-      <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-        <div>
-          <Label htmlFor="personalizable">Producto Personalizable</Label>
-          <p className="text-sm text-muted-foreground">Permite diseño personalizado</p>
-        </div>
-        <Switch 
-          id="personalizable" 
-          checked={formData.esPersonalizable}
-          onCheckedChange={(checked) => setFormData({ ...formData, esPersonalizable: checked })}
-        />
-      </div>
-
-      <div className="space-y-4">
-        <Label>Tallas Disponibles</Label>
-        <div className="flex flex-wrap gap-2">
-          {availableSizes.map(size => (
-            <Badge 
-              key={size} 
-              variant={formData.tallas.includes(size) ? "default" : "outline"} 
-              className="cursor-pointer hover:bg-accent hover:text-accent-foreground px-4 py-2"
-              onClick={() => handleToggleSize(size)}
-            >
-              {size}
-            </Badge>
-          ))}
-        </div>
-      </div>
-
-      {/* Volume Discounts Section */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <Label className="flex items-center gap-2">
-            <Percent className="w-4 h-4" />
-            Descuentos por Volumen
-          </Label>
-          <Button type="button" variant="outline" size="sm" onClick={handleAddDiscount}>
-            <Plus className="w-4 h-4 mr-1" />
-            Agregar Descuento
-          </Button>
-        </div>
-        
-        {formData.descuentosVolumen.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-4 border rounded-lg border-dashed">
-            No hay descuentos configurados. Agrega descuentos para pedidos por volumen.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {formData.descuentosVolumen.map((discount, index) => (
-              <div key={discount.idDescuento} className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30">
-                <div className="flex-1 grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Cantidad Minima</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      value={discount.cantidadMinima}
-                      onChange={(e) => handleUpdateDiscount(index, 'cantidadMinima', parseInt(e.target.value) || 0)}
-                      className="h-9"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Descuento (%)</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      max="100"
-                      value={discount.porcentajeDescuento}
-                      onChange={(e) => handleUpdateDiscount(index, 'porcentajeDescuento', parseInt(e.target.value) || 0)}
-                      className="h-9"
-                    />
-                  </div>
-                </div>
-                <Button 
-                  type="button" 
-                  variant="ghost" 
-                  size="icon"
-                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                  onClick={() => handleRemoveDiscount(index)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {formData.descuentosVolumen.length > 0 && (
-          <div className="p-3 bg-accent/10 rounded-lg">
-            <p className="text-sm text-muted-foreground">
-              <strong>Vista previa:</strong>{" "}
-              {formData.descuentosVolumen
-                .sort((a, b) => a.cantidadMinima - b.cantidadMinima)
-                .map(d => `${d.cantidadMinima}+ uds = ${d.porcentajeDescuento}% desc.`)
-                .join(" | ")}
-            </p>
-          </div>
-        )}
-      </div>
-
-      <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-        <div>
-          <Label htmlFor="activo">Producto Activo</Label>
-          <p className="text-sm text-muted-foreground">Visible en el catalogo</p>
-        </div>
-      </div>
-    </div>
-  )
 
   return (
     <div className="space-y-6">
@@ -494,6 +565,16 @@ export default function AdminProductsPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as ProductStatusFilter)}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue placeholder="Estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="activos">Activos</SelectItem>
+                <SelectItem value="inactivos">Inactivos</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -510,6 +591,7 @@ export default function AdminProductsPage() {
                   <TableHead className="text-right">Precio</TableHead>
                   <TableHead>Stock</TableHead>
                   <TableHead>Descuentos</TableHead>
+                  <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
@@ -626,10 +708,23 @@ export default function AdminProductsPage() {
                                   await AdminService.deleteProduct(String(product.idProducto));
 
                                   setProducts((prevProducts) =>
-                                    prevProducts.filter((p) => p.idProducto !== product.idProducto)
+                                    prevProducts.map((p) =>
+                                      p.idProducto === product.idProducto
+                                        ? { ...p, esActivo: false, estado: 'INACTIVO' }
+                                        : p
+                                    )
                                   );
+                                  toast({
+                                    title: "Producto desactivado",
+                                    description: "El producto ya no aparecera en el catalogo publico.",
+                                  })
                                 } catch (error) {
                                   console.error('Error al eliminar el producto:', error);
+                                  toast({
+                                    title: "Error al desactivar producto",
+                                    description: error instanceof Error ? error.message : "Intenta nuevamente.",
+                                    variant: "destructive",
+                                  })
                                 }
                               }}
                             >
@@ -664,12 +759,20 @@ export default function AdminProductsPage() {
               Completa la informacion del producto
             </DialogDescription>
           </DialogHeader>
-          <ProductForm />
+          <ProductForm
+            formData={formData}
+            fieldErrors={fieldErrors}
+            onChange={setFormData}
+            onToggleSize={handleToggleSize}
+            onAddDiscount={handleAddDiscount}
+            onUpdateDiscount={handleUpdateDiscount}
+            onRemoveDiscount={handleRemoveDiscount}
+          />
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSaveProduct} disabled={!formData.nombre || !formData.precioBase || isSavingProduct}>
+            <Button onClick={handleSaveProduct} disabled={isSavingProduct}>
               {isSavingProduct ? 'Guardando...' : 'Guardar Producto'}
             </Button>
           </DialogFooter>
@@ -685,12 +788,20 @@ export default function AdminProductsPage() {
               Modifica la informacion del producto
             </DialogDescription>
           </DialogHeader>
-          <ProductForm isEdit />
+          <ProductForm
+            formData={formData}
+            fieldErrors={fieldErrors}
+            onChange={setFormData}
+            onToggleSize={handleToggleSize}
+            onAddDiscount={handleAddDiscount}
+            onUpdateDiscount={handleUpdateDiscount}
+            onRemoveDiscount={handleRemoveDiscount}
+          />
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSaveProduct} disabled={!formData.nombre || !formData.precioBase || isSavingProduct}>
+            <Button onClick={handleSaveProduct} disabled={isSavingProduct}>
               {isSavingProduct ? 'Guardando...' : 'Guardar Cambios'}
             </Button>
           </DialogFooter>

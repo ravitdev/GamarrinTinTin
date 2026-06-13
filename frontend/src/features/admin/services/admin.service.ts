@@ -96,15 +96,8 @@ export class AdminService {
   }
 
   static async getProducts(): Promise<Producto[]> {
-    const rawProducts = await ApiClient.get<any[]>('/productos');
-
-    const detailedProducts = await Promise.all(
-      rawProducts.map((product) =>
-        ApiClient.get<any>(`/productos/${product.idProducto}`),
-      ),
-    );
-
-    return detailedProducts.map(mapBackendProductToFrontend);
+    const rawProducts = await ApiClient.get<any[]>('/productos/admin/todos');
+    return rawProducts.map(mapBackendProductToFrontend);
   }
 
   static async createProduct(data: CreateProductPayload): Promise<Producto> {

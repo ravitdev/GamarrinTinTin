@@ -31,6 +31,19 @@ export class ProductoController {
     };
   }
 
+  @Get('admin/todos')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('VENDEDOR', 'ADMINISTRADOR')
+  async listarProductosParaAdministracion() {
+    const productos =
+      await this.productoManager.listarProductosParaAdministracion();
+
+    return {
+      success: true,
+      data: productos,
+    };
+  }
+
   @Get(':idProducto')
   async consultarDetalleProducto(@Param('idProducto') idProducto: string) {
     try {

@@ -25,6 +25,50 @@ export class ApiError extends Error {
   }
 }
 
+function extractErrorMessage(data: unknown, fallback: string): string {
+  if (!data || typeof data !== 'object') return fallback;
+
+  if ('message' in data) {
+    const message = (data as { message: unknown }).message;
+    if (Array.isArray(message)) return message.map(String).join(', ');
+    if (message) return String(message);
+  }
+
+  if ('error' in data) {
+    const error = (data as { error: unknown }).error;
+    if (typeof error === 'string') return error;
+    if (error && typeof error === 'object' && 'issues' in error) {
+      const issues = (error as { issues: unknown }).issues;
+      if (Array.isArray(issues)) {
+        return issues
+          .map((issue) => {
+            if (issue && typeof issue === 'object' && 'message' in issue) {
+              return String((issue as { message: unknown }).message);
+            }
+            return String(issue);
+          })
+          .join(', ');
+      }
+    }
+  }
+
+  if ('issues' in data) {
+    const issues = (data as { issues: unknown }).issues;
+    if (Array.isArray(issues)) {
+      return issues
+        .map((issue) => {
+          if (issue && typeof issue === 'object' && 'message' in issue) {
+            return String((issue as { message: unknown }).message);
+          }
+          return String(issue);
+        })
+        .join(', ');
+    }
+  }
+
+  return fallback;
+}
+
 /**
  * Recupera el token JWT almacenado en el cliente.
  * En un proyecto real esto podria leer de cookies httpOnly via un endpoint,
@@ -88,17 +132,14 @@ export async function apiClient<TResponse>(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const message =
-      (data && typeof data === 'object' && 'message' in data
-        ? String((data as { message: unknown }).message)
-        : null) ?? `Error HTTP ${response.status}`;
+    const message = extractErrorMessage(data, `Error HTTP ${response.status}`);
     throw new ApiError(response.status, message, data);
   }
 
   // Desempaquetar el envoltorio del backend NestJS
   if (data && typeof data === 'object' && 'success' in data) {
     if (data.success === false) {
-      throw new ApiError(response.status, data.message || 'Error', data);
+      throw new ApiError(response.status, extractErrorMessage(data, 'Error'), data);
     }
     if ('data' in data) {
       return data.data as TResponse;

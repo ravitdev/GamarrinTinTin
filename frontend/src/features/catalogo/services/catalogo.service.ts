@@ -75,7 +75,14 @@ export async function fetchCatalogo(
     }
     if (query.tallas?.length) {
       data = data.filter((p) =>
-        p.tallas.some((t: any) => query.tallas!.includes(t as Talla))
+        (p.tallas || []).some((t: any) => query.tallas!.includes(t as Talla))
+      );
+    }
+    if (query.tipoDiseno?.length) {
+      data = data.filter((p) =>
+        query.tipoDiseno!.some((tipo) =>
+          tipo === 'personalizable' ? p.esPersonalizable : !p.esPersonalizable
+        )
       );
     }
     if (query.precioMin != null) {
@@ -118,6 +125,13 @@ export async function fetchCatalogo(
     if (query.tallas?.length) {
       data = data.filter((p) =>
         (p.tallas || []).some((t) => query.tallas!.includes(t as Talla))
+      );
+    }
+    if (query.tipoDiseno?.length) {
+      data = data.filter((p) =>
+        query.tipoDiseno!.some((tipo) =>
+          tipo === 'personalizable' ? p.esPersonalizable : !p.esPersonalizable
+        )
       );
     }
     if (query.precioMin != null) {

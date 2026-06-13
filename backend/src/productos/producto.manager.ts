@@ -17,6 +17,11 @@ export class ProductoManager {
     return productos.map((producto) => ProductoMapper.aCatalogoDto(producto));
   }
 
+  async listarProductosParaAdministracion(): Promise<ProductoDetalleResponseDto[]> {
+    const productos = await this.productoRepository.listarTodosParaAdministracion();
+    return productos.map((producto) => ProductoMapper.aDetalleDto(producto));
+  }
+
   async consultarDetalleProducto(
     idProducto: number,
   ): Promise<ProductoDetalleResponseDto> {

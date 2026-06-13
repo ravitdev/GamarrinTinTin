@@ -17,6 +17,20 @@ export class ProductoRepository {
       },
       include: {
         categoria: true,
+        variantes: {
+          where: {
+            esActivo: true,
+            fechaEliminacion: null,
+          },
+          orderBy: [
+            {
+              colorNombre: 'asc',
+            },
+            {
+              talla: 'asc',
+            },
+          ],
+        },
         imagenes: {
           where: {
             esActivo: true,
@@ -24,6 +38,41 @@ export class ProductoRepository {
           },
           orderBy: {
             displayOrder: 'asc',
+          },
+        },
+      },
+      orderBy: {
+        fechaCreacion: 'desc',
+      },
+    });
+
+    return registros.map((registro) =>
+      ProductoMapper.aEntidad(registro as ProductoRegistro),
+    );
+  }
+
+  async listarTodosParaAdministracion(): Promise<Producto[]> {
+    const registros = await this.prisma.producto.findMany({
+      include: {
+        categoria: true,
+        variantes: {
+          orderBy: [
+            {
+              colorNombre: 'asc',
+            },
+            {
+              talla: 'asc',
+            },
+          ],
+        },
+        imagenes: {
+          orderBy: {
+            displayOrder: 'asc',
+          },
+        },
+        descuentosVolumen: {
+          orderBy: {
+            cantidadMinima: 'asc',
           },
         },
       },

@@ -126,10 +126,13 @@ export class ProductoMapper {
 
     return {
       idProducto: producto.idProducto,
+      idCategoria: producto.idCategoria,
       nombre: producto.nombre,
       descripcion: producto.descripcion,
       precioBase: producto.precioBase,
       esPersonalizable: producto.esPersonalizable,
+      esActivo: producto.esActivo,
+      fechaCreacion: producto.fechaCreacion,
       categoria: producto.categoria
         ? {
             idCategoria: producto.categoria.idCategoria,
@@ -137,6 +140,15 @@ export class ProductoMapper {
           }
         : undefined,
       imagenPrincipal,
+      variantes: producto.variantes
+        .filter((variante) => variante.esActivo)
+        .map((variante) => ({
+          idProductoVariante: variante.idProductoVariante,
+          colorNombre: variante.colorNombre,
+          colorHex: variante.colorHex,
+          talla: variante.talla,
+          stock: variante.stock,
+        })),
     };
   }
 
