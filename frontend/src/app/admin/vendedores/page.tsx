@@ -72,7 +72,7 @@ import { TipoDocumento } from "@/lib/types"
 // Reglas de validación idénticas al Registro de Usuarios
 // ---------------------------------------------------------------------------
 const EMAIL_REGEX    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const CELULAR_REGEX  = /^[0-9]{9}$/;
+const CELULAR_DIGITOS_REGEX  = /^[0-9]{9}$/;
 const DNI_REGEX      = /^[0-9]{8}$/;
 const PASSWORD_REGEX = /^(?=.*[0-9]).{8,}$/; // min 8 chars + al menos 1 número
 
@@ -272,8 +272,10 @@ export default function AdminVendedoresPage() {
 
     if (!newVendor.celular.trim()) {
       errors.celular = "El celular es obligatorio"
-    } else if (!CELULAR_REGEX.test(newVendor.celular)) {
+    } else if (!CELULAR_DIGITOS_REGEX.test(newVendor.celular)) {
       errors.celular = "El celular debe tener exactamente 9 dígitos numéricos"
+    } else if (!newVendor.celular.startsWith("9")) {
+      errors.celular = "El celular debe empezar con 9"
     }
 
     if (!newVendor.correo.trim()) {

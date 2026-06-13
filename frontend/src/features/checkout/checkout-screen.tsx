@@ -1,14 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { CreditCard, User, Truck, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useCheckout } from '@/features/checkout/hooks/use-checkout';
 import { useCart } from '@/features/cart/hooks/use-cart';
+import { useAuth } from '@/features/auth/hooks/use-auth';
 
 export function CheckoutScreen() {
+  const router = useRouter();
+  const { isHydrating, isLoggedIn } = useAuth();
   const { isProcessing, error, order, confirmOrder } = useCheckout();
   const { cart } = useCart();
   const [step, setStep] = useState<'shipping' | 'payment' | 'confirm'>('shipping');
@@ -30,6 +34,20 @@ export function CheckoutScreen() {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
+
+  useEffect(() => {
+    if (!isHydrating && !isLoggedIn) {
+      router.push('/login?callback=/checkout');
+    }
+  }, [isHydrating, isLoggedIn, router]);
+
+  if (isHydrating || !isLoggedIn) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center text-muted-foreground">
+        Validando sesión...
+      </div>
+    );
+  }
 
   if (order) {
     return (

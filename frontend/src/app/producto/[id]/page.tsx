@@ -432,7 +432,7 @@ export default function ProductDetailPage() {
                   )}
 
                   {product.tipoDiseno === 'personalizable' && (
-                    <Link href={`/personalizar/${product.id}`}>
+                    <Link href={`/personalizar/${product.idProducto}`}>
                       <Button variant="outline" className="w-full gap-2">
                         <Sparkles className="h-4 w-4" />
                         Subir Mi Propio Diseno
@@ -522,7 +522,7 @@ export default function ProductDetailPage() {
                 )}
 
                 {(shouldQuote || !canAddToCart && selectedSize) && (
-                  <Link href={`/solicitar-cotizacion?producto=${product.id}`}>
+                  <Link href={`/solicitar-cotizacion?producto=${product.idProducto}`}>
                     <Button size="lg" variant="outline" className="w-full gap-2">
                       <FileText className="h-5 w-5" />
                       Solicitar Cotizacion

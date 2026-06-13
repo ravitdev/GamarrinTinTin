@@ -220,14 +220,7 @@ export default function VendedorProductsPage() {
       if (selectedProduct && isEditDialogOpen) {
         const updatedProduct = await AdminService.updateProduct(
           String(selectedProduct.idProducto),
-          {
-            idCategoria: formData.categoria === "polera" ? 2 : 1,
-            nombre: formData.nombre,
-            descripcion: formData.descripcion,
-            precioBase: formData.precioBase || formData.precio || 0,
-            esPersonalizable:
-              formData.tipoDiseno === "personalizable" || formData.esPersonalizable,
-          }
+          buildCreateProductPayload(formData)
         )
 
         setProducts((prevProducts) =>
@@ -283,7 +276,11 @@ export default function VendedorProductsPage() {
       await AdminService.deleteProduct(String(product.idProducto))
 
       setProducts((prevProducts) =>
-        prevProducts.filter((p) => p.idProducto !== product.idProducto)
+        prevProducts.map((p) =>
+          p.idProducto === product.idProducto
+            ? { ...p, esActivo: false, estado: "INACTIVO" }
+            : p
+        )
       )
     } catch (error) {
       console.error("Error al eliminar producto del vendedor:", error)

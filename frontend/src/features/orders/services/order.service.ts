@@ -1,5 +1,4 @@
 import { ApiClient } from '@/lib/api-client';
-import { mockOrders } from '@/lib/mock-data';
 import type { Order, OrderStatus } from '@/lib/types';
 
 type BackendPedidoEstado =
@@ -87,13 +86,8 @@ function mapBackendOrderToFrontend(pedido: BackendPedido): Order {
 
 export class OrderService {
   static async getMyOrders(): Promise<Order[]> {
-    try {
-      const pedidos = await ApiClient.get<BackendPedido[]>('/pedidos/propios');
-      return pedidos.map(mapBackendOrderToFrontend);
-    } catch (error) {
-      console.error('Error al cargar pedidos propios:', error);
-      return mockOrders;
-    }
+    const pedidos = await ApiClient.get<BackendPedido[]>('/pedidos/propios');
+    return pedidos.map(mapBackendOrderToFrontend);
   }
 
   static async getOrderDetail(id: string): Promise<Order> {
