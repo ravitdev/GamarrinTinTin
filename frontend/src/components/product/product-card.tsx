@@ -67,28 +67,6 @@ export function ProductCard({ product }: ProductCardProps) {
           )}
         </div>
 
-        {/* Favorite Button */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn(
-            "absolute right-3 top-3 h-8 w-8 rounded-full bg-card/80 backdrop-blur transition-opacity",
-            isHovered ? "opacity-100" : "opacity-0"
-          )}
-          onClick={(e) => {
-            e.preventDefault();
-            setIsFavorite(!isFavorite);
-          }}
-        >
-          <Heart 
-            className={cn(
-              "h-4 w-4 transition-colors",
-              isFavorite ? "fill-accent text-accent" : "text-foreground"
-            )} 
-          />
-          <span className="sr-only">Agregar a favoritos</span>
-        </Button>
-
         {/* Quick Actions */}
         <div 
           className={cn(

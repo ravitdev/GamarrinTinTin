@@ -147,7 +147,7 @@ export function CatalogoScreen() {
                       <SheetHeader>
                         <SheetTitle>Filtros</SheetTitle>
                       </SheetHeader>
-                      <div className="mt-6">
+                      <div className="mt-6 px-6">
                         <FilterSidebar
                           filters={filters}
                           activeFiltersCount={activeFiltersCount}

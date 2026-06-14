@@ -26,8 +26,7 @@ export default async function HomePage() {
       
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="relative overflow-hidden bg-primary py-20 lg:py-32">
-          <div className="absolute inset-0 bg-[url('/grid-pattern.svg')] opacity-5" />
+        <section className="relative overflow-hidden bg-primary py-18 lg:py-30">
           <div className="container relative mx-auto px-4">
             <div className="mx-auto max-w-3xl text-center">
               <span className="inline-block rounded-full bg-accent/20 px-4 py-1.5 text-sm font-medium text-accent mb-6">
@@ -56,8 +55,8 @@ export default async function HomePage() {
         </section>
 
         {/* Features */}
-        <section className="border-b border-border bg-card py-12">
-          <div className="container mx-auto px-4">
+        <section className="border-b border-border bg-card py-10">
+          <div className="container mx-auto px-6">
             <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
               <div className="flex flex-col items-center gap-3 text-center">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent/10">
