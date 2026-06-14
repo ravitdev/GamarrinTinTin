@@ -145,12 +145,20 @@ export class UsuarioManager {
       await this.usuarioRepository.buscarSolicitudCambioDocumentoPendiente(idUsuario);
     const solicitudDesactivacion =
       await this.usuarioRepository.buscarSolicitudDesactivacionPendiente(idUsuario);
+    const pedidos =
+      usuario.rol === 'CLIENTE'
+        ? await this.usuarioRepository.listarPedidosResumenPorCliente(idUsuario)
+        : undefined;
 
     return UsuarioMapper.aPerfilDto(usuario, {
       solicitudCambioDocumentoPendiente: solicitudDocumento !== null,
       solicitudDesactivacionPendiente: solicitudDesactivacion !== null,
       puedeDesactivarse: validacion.puede,
       motivoNoDesactivacion: validacion.motivo,
+      totalPedidos: pedidos?.length,
+      totalGastado: pedidos?.reduce((total, pedido) => total + pedido.total, 0),
+      fechaUltimoPedido: pedidos?.[0]?.fecha ?? null,
+      pedidos,
     });
   }
 

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Usuario, RolUsuario } from './domain/usuario.entity';
+import type { PedidoClienteResumenDto } from './dto/perfil.dto';
 import {
   SolicitudCambioDocumento,
   SolicitudDesactivacion,
@@ -119,6 +120,31 @@ export class UsuarioRepository implements IUsuarioRepository {
         },
       },
     });
+  }
+
+  async listarPedidosResumenPorCliente(
+    idCliente: number,
+  ): Promise<PedidoClienteResumenDto[]> {
+    const registros = await this.prisma.pedido.findMany({
+      where: { idCliente },
+      include: { detalles: true },
+      orderBy: { fechaCreacion: 'desc' },
+    });
+
+    return registros.map((pedido) => ({
+      idPedido: pedido.idPedido,
+      codigo: `PED-${pedido.idPedido.toString().padStart(6, '0')}`,
+      fecha: pedido.fechaCreacion.toISOString(),
+      estado: pedido.estado,
+      total: pedido.total.toNumber(),
+      items: pedido.detalles.reduce(
+        (total, detalle) => total + detalle.cantidad,
+        0,
+      ),
+      productos: pedido.detalles.map(
+        (detalle) => detalle.nombreProductoSnapshot,
+      ),
+    }));
   }
 
   async guardarRefreshToken(

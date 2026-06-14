@@ -82,6 +82,7 @@ interface Client {
   lastOrder: string
   createdAt: string
   status: "active" | "inactive"
+  orders: Order[]
   hasPendingOrders?: boolean
   deactivationRequest?: boolean
 }
@@ -96,96 +97,6 @@ interface Order {
   productos: string[]
 }
 
-const mockOrders: Record<string, Order[]> = {
-  "CLI-001": [
-    { id: "ord-1", codigo: "PED-2024-0045", fecha: "2024-01-15", estado: "entregado", total: 450, items: 3, productos: ["Polo Premium Blanco", "Polo Basico Negro"] },
-    { id: "ord-2", codigo: "PED-2024-0032", fecha: "2024-01-08", estado: "entregado", total: 320, items: 2, productos: ["Polera Cuello V"] },
-    { id: "ord-3", codigo: "PED-2024-0018", fecha: "2023-12-20", estado: "entregado", total: 480, items: 4, productos: ["Polo Premium", "Polo Basico"] },
-  ],
-  "CLI-002": [
-    { id: "ord-4", codigo: "PED-2024-0048", fecha: "2024-01-14", estado: "en_produccion", total: 2500, items: 50, productos: ["Polo Corporativo Tech Solutions"] },
-    { id: "ord-5", codigo: "PED-2024-0041", fecha: "2024-01-10", estado: "entregado", total: 3200, items: 60, productos: ["Polo Corporativo Tech Solutions"] },
-    { id: "ord-6", codigo: "PED-2024-0028", fecha: "2024-01-02", estado: "entregado", total: 4800, items: 100, productos: ["Camiseta Evento", "Polo Promocional"] },
-  ],
-  "CLI-003": [
-    { id: "ord-7", codigo: "PED-2024-0039", fecha: "2024-01-10", estado: "enviado", total: 1800, items: 30, productos: ["Polo Uniforme Restaurant"] },
-    { id: "ord-8", codigo: "PED-2024-0022", fecha: "2023-12-28", estado: "entregado", total: 2400, items: 40, productos: ["Polo Uniforme Restaurant"] },
-  ],
-}
-
-const clients: Client[] = [
-  {
-    id: "CLI-001",
-    name: "Maria Garcia",
-    email: "maria@email.com",
-    phone: "+51 999 888 777",
-    type: "individual",
-    totalOrders: 5,
-    totalSpent: 1250,
-    lastOrder: "2024-01-15",
-    createdAt: "2023-06-15",
-    status: "active"
-  },
-  {
-    id: "CLI-002",
-    name: "Carlos Lopez",
-    email: "carlos@techsolutions.pe",
-    phone: "+51 987 654 321",
-    type: "business",
-    company: "Tech Solutions SAC",
-    ruc: "20456789012",
-    totalOrders: 12,
-    totalSpent: 15800,
-    lastOrder: "2024-01-14",
-    createdAt: "2023-03-20",
-    status: "active",
-    hasPendingOrders: true
-  },
-  {
-    id: "CLI-003",
-    name: "Rosa Martinez",
-    email: "rosa@restaurantlima.pe",
-    phone: "+51 912 345 678",
-    type: "business",
-    company: "Restaurant Lima SAC",
-    ruc: "20123456789",
-    totalOrders: 8,
-    totalSpent: 8500,
-    lastOrder: "2024-01-10",
-    createdAt: "2023-08-10",
-    status: "active",
-    hasPendingOrders: true
-  },
-  {
-    id: "CLI-004",
-    name: "Pedro Ramirez",
-    email: "pedro@email.com",
-    phone: "+51 945 678 123",
-    type: "individual",
-    totalOrders: 3,
-    totalSpent: 650,
-    lastOrder: "2024-01-08",
-    createdAt: "2023-11-05",
-    status: "active"
-  },
-  {
-    id: "CLI-005",
-    name: "Ana Fernandez",
-    email: "ana@colegiosanmartin.edu.pe",
-    phone: "+51 998 765 432",
-    type: "business",
-    company: "Colegio San Martin",
-    ruc: "20987654321",
-    totalOrders: 4,
-    totalSpent: 22500,
-    lastOrder: "2024-01-05",
-    createdAt: "2023-02-15",
-    status: "active",
-    hasPendingOrders: true,
-    deactivationRequest: true
-  },
-]
-
 const estadoConfig = {
   pendiente: { label: "Pendiente", color: "bg-yellow-100 text-yellow-700", icon: Clock },
   confirmado: { label: "Confirmado", color: "bg-blue-100 text-blue-700", icon: CheckCircle2 },
@@ -195,10 +106,35 @@ const estadoConfig = {
   cancelado: { label: "Cancelado", color: "bg-red-100 text-red-700", icon: XCircle },
 }
 
+function mapBackendOrderStatus(
+  estado: string,
+): Order["estado"] {
+  const estados: Record<string, Order["estado"]> = {
+    REGISTRADO: "pendiente",
+    CONFIRMADO: "confirmado",
+    PROCESANDO: "en_produccion",
+    ENVIADO: "enviado",
+    ENTREGADO: "entregado",
+    CANCELADO: "cancelado",
+  }
+
+  return estados[estado] ?? "pendiente"
+}
+
 function mapProfileToClient(
   profile: UserProfile,
   deactivationRequest = false,
 ): Client {
+  const orders: Order[] = (profile.pedidos ?? []).map((pedido) => ({
+    id: String(pedido.idPedido),
+    codigo: pedido.codigo,
+    fecha: pedido.fecha,
+    estado: mapBackendOrderStatus(pedido.estado),
+    total: pedido.total,
+    items: pedido.items,
+    productos: pedido.productos,
+  }))
+
   return {
     id: String(profile.idUsuario),
     name: `${profile.nombres} ${profile.apellidos}`,
@@ -207,11 +143,12 @@ function mapProfileToClient(
     type: profile.tipoDocumento === "RUC" ? "business" : "individual",
     company: profile.tipoDocumento === "RUC" ? `${profile.nombres} ${profile.apellidos}` : undefined,
     ruc: profile.tipoDocumento === "RUC" ? profile.numeroDocumento : undefined,
-    totalOrders: 0,
-    totalSpent: 0,
-    lastOrder: profile.fechaRegistro,
+    totalOrders: profile.totalPedidos ?? orders.length,
+    totalSpent: profile.totalGastado ?? orders.reduce((total, order) => total + order.total, 0),
+    lastOrder: profile.fechaUltimoPedido ?? orders[0]?.fecha ?? profile.fechaRegistro,
     createdAt: profile.fechaRegistro,
     status: profile.estado === "ACTIVO" ? "active" : "inactive",
+    orders,
     hasPendingOrders: profile.puedeDesactivarse === false,
     deactivationRequest,
   }
@@ -356,7 +293,7 @@ export default function AdminClientsPage() {
     ))
   }
 
-  const clientOrders = selectedClient ? mockOrders[selectedClient.id] || [] : []
+  const clientOrders = selectedClient?.orders ?? []
 
   return (
     <div className="space-y-6">

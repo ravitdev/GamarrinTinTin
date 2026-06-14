@@ -1,6 +1,6 @@
 import { Usuario } from './domain/usuario.entity';
 import { UsuarioSesionDto } from './dto/sesion.dto';
-import type { UsuarioPerfilDto } from './dto/perfil.dto';
+import type { PedidoClienteResumenDto, UsuarioPerfilDto } from './dto/perfil.dto';
 import type { SolicitudCambioDocumentoDto } from './dto/solicitud-cambio-documento.dto';
 import type { SolicitudDesactivacionDto } from './dto/solicitud-desactivacion.dto';
 
@@ -22,6 +22,10 @@ export class UsuarioMapper {
       solicitudDesactivacionPendiente: boolean;
       puedeDesactivarse: boolean;
       motivoNoDesactivacion?: string;
+      totalPedidos?: number;
+      totalGastado?: number;
+      fechaUltimoPedido?: string | null;
+      pedidos?: PedidoClienteResumenDto[];
     },
   ): UsuarioPerfilDto {
     return {
@@ -40,6 +44,10 @@ export class UsuarioMapper {
       solicitudDesactivacionPendiente: extras.solicitudDesactivacionPendiente,
       puedeDesactivarse: extras.puedeDesactivarse,
       motivoNoDesactivacion: extras.motivoNoDesactivacion,
+      totalPedidos: extras.totalPedidos,
+      totalGastado: extras.totalGastado,
+      fechaUltimoPedido: extras.fechaUltimoPedido,
+      pedidos: extras.pedidos,
     };
   }
 

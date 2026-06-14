@@ -17,6 +17,20 @@ export interface UserProfile {
   solicitudDesactivacionPendiente: boolean;
   puedeDesactivarse: boolean;
   motivoNoDesactivacion?: string;
+  totalPedidos?: number;
+  totalGastado?: number;
+  fechaUltimoPedido?: string | null;
+  pedidos?: ClientOrderSummary[];
+}
+
+export interface ClientOrderSummary {
+  idPedido: number;
+  codigo: string;
+  fecha: string;
+  estado: 'REGISTRADO' | 'CONFIRMADO' | 'PROCESANDO' | 'ENVIADO' | 'ENTREGADO' | 'CANCELADO';
+  total: number;
+  items: number;
+  productos: string[];
 }
 
 export interface UpdateProfilePayload {
