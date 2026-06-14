@@ -575,7 +575,7 @@ export default function MiCuentaPage() {
                             <DialogHeader>
                               <DialogTitle>Solicitar cambio de documento</DialogTitle>
                               <DialogDescription>
-                                Ingresa el nuevo tipo y numero de documento. Un administrador revisara tu solicitud.
+                                Ingresa el nuevo tipo y número de documento. Un administrador revisara tu solicitud.
                               </DialogDescription>
                             </DialogHeader>
                             <div className="space-y-4 py-4">

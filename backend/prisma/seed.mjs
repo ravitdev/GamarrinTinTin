@@ -223,7 +223,6 @@ async function main() {
 
   const polos = await upsertCategoria('Polos', 'Polos personalizables y basicos.');
   const poleras = await upsertCategoria('Poleras', 'Poleras urbanas y de temporada.');
-  const casacas = await upsertCategoria('Casacas', 'Casacas y prendas exteriores.');
 
   const producto1 = await obtenerOCrearProducto({
     categoria: polos,
@@ -267,21 +266,6 @@ async function main() {
     ],
   });
 
-  const producto3 = await obtenerOCrearProducto({
-    categoria: casacas,
-    nombre: 'Casaca Denim Clasica',
-    descripcion: 'Casaca denim resistente para uso diario.',
-    precioBase: 129.9,
-    esPersonalizable: true,
-    variantes: [
-      { colorNombre: 'Denim', colorHex: '#34568B', talla: 'M', stock: 10 },
-      { colorNombre: 'Denim', colorHex: '#34568B', talla: 'L', stock: 8 },
-    ],
-    imagenes: [
-      { colorHex: '#34568B', lado: 'FRONT', urlImagen: '/placeholder.svg', displayOrder: 0 },
-    ],
-  });
-
   await obtenerOCrearProducto({
     categoria: polos,
     nombre: 'Polo Temporada Pasada',
@@ -295,17 +279,6 @@ async function main() {
     imagenes: [
       { colorHex: '#CC3333', lado: 'FRONT', urlImagen: '/placeholder.svg', displayOrder: 0 },
     ],
-  });
-
-  const variantes = await prisma.productoVariante.findMany({
-    where: {
-      idProducto: {
-        in: [producto1.idProducto, producto2.idProducto, producto3.idProducto],
-      },
-      esActivo: true,
-    },
-    include: { producto: true },
-    orderBy: { idProductoVariante: 'asc' },
   });
 
   await prisma.carrito.upsert({
