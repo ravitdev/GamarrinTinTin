@@ -5,15 +5,49 @@ import { RegistrarProductoDto } from './dto/registrar-producto.dto';
 import { Producto } from './domain/producto.entity';
 import { ProductoMapper, ProductoRegistro } from './producto.mapper';
 
+interface FiltrosCatalogoProductos {
+  buscar?: string;
+  idCategoria?: number;
+  esPersonalizable?: boolean;
+}
+
 @Injectable()
 export class ProductoRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async listarCatalogo(): Promise<Producto[]> {
+  async listarCatalogo(filtros: FiltrosCatalogoProductos = {}): Promise<Producto[]> {
     const registros = await this.prisma.producto.findMany({
       where: {
         esActivo: true,
         fechaEliminacion: null,
+        ...(filtros.buscar
+          ? {
+              OR: [
+                {
+                  nombre: {
+                    contains: filtros.buscar,
+                    mode: 'insensitive',
+                  },
+                },
+                {
+                  descripcion: {
+                    contains: filtros.buscar,
+                    mode: 'insensitive',
+                  },
+                },
+              ],
+            }
+          : {}),
+        ...(filtros.idCategoria
+          ? {
+              idCategoria: filtros.idCategoria,
+            }
+          : {}),
+        ...(filtros.esPersonalizable !== undefined
+          ? {
+              esPersonalizable: filtros.esPersonalizable,
+            }
+          : {}),
       },
       include: {
         categoria: true,
