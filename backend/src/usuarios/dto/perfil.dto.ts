@@ -1,4 +1,15 @@
 import type { EstadoUsuario, RolUsuario, TipoDocumento } from '../domain/usuario.entity';
+import type { EstadoPedido } from '../../pedidos/domain/pedido.entity';
+
+export interface PedidoClienteResumenDto {
+  idPedido: number;
+  codigo: string;
+  fecha: string;
+  estado: EstadoPedido;
+  total: number;
+  items: number;
+  productos: string[];
+}
 
 export interface UsuarioPerfilDto {
   idUsuario: number;
@@ -16,6 +27,10 @@ export interface UsuarioPerfilDto {
   solicitudDesactivacionPendiente: boolean;
   puedeDesactivarse: boolean;
   motivoNoDesactivacion?: string;
+  totalPedidos?: number;
+  totalGastado?: number;
+  fechaUltimoPedido?: string | null;
+  pedidos?: PedidoClienteResumenDto[];
 }
 
 export interface ActualizarPerfilDto {

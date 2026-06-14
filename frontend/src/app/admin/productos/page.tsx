@@ -46,7 +46,8 @@ import {
   AlertCircle,
   CheckCircle2,
   X,
-  Percent
+  Percent,
+  Power
 } from "lucide-react"
 import { formatPrice, categorias } from "@/lib/mock-data"
 import { AdminService, type CreateProductPayload } from "@/features/admin/services/admin.service"
@@ -735,7 +736,7 @@ export default function AdminProductsPage() {
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => handleChangeProductStatus(product)}>
-                              <Trash2 className="w-4 h-4 mr-2" />
+                              <Power className="w-4 h-4 mr-2" />
                               Cambiar estado
                             </DropdownMenuItem>
                           </DropdownMenuContent>

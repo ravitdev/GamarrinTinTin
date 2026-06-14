@@ -1,4 +1,5 @@
 import { Usuario, RolUsuario } from './domain/usuario.entity';
+import type { PedidoClienteResumenDto } from './dto/perfil.dto';
 import {
   SolicitudCambioDocumento,
   SolicitudDesactivacion,
@@ -15,6 +16,7 @@ export interface IUsuarioRepository {
   listarUsuarios(): Promise<Usuario[]>;
   listarPorRol(rol: RolUsuario): Promise<Usuario[]>;
   contarPedidosEnProceso(idCliente: number): Promise<number>;
+  listarPedidosResumenPorCliente(idCliente: number): Promise<PedidoClienteResumenDto[]>;
   guardarRefreshToken(
     idUsuario: number,
     refreshTokenHash: string,
