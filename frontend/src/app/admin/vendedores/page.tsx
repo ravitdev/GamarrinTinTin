@@ -58,6 +58,7 @@ import {
   Mail,
   Phone,
   Lock,
+  MapPin,
   Loader2
 } from "lucide-react"
 import { formatPrice } from "@/lib/mock-data"
@@ -74,7 +75,7 @@ import { TipoDocumento } from "@/lib/types"
 const EMAIL_REGEX    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CELULAR_DIGITOS_REGEX  = /^[0-9]{9}$/;
 const DNI_REGEX      = /^[0-9]{8}$/;
-const PASSWORD_REGEX = /^(?=.*[0-9]).{8,}$/; // min 8 chars + al menos 1 número
+const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
 
 interface VendorMock {
   id: string;
@@ -151,6 +152,7 @@ export default function AdminVendedoresPage() {
     correo: "",
     celular: "",
     documento: "",
+    direccion: "",
     contrasena: "",
     confirmPassword: "",
   })
@@ -162,6 +164,7 @@ export default function AdminVendedoresPage() {
       correo: "",
       celular: "",
       documento: "",
+      direccion: "",
       contrasena: "",
       confirmPassword: "",
     })
@@ -288,13 +291,17 @@ export default function AdminVendedoresPage() {
     if (!newVendor.contrasena) {
       errors.contrasena = "La contraseña es obligatoria"
     } else if (!PASSWORD_REGEX.test(newVendor.contrasena)) {
-      errors.contrasena = "Mínimo 8 caracteres y al menos 1 número"
+      errors.contrasena = "Mínimo 8 caracteres, incluyendo letras y números"
     }
 
     if (!newVendor.confirmPassword) {
       errors.confirmPassword = "Debes confirmar la contraseña"
     } else if (newVendor.contrasena !== newVendor.confirmPassword) {
       errors.confirmPassword = "Las contraseñas no coinciden"
+    }
+
+    if (!newVendor.direccion.trim()) {
+      errors.direccion = "La dirección es obligatoria"
     }
 
     setFieldErrors(errors)
@@ -362,7 +369,7 @@ export default function AdminVendedoresPage() {
         telefono: newVendor.celular.trim(),
         tipoDocumento: TipoDocumento.DNI,
         numeroDocumento: newVendor.documento.trim(),
-        direccion: "No aplica",
+        direccion: newVendor.direccion.trim(),
       })
 
       const vendor: VendorMock = {
@@ -397,6 +404,27 @@ export default function AdminVendedoresPage() {
         error instanceof Error
           ? error.message
           : "Ocurrió un error inesperado. Intenta de nuevo."
+
+      const normalizedMessage = message.toLowerCase()
+
+      if (normalizedMessage.includes("email") || normalizedMessage.includes("correo")) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          correo: message,
+        }))
+      }
+
+      if (
+        normalizedMessage.includes("documento") ||
+        normalizedMessage.includes("dni") ||
+        normalizedMessage.includes("ruc")
+      ) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          documento: message,
+        }))
+      }
+
       toast({
         title: "Error al registrar vendedor",
         description: message,
@@ -514,6 +542,24 @@ export default function AdminVendedoresPage() {
                 )}
               </div>
 
+              {/* Dirección */}
+              <div className="space-y-2">
+                <Label htmlFor="direccion">Dirección <span className="text-destructive">*</span></Label>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="direccion"
+                    value={newVendor.direccion}
+                    onChange={(e) => handleInputChange("direccion", e.target.value)}
+                    placeholder="Av. Principal 123, Lima"
+                    className={cn("pl-10", fieldErrors.direccion && "border-destructive")}
+                  />
+                </div>
+                {fieldErrors.direccion && (
+                  <p className="text-xs text-destructive">{fieldErrors.direccion}</p>
+                )}
+              </div>
+
               {/* Correo Electrónico */}
               <div className="space-y-2">
                 <Label htmlFor="correo">Correo Electrónico <span className="text-destructive">*</span></Label>
@@ -543,7 +589,7 @@ export default function AdminVendedoresPage() {
                     type={showPassword ? "text" : "password"}
                     value={newVendor.contrasena}
                     onChange={(e) => handleInputChange("contrasena", e.target.value)}
-                    placeholder="Min. 8 caracteres con al menos 1 número"
+                    placeholder="Min. 8 caracteres con letras y números"
                     className={cn("pl-10 pr-10", fieldErrors.contrasena && "border-destructive")}
                   />
                   <button

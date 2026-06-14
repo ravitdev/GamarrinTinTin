@@ -17,12 +17,9 @@ export function mapBackendProductToFrontend(backendProduct: any): any {
   }));
 
   // 2. Extract unique sizes (tallas)
-  let tallas: string[] = [];
-  if (backendProduct.variantes && backendProduct.variantes.length > 0) {
-    tallas = Array.from(new Set(backendProduct.variantes.map((v: any) => v.talla)));
-  } else {
-    tallas = ['S', 'M', 'L', 'XL'];
-  }
+  const tallas: string[] = Array.from(
+    new Set((backendProduct.variantes || []).map((v: any) => v.talla)),
+  );
 
   // 3. Map images
   const imagenes = (backendProduct.imagenes || []).map((img: any) => img.urlImagen);
@@ -62,17 +59,6 @@ export function mapBackendProductToFrontend(backendProduct: any): any {
       }
     });
     colores = Array.from(colorMap.values());
-  } else {
-    // Fallback if no variants and no images
-    colores = [
-      {
-        idColor: 1,
-        nombre: 'Blanco',
-        codigoHex: '#FFFFFF',
-        hexCode: '#FFFFFF',
-        urlImagen: backendProduct.imagenPrincipal || '/placeholder.svg',
-      },
-    ];
   }
 
   // 5. Map categories
@@ -85,7 +71,10 @@ export function mapBackendProductToFrontend(backendProduct: any): any {
     descripcion: backendProduct.descripcion,
     precioBase,
     precio: precioBase, // backward-compatibility for UI
-    stock: backendProduct.stock || 100,
+    stock: (backendProduct.variantes || []).reduce(
+      (total: number, variante: any) => total + (Number(variante.stock) || 0),
+      0,
+    ),
     categoria, // backward-compatibility for UI (expects string)
     categoriaObjeto: backendProduct.categoria, // original category object
     tallas,
@@ -93,6 +82,8 @@ export function mapBackendProductToFrontend(backendProduct: any): any {
     descuentosVolumen,
     disenosPredefinidos: [], // default mock empty array
     imagenes: imagenes.length > 0 ? imagenes : [backendProduct.imagenPrincipal || '/placeholder.svg'],
+    tipoDiseno: backendProduct.esPersonalizable ? 'personalizable' : 'predefinido',
+    esPersonalizable: backendProduct.esPersonalizable,
     estado: backendProduct.esActivo ? 'ACTIVO' : 'INACTIVO',
   };
 }

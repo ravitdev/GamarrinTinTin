@@ -114,6 +114,11 @@ export class AdminService {
     return ApiClient.delete(`/productos/${id}`);
   }
 
+  static async changeProductStatus(id: string, esActivo: boolean): Promise<Producto> {
+    const rawProduct = await ApiClient.patch<any>(`/productos/${id}/estado`, { esActivo });
+    return mapBackendProductToFrontend(rawProduct);
+  }
+
   static async getClients(): Promise<UserProfile[]> {
     return UserService.listUsersByRole('CLIENTE' as RolUsuario);
   }

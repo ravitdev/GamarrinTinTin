@@ -9,7 +9,7 @@
 // ============================================================================
 
 import dynamic from 'next/dynamic';
-import { Filter, SlidersHorizontal, Grid3X3, LayoutList, X } from 'lucide-react';
+import { Filter, SlidersHorizontal, Grid3X3, LayoutList, X, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils';
 import { useCatalogo } from './hooks/use-catalogo';
 import type { CatalogoSort } from './services/catalogo.service';
 import { useCart } from '@/features/cart/hooks/use-cart';
+import { Input } from '@/components/ui/input';
 
 const FilterSidebar = dynamic(() => import('./components/filter-sidebar').then(mod => ({ default: mod.FilterSidebar })), {
   loading: () => <div className="text-xs text-muted-foreground">Cargando filtros...</div>,
@@ -48,6 +49,7 @@ export function CatalogoScreen() {
     sortBy,
     viewMode,
     activeFiltersCount,
+    setSearchText,
     setSortBy,
     setViewMode,
     toggleCategoryFilter,
@@ -72,10 +74,30 @@ export function CatalogoScreen() {
             </p>
           </div>
 
+          <div className="mb-6">
+            <div className="relative max-w-xl">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={filters.buscar}
+                onChange={(event) => setSearchText(event.target.value)}
+                placeholder="Buscar por nombre o descripción..."
+                className="pl-10"
+              />
+            </div>
+          </div>
+
           {/* Filtros activos */}
           {activeFiltersCount > 0 && (
             <div className="mb-6 flex flex-wrap items-center gap-2">
               <span className="text-sm text-muted-foreground">Filtros activos:</span>
+              {filters.buscar.trim() && (
+                <Badge variant="secondary" className="gap-1">
+                  Busqueda: {filters.buscar}
+                  <button onClick={() => setSearchText('')}>
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              )}
               {filters.categorias.map((cat) => (
                 <Badge key={cat} variant="secondary" className="gap-1 capitalize">
                   {cat}
