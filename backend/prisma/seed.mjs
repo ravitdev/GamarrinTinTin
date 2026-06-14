@@ -281,6 +281,17 @@ async function main() {
     ],
   });
 
+  const variantes = await prisma.productoVariante.findMany({
+    where: {
+      idProducto: {
+        in: [producto1.idProducto, producto2.idProducto],
+      },
+      esActivo: true,
+    },
+    include: { producto: true },
+    orderBy: { idProductoVariante: 'asc' },
+  });
+
   await prisma.carrito.upsert({
     where: { idUsuario: cliente.idUsuario },
     update: {},
