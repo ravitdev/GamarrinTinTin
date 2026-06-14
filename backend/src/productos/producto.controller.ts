@@ -9,11 +9,13 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import type { CambiarEstadoProductoDto } from './dto/cambiar-estado-producto.dto';
 import type { RegistrarProductoDto } from './dto/registrar-producto.dto';
 import type { ModificarProductoDto } from './dto/modificar-producto.dto';
+import type { ConsultarCatalogoProductosDto } from './dto/consultar-catalogo-productos.dto';
 import { ProductoManager } from './producto.manager';
 import { Roles } from '../usuarios/seguridad/auth.decorators';
 import { JwtAuthGuard } from '../usuarios/seguridad/jwt-auth.guard';
@@ -24,8 +26,9 @@ export class ProductoController {
   constructor(private readonly productoManager: ProductoManager) {}
 
   @Get()
-  async consultarCatalogo() {
-    const productos = await this.productoManager.consultarCatalogo();
+  @Get()
+  async consultarCatalogo(@Query() filtros: ConsultarCatalogoProductosDto) {
+    const productos = await this.productoManager.consultarCatalogo(filtros);
 
     return {
       success: true,
@@ -110,7 +113,7 @@ export class ProductoController {
   @Delete(':idProducto')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('VENDEDOR', 'ADMINISTRADOR')
-    async desactivarProducto(@Param('idProducto') idProducto: string) {
+  async desactivarProducto(@Param('idProducto') idProducto: string) {
   try {
     await this.productoManager.desactivarProducto(Number(idProducto));
     return {

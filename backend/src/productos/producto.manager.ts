@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { CambiarEstadoProductoDto } from './dto/cambiar-estado-producto.dto';
 import { ModificarProductoDto } from './dto/modificar-producto.dto';
+import type { ConsultarCatalogoProductosDto } from './dto/consultar-catalogo-productos.dto';
 import {
   ProductoCatalogoResponseDto,
   ProductoDetalleResponseDto,
@@ -13,8 +14,24 @@ import { ProductoRepository } from './producto.repository';
 export class ProductoManager {
   constructor(private readonly productoRepository: ProductoRepository) {}
 
-  async consultarCatalogo(): Promise<ProductoCatalogoResponseDto[]> {
-    const productos = await this.productoRepository.listarCatalogo();
+  async consultarCatalogo(
+    filtros: ConsultarCatalogoProductosDto = {},
+  ): Promise<ProductoCatalogoResponseDto[]> {
+    const productos = await this.productoRepository.listarCatalogo({
+      buscar:
+        filtros.buscar !== undefined
+          ? this.normalizarTexto(filtros.buscar)
+          : undefined,
+      idCategoria:
+        filtros.idCategoria !== undefined
+          ? Number(filtros.idCategoria)
+          : undefined,
+      esPersonalizable:
+        filtros.esPersonalizable !== undefined
+          ? filtros.esPersonalizable === 'true'
+          : undefined,
+    });
+
     return productos.map((producto) => ProductoMapper.aCatalogoDto(producto));
   }
 
