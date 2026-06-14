@@ -24,7 +24,7 @@ const EMAIL_REGEX    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CELULAR_DIGITOS_REGEX = /^[0-9]{9}$/;
 const DNI_REGEX      = /^[0-9]{8}$/;
 const RUC_DIGITOS_REGEX = /^[0-9]{11}$/;
-const PASSWORD_REGEX = /^(?=.*[0-9]).{8,}$/; // min 8 chars + al menos 1 número
+const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
 
 type FormData = {
   nombres:         string;
@@ -81,7 +81,7 @@ function validateForm(data: FormData): Record<string, string> {
   if (!data.password) {
     e.password = 'La contrasena es obligatoria';
   } else if (!PASSWORD_REGEX.test(data.password)) {
-    e.password = 'Minimo 8 caracteres y al menos 1 numero';
+    e.password = 'Minimo 8 caracteres, incluyendo letras y numeros';
   }
 
   if (!data.confirmPassword) {
@@ -160,9 +160,34 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
       });
       onSuccess?.();
     } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Ocurrio un error inesperado. Intenta de nuevo.';
+
+      const normalizedMessage = message.toLowerCase();
+
+      if (normalizedMessage.includes('email') || normalizedMessage.includes('correo')) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          email: message,
+        }));
+      }
+
+      if (
+        normalizedMessage.includes('documento') ||
+        normalizedMessage.includes('dni') ||
+        normalizedMessage.includes('ruc')
+      ) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          numeroDocumento: message,
+        }));
+      }
+
       toast({
         title: 'Error al crear la cuenta',
-        description: err instanceof Error ? err.message : 'Ocurrio un error inesperado. Intenta de nuevo.',
+        description: message,
         variant: 'destructive',
       });
     }
