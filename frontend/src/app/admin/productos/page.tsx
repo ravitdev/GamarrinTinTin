@@ -319,10 +319,13 @@ export default function AdminProductsPage() {
     loadProducts()
   }, [])
 
+  const isProductActive = (product: Producto) =>
+    product.esActivo === true || product.estado === 'ACTIVO' || product.estado === 'activo'
+
   const filteredProducts = products.filter(product => {
     const matchesSearch = 
       product.nombre.toLowerCase().includes(searchTerm.toLowerCase())
-    const isActive = product.esActivo === true || product.estado === 'ACTIVO'
+    const isActive = isProductActive(product)
     const matchesStatus =
       statusFilter === "todos" ||
       (statusFilter === "activos" && isActive) ||
@@ -332,7 +335,7 @@ export default function AdminProductsPage() {
   })
 
   const totalProducts = products.length
-  const activeProducts = products.filter(p => p.esActivo === true || p.estado === 'ACTIVO').length
+  const activeProducts = products.filter(p => isProductActive(p)).length
   const lowStockProducts = products.filter(p => isLowStock(p)).length
 
   const handleToggleSize = (size: Talla) => {
@@ -510,6 +513,36 @@ export default function AdminProductsPage() {
     setIsAddDialogOpen(true)
   }
 
+  const handleChangeProductStatus = async (product: Producto) => {
+    const nextStatus = !isProductActive(product)
+
+    try {
+      const updatedProduct = await AdminService.changeProductStatus(
+        String(product.idProducto),
+        nextStatus,
+      )
+
+      setProducts((prevProducts) =>
+        prevProducts.map((item) =>
+          item.idProducto === product.idProducto ? updatedProduct : item,
+        ),
+      )
+
+      toast({
+        title: nextStatus ? "Producto activado" : "Producto desactivado",
+        description: nextStatus
+          ? "El producto volvera a aparecer en el catalogo público."
+          : "El producto ya no aparecera en el catalogo público.",
+      })
+    } catch (error) {
+      toast({
+        title: "Error al cambiar estado",
+        description: error instanceof Error ? error.message : "Intenta nuevamente.",
+        variant: "destructive",
+      })
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -675,8 +708,8 @@ export default function AdminProductsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={(product.esActivo === true || product.estado === 'ACTIVO') ? "default" : "secondary"}>
-                          {(product.esActivo === true || product.estado === 'ACTIVO') ? "Activo" : "Inactivo"}
+                        <Badge variant={isProductActive(product) ? "default" : "secondary"}>
+                          {isProductActive(product) ? "Activo" : "Inactivo"}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
@@ -701,35 +734,9 @@ export default function AdminProductsPage() {
                               Editar
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={async () => {
-                                try {
-                                  await AdminService.deleteProduct(String(product.idProducto));
-
-                                  setProducts((prevProducts) =>
-                                    prevProducts.map((p) =>
-                                      p.idProducto === product.idProducto
-                                        ? { ...p, esActivo: false, estado: 'INACTIVO' }
-                                        : p
-                                    )
-                                  );
-                                  toast({
-                                    title: "Producto desactivado",
-                                    description: "El producto ya no aparecera en el catalogo publico.",
-                                  })
-                                } catch (error) {
-                                  console.error('Error al eliminar el producto:', error);
-                                  toast({
-                                    title: "Error al desactivar producto",
-                                    description: error instanceof Error ? error.message : "Intenta nuevamente.",
-                                    variant: "destructive",
-                                  })
-                                }
-                              }}
-                            >
+                            <DropdownMenuItem onClick={() => handleChangeProductStatus(product)}>
                               <Trash2 className="w-4 h-4 mr-2" />
-                              Eliminar
+                              Cambiar estado
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

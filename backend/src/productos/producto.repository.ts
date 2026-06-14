@@ -179,11 +179,9 @@ export class ProductoRepository {
     idProducto: number,
     datos: ModificarProductoDto,
   ): Promise<Producto> {
-    const productoExistente = await this.prisma.producto.findFirst({
+    const productoExistente = await this.prisma.producto.findUnique({
       where: {
         idProducto,
-        esActivo: true,
-        fechaEliminacion: null,
       },
       select: {
         idProducto: true,
@@ -276,24 +274,91 @@ export class ProductoRepository {
       }
     });
 
-    const productoActualizado = await this.buscarDetallePorId(idProducto);
+    const productoActualizado =
+      await this.buscarDetalleAdministracionPorId(idProducto);
 
     if (!productoActualizado) {
       throw new Error('Producto no encontrado.');
     }
 
-    return productoActualizado;
+    return ProductoMapper.aEntidad(productoActualizado as ProductoRegistro);
   }
 
   async desactivar(idProducto: number): Promise<boolean> {
-  const resultado = await this.prisma.producto.updateMany({
-    where: { idProducto, esActivo: true },
-    data: {
-      esActivo: false,
-      fechaEliminacion: new Date(),
-    },
-  });
+    const resultado = await this.prisma.producto.updateMany({
+      where: { idProducto, esActivo: true },
+      data: {
+        esActivo: false,
+        fechaEliminacion: new Date(),
+      },
+    });
 
-  return resultado.count > 0;
+    return resultado.count > 0;
+  }
+
+  async cambiarEstado(idProducto: number, esActivo: boolean): Promise<Producto> {
+    const productoExistente = await this.prisma.producto.findUnique({
+      where: {
+        idProducto,
+      },
+      select: {
+        idProducto: true,
+      },
+    });
+
+    if (!productoExistente) {
+      throw new Error('Producto no encontrado.');
+    }
+
+    await this.prisma.producto.update({
+      where: {
+        idProducto,
+      },
+      data: {
+        esActivo,
+        fechaEliminacion: esActivo ? null : new Date(),
+      },
+    });
+
+    const registro = await this.buscarDetalleAdministracionPorId(idProducto);
+
+    if (!registro) {
+      throw new Error('Producto no encontrado.');
+    }
+
+    return ProductoMapper.aEntidad(registro as ProductoRegistro);
+  }
+
+  private async buscarDetalleAdministracionPorId(
+    idProducto: number,
+  ): Promise<ProductoRegistro | null> {
+    return this.prisma.producto.findUnique({
+      where: {
+        idProducto,
+      },
+      include: {
+        categoria: true,
+        variantes: {
+          orderBy: [
+            {
+              colorNombre: 'asc',
+            },
+            {
+              talla: 'asc',
+            },
+          ],
+        },
+        imagenes: {
+          orderBy: {
+            displayOrder: 'asc',
+          },
+        },
+        descuentosVolumen: {
+          orderBy: {
+            cantidadMinima: 'asc',
+          },
+        },
+      },
+    }) as Promise<ProductoRegistro | null>;
   }
 }

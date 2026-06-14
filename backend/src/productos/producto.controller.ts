@@ -6,10 +6,12 @@ import {
   HttpException,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Put,
   UseGuards,
 } from '@nestjs/common';
+import type { CambiarEstadoProductoDto } from './dto/cambiar-estado-producto.dto';
 import type { RegistrarProductoDto } from './dto/registrar-producto.dto';
 import type { ModificarProductoDto } from './dto/modificar-producto.dto';
 import { ProductoManager } from './producto.manager';
@@ -122,6 +124,36 @@ export class ProductoController {
         : HttpStatus.BAD_REQUEST;
 
     throw new HttpException(error.message, estado);
+    }
+  }
+
+  @Patch(':idProducto/estado')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMINISTRADOR')
+  async cambiarEstadoProducto(
+    @Param('idProducto') idProducto: string,
+    @Body() body: CambiarEstadoProductoDto,
+  ) {
+    try {
+      const producto = await this.productoManager.cambiarEstadoProducto(
+        Number(idProducto),
+        body,
+      );
+
+      return {
+        success: true,
+        message: body.esActivo
+          ? 'Producto activado correctamente.'
+          : 'Producto desactivado correctamente.',
+        data: producto,
+      };
+    } catch (error: any) {
+      const estado =
+        error.message === 'Producto no encontrado.'
+          ? HttpStatus.NOT_FOUND
+          : HttpStatus.BAD_REQUEST;
+
+      throw new HttpException(error.message, estado);
     }
   }
 }
