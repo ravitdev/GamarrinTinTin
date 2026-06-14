@@ -233,7 +233,11 @@ export default function ProductDetailPage() {
                 {product.colores.map((color: any, index: number) => (
                   <button
                     key={color.idColor || color.id || index}
-                    onClick={() => setSelectedColorIndex(index)}
+                    onClick={() => {
+                      setSelectedColorIndex(index);
+                      setSelectedSize(null);
+                      setQuantity(1);
+                    }}
                     className={cn(
                       'h-16 w-16 rounded-lg border-2 transition-all',
                       selectedColorIndex === index
@@ -300,7 +304,11 @@ export default function ProductDetailPage() {
                   {product.colores.map((color: any, index: number) => (
                     <button
                       key={color.idColor || color.id || index}
-                      onClick={() => setSelectedColorIndex(index)}
+                      onClick={() => {
+                        setSelectedColorIndex(index);
+                        setSelectedSize(null);
+                        setQuantity(1);
+                      }}
                       className={cn(
                         'h-10 w-10 rounded-full border-2 transition-all',
                         selectedColorIndex === index

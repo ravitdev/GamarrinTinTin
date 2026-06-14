@@ -82,6 +82,8 @@ export function mapBackendProductToFrontend(backendProduct: any): any {
     descuentosVolumen,
     disenosPredefinidos: [], // default mock empty array
     imagenes: imagenes.length > 0 ? imagenes : [backendProduct.imagenPrincipal || '/placeholder.svg'],
+    tipoDiseno: backendProduct.esPersonalizable ? 'personalizable' : 'predefinido',
+    esPersonalizable: backendProduct.esPersonalizable,
     estado: backendProduct.esActivo ? 'ACTIVO' : 'INACTIVO',
   };
 }
