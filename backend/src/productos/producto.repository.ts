@@ -252,15 +252,30 @@ export class ProductoRepository {
           },
         });
 
-        await tx.productoVariante.createMany({
-          data: datos.variantes.map((variante) => ({
-            idProducto,
-            colorNombre: variante.colorNombre,
-            colorHex: variante.colorHex,
-            talla: variante.talla,
-            stock: variante.stock,
-          })),
-        });
+        for (const variante of datos.variantes) {
+          await tx.productoVariante.upsert({
+            where: {
+              idProducto_colorHex_talla: {
+                idProducto,
+                colorHex: variante.colorHex,
+                talla: variante.talla,
+              },
+            },
+            update: {
+              colorNombre: variante.colorNombre,
+              stock: variante.stock,
+              esActivo: true,
+              fechaEliminacion: null,
+            },
+            create: {
+              idProducto,
+              colorNombre: variante.colorNombre,
+              colorHex: variante.colorHex,
+              talla: variante.talla,
+              stock: variante.stock,
+            },
+          });
+        }
       }
 
       if (datos.imagenes) {
@@ -275,15 +290,30 @@ export class ProductoRepository {
           },
         });
 
-        await tx.productoImagen.createMany({
-          data: datos.imagenes.map((imagen) => ({
-            idProducto,
-            colorHex: imagen.colorHex,
-            lado: imagen.lado,
-            urlImagen: imagen.urlImagen,
-            displayOrder: imagen.displayOrder ?? 0,
-          })),
-        });
+        for (const imagen of datos.imagenes) {
+          await tx.productoImagen.upsert({
+            where: {
+              idProducto_colorHex_lado: {
+                idProducto,
+                colorHex: imagen.colorHex,
+                lado: imagen.lado,
+              },
+            },
+            update: {
+              urlImagen: imagen.urlImagen,
+              displayOrder: imagen.displayOrder ?? 0,
+              esActivo: true,
+              fechaEliminacion: null,
+            },
+            create: {
+              idProducto,
+              colorHex: imagen.colorHex,
+              lado: imagen.lado,
+              urlImagen: imagen.urlImagen,
+              displayOrder: imagen.displayOrder ?? 0,
+            },
+          });
+        }
       }
 
       if (datos.descuentosVolumen) {
@@ -298,13 +328,26 @@ export class ProductoRepository {
           },
         });
 
-        await tx.descuentoVolumen.createMany({
-          data: datos.descuentosVolumen.map((descuento) => ({
-            idProducto,
-            cantidadMinima: descuento.cantidadMinima,
-            porcentajeDescuento: descuento.porcentajeDescuento,
-          })),
-        });
+        for (const descuento of datos.descuentosVolumen) {
+          await tx.descuentoVolumen.upsert({
+            where: {
+              idProducto_cantidadMinima: {
+                idProducto,
+                cantidadMinima: descuento.cantidadMinima,
+              },
+            },
+            update: {
+              porcentajeDescuento: descuento.porcentajeDescuento,
+              esActivo: true,
+              fechaEliminacion: null,
+            },
+            create: {
+              idProducto,
+              cantidadMinima: descuento.cantidadMinima,
+              porcentajeDescuento: descuento.porcentajeDescuento,
+            },
+          });
+        }
       }
     });
 
