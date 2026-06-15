@@ -71,7 +71,7 @@ export interface CreateVendedorPayload {
   telefono: string;
   tipoDocumento: 'DNI' | 'RUC';
   numeroDocumento: string;
-  direccion: string;
+  direccion?: string | null;
 }
 
 export interface VendedorCreated {

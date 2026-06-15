@@ -14,6 +14,8 @@ export class PedidoRepository implements IPedidoRepository {
         where: { idPedido: pedido.idPedido },
         data: {
           estado: pedido.estado,
+          tipoEntrega: pedido.tipoEntrega,
+          direccionSnapshot: pedido.direccionSnapshot,
           subtotal: pedido.subtotal,
           descuentoTotal: pedido.descuentoTotal,
           total: pedido.total,
@@ -26,7 +28,7 @@ export class PedidoRepository implements IPedidoRepository {
 
     const cliente = await this.prisma.usuario.findUnique({
       where: { idUsuario: pedido.idCliente },
-      select: { direccion: true },
+      select: { idUsuario: true },
     });
 
     if (!cliente) {
@@ -73,7 +75,8 @@ export class PedidoRepository implements IPedidoRepository {
         subtotal,
         descuentoTotal,
         total,
-        direccionSnapshot: cliente.direccion,
+        tipoEntrega: pedido.tipoEntrega,
+        direccionSnapshot: pedido.direccionSnapshot,
         detalles: {
           create: detallesPreparados,
         },

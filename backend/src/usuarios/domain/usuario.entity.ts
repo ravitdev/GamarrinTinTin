@@ -15,7 +15,7 @@ export class Usuario {
     public fechaRegistro: Date,
     public tipoDocumento: TipoDocumento,
     public numeroDocumento: string,
-    public direccion: string,
+    public direccion: string | null,
     public rol: RolUsuario,
     public estado: EstadoUsuario,
   ) {}

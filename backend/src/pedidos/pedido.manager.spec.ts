@@ -73,7 +73,8 @@ class PedidoRepositoryFake implements IPedidoRepository {
       subtotal,
       0,
       subtotal,
-      'Lima',
+      pedido.tipoEntrega,
+      pedido.direccionSnapshot,
       detalles,
     );
 
@@ -116,7 +117,7 @@ describe('PedidoManager', () => {
         idProductoVariante: 11,
         cantidad: 1,
       },
-    ]);
+    ], 'ENVIO', 'Av. Test 123');
 
     expect(pedido.idCliente).toBe(1);
     expect(pedido.estado).toBe('REGISTRADO');
@@ -125,12 +126,17 @@ describe('PedidoManager', () => {
   });
 
   it('confirma el pedido cuando el pago es exitoso', async () => {
-    await manager.crearPedido(1, [
-      {
-        idProductoVariante: 10,
-        cantidad: 2,
-      },
-    ]);
+    await manager.crearPedido(
+      1,
+      [
+        {
+          idProductoVariante: 10,
+          cantidad: 2,
+        },
+      ],
+      'ENVIO',
+      'Av. Test 123',
+    );
 
     const pagoExitoso = await manager.procesarPagoPedido(1, 'tok_aprobado');
     const pedidos = await manager.listarPorCliente(1);
@@ -140,12 +146,17 @@ describe('PedidoManager', () => {
   });
 
   it('mantiene registrado el pedido cuando el pago es rechazado', async () => {
-    await manager.crearPedido(1, [
-      {
-        idProductoVariante: 10,
-        cantidad: 2,
-      },
-    ]);
+    await manager.crearPedido(
+      1,
+      [
+        {
+          idProductoVariante: 10,
+          cantidad: 2,
+        },
+      ],
+      'ENVIO',
+      'Av. Test 123',
+    );
 
     const pagoExitoso = await manager.procesarPagoPedido(1, 'rechazado');
     const pedidos = await manager.listarPorCliente(1);
@@ -156,33 +167,48 @@ describe('PedidoManager', () => {
 
   it('rechaza pedido con variante inválida', async () => {
     await expect(
-      manager.crearPedido(1, [
-        {
-          idProductoVariante: 0,
-          cantidad: 2,
-        },
-      ]),
+      manager.crearPedido(
+        1,
+        [
+          {
+            idProductoVariante: 0,
+            cantidad: 2,
+          },
+        ],
+        'ENVIO',
+        'Av. Test 123',
+      ),
     ).rejects.toThrow('La variante del producto no es válida.');
   });
 
   it('rechaza pedido con cantidad inválida', async () => {
     await expect(
-      manager.crearPedido(1, [
-        {
-          idProductoVariante: 10,
-          cantidad: 0,
-        },
-      ]),
+      manager.crearPedido(
+        1,
+        [
+          {
+            idProductoVariante: 10,
+            cantidad: 0,
+          },
+        ],
+        'ENVIO',
+        'Av. Test 123',
+      ),
     ).rejects.toThrow('La cantidad del detalle no es válida.');
   });
 
   it('rechaza pago sin token', async () => {
-    await manager.crearPedido(1, [
-      {
-        idProductoVariante: 10,
-        cantidad: 2,
-      },
-    ]);
+    await manager.crearPedido(
+      1,
+      [
+        {
+          idProductoVariante: 10,
+          cantidad: 2,
+        },
+      ],
+      'ENVIO',
+      'Av. Test 123',
+    );
 
     await expect(manager.procesarPagoPedido(1, '   ')).rejects.toThrow(
       'El token de pago es obligatorio.',
@@ -190,12 +216,17 @@ describe('PedidoManager', () => {
   });
 
   it('consulta el detalle de pedido propio', async () => {
-    await manager.crearPedido(1, [
-      {
-        idProductoVariante: 10,
-        cantidad: 2,
-      },
-    ]);
+    await manager.crearPedido(
+      1,
+      [
+        {
+          idProductoVariante: 10,
+          cantidad: 2,
+        },
+      ],
+      'ENVIO',
+      'Av. Test 123',
+    );
 
     const pedido = await manager.consultarDetallePedidoPropio(1, 1);
 
@@ -205,15 +236,53 @@ describe('PedidoManager', () => {
   });
 
   it('rechaza detalle de pedido que no pertenece al cliente', async () => {
-    await manager.crearPedido(1, [
-      {
-        idProductoVariante: 10,
-        cantidad: 2,
-      },
-    ]);
+    await manager.crearPedido(
+      1,
+      [
+        {
+          idProductoVariante: 10,
+          cantidad: 2,
+        },
+      ],
+      'ENVIO',
+      'Av. Test 123',
+    );
 
     await expect(manager.consultarDetallePedidoPropio(2, 1)).rejects.toThrow(
       'Pedido no encontrado para el cliente.',
     );
+  });
+
+  it('rechaza pedido con envío sin dirección', async () => {
+    await expect(
+      manager.crearPedido(
+        1,
+        [
+          {
+            idProductoVariante: 10,
+            cantidad: 1,
+          },
+        ],
+        'ENVIO',
+        '',
+      ),
+    ).rejects.toThrow('La dirección de envío es obligatoria.');
+  });
+
+  it('crea pedido con recojo en tienda sin dirección', async () => {
+    const pedido = await manager.crearPedido(
+      1,
+      [
+        {
+          idProductoVariante: 10,
+          cantidad: 1,
+        },
+      ],
+      'RECOJO_TIENDA',
+      null,
+    );
+
+    expect(pedido.tipoEntrega).toBe('RECOJO_TIENDA');
+    expect(pedido.direccionSnapshot).toBe('Recojo en tienda');
   });
 });

@@ -97,7 +97,7 @@ export interface Usuario {
   telefono:        string;
   tipoDocumento:   TipoDocumento;
   numeroDocumento: string;
-  direccion:       string;
+  direccion?:       string | null;
   rol:             RolUsuario;
   estado:          EstadoUsuario;
   fechaRegistro:   string; // DateTime ISO
@@ -434,7 +434,7 @@ export interface RegistroData {
   numeroDocumento: string;
   celular:         string;
   email:           string;
-  direccion:       string;
+  direccion?:       string | null;
   password:        string;
   confirmPassword: string;
 }
@@ -489,7 +489,7 @@ export interface Order {
     celular: string;
     tipoDocumento: string;
     documento: string;
-    direccion: string;
+    direccion?: string | null;
   };
   direccionEnvio: string;
   metodoPago: string;

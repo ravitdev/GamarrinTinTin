@@ -3,6 +3,7 @@ import {
   Pedido,
   PedidoDetalle,
   Talla,
+  TipoEntrega,
 } from './domain/pedido.entity';
 
 export interface PedidoDetalleRegistro {
@@ -25,6 +26,7 @@ export interface PedidoRegistro {
   subtotal: number | { toNumber(): number };
   descuentoTotal: number | { toNumber(): number };
   total: number | { toNumber(): number };
+  tipoEntrega: TipoEntrega;
   direccionSnapshot: string;
   detalles: PedidoDetalleRegistro[];
 }
@@ -39,6 +41,7 @@ export class PedidoMapper {
       this.aNumero(registro.subtotal),
       this.aNumero(registro.descuentoTotal),
       this.aNumero(registro.total),
+      registro.tipoEntrega,
       registro.direccionSnapshot,
       registro.detalles.map(
         (detalle) =>
@@ -66,6 +69,7 @@ export class PedidoMapper {
       subtotal: pedido.subtotal,
       descuentoTotal: pedido.descuentoTotal,
       total: pedido.total,
+      tipoEntrega: pedido.tipoEntrega,
       direccionSnapshot: pedido.direccionSnapshot,
       detalles: pedido.detalles.map((detalle) => ({
         idPedidoDetalle: detalle.idPedidoDetalle,

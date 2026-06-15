@@ -31,6 +31,8 @@ export class PedidoController {
       const pedido = await this.pedidoManager.crearPedido(
         usuario.idUsuario,
         body.items,
+        body.tipoEntrega,
+        body.direccionEnvio,
       );
       return {
         success: true,

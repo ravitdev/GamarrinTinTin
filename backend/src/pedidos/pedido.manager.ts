@@ -13,6 +13,8 @@ export class PedidoManager {
   async crearPedido(
     idCliente: number,
     items: CrearPedidoDetalleDto[],
+    tipoEntrega: 'ENVIO' | 'RECOJO_TIENDA',
+    direccionEnvio?: string | null,
   ): Promise<Pedido> {
     if (!this.esEnteroPositivo(idCliente)) {
       throw new Error('El cliente del pedido no es válido.');
@@ -21,6 +23,21 @@ export class PedidoManager {
     if (!items || items.length === 0) {
       throw new Error('El pedido debe tener al menos un detalle.');
     }
+
+    if (!['ENVIO', 'RECOJO_TIENDA'].includes(tipoEntrega)) {
+      throw new Error('El tipo de entrega no es válido.');
+    }
+
+    const direccionNormalizada = direccionEnvio?.trim() ?? '';
+
+    if (tipoEntrega === 'ENVIO' && !direccionNormalizada) {
+      throw new Error('La dirección de envío es obligatoria.');
+    }
+
+    const direccionSnapshot =
+      tipoEntrega === 'ENVIO'
+        ? direccionNormalizada
+        : 'Recojo en tienda';
 
     const detalles = items.map((item) => this.crearDetalle(item));
     const subtotal = detalles.reduce(
@@ -38,7 +55,8 @@ export class PedidoManager {
       subtotal,
       descuentoTotal,
       total,
-      '',
+      tipoEntrega,
+      direccionSnapshot,
       detalles,
     );
 

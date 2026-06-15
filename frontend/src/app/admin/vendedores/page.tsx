@@ -210,7 +210,7 @@ export default function AdminVendedoresPage() {
         correo: profile.email,
         celular: profile.telefono,
         documento: profile.numeroDocumento,
-        direccion: profile.direccion,
+        direccion: profile.direccion ?? "",
       })
       setIsEditDialogOpen(true)
     } catch (error) {
@@ -234,7 +234,7 @@ export default function AdminVendedoresPage() {
         telefono: editVendor.celular.replace(/\D/g, ""),
         numeroDocumento: editVendor.documento.trim(),
         tipoDocumento: TipoDocumento.DNI,
-        ...(editVendor.direccion.trim() ? { direccion: editVendor.direccion.trim() } : {}),
+        direccion: editVendor.direccion.trim() || null,
       })
 
       const mapped = mapProfileToVendor(updated)
@@ -298,10 +298,6 @@ export default function AdminVendedoresPage() {
       errors.confirmPassword = "Debes confirmar la contraseña"
     } else if (newVendor.contrasena !== newVendor.confirmPassword) {
       errors.confirmPassword = "Las contraseñas no coinciden"
-    }
-
-    if (!newVendor.direccion.trim()) {
-      errors.direccion = "La dirección es obligatoria"
     }
 
     setFieldErrors(errors)
@@ -369,7 +365,7 @@ export default function AdminVendedoresPage() {
         telefono: newVendor.celular.trim(),
         tipoDocumento: TipoDocumento.DNI,
         numeroDocumento: newVendor.documento.trim(),
-        direccion: newVendor.direccion.trim(),
+        direccion: newVendor.direccion.trim() || null,
       })
 
       const vendor: VendorMock = {
@@ -544,7 +540,7 @@ export default function AdminVendedoresPage() {
 
               {/* Dirección */}
               <div className="space-y-2">
-                <Label htmlFor="direccion">Dirección <span className="text-destructive">*</span></Label>
+                <Label htmlFor="direccion">Dirección opcional<span className="text-destructive"></span></Label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input

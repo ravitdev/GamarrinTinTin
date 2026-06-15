@@ -75,9 +75,6 @@ function validateForm(data: FormData): Record<string, string> {
     e.email = 'Ingresa un correo valido (ej. juan.perez@gmail.com)';
   }
 
-  if (!data.direccion.trim())
-    e.direccion = 'La direccion es obligatoria';
-
   if (!data.password) {
     e.password = 'La contrasena es obligatoria';
   } else if (!PASSWORD_REGEX.test(data.password)) {
@@ -370,7 +367,7 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
 
             <div>
               <Label htmlFor="direccion">
-                Direccion <span className="text-destructive">*</span>
+                Dirección opcional
               </Label>
               <div className="relative mt-1">
                 <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -405,7 +402,7 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
                 <Input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="Min. 8 caracteres con al menos 1 numero"
+                  placeholder="Min. 8 caracteres con letras y números"
                   className={cn('pl-10 pr-10', fieldErrors.password && 'border-destructive')}
                   value={formData.password}
                   onChange={handleChange}
