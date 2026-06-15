@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
@@ -47,6 +48,7 @@ import {
   Search,
   MoreHorizontal,
   Eye,
+  Edit,
   Mail,
   Phone,
   ShoppingBag,
@@ -66,14 +68,23 @@ import {
   ArrowLeft
 } from "lucide-react"
 import { AdminService } from "@/features/admin/services/admin.service"
-import { UserService, type UserProfile } from "@/features/user/services/user.service"
+import {
+  UserService,
+  type DocumentChangeRequest,
+  type UserProfile,
+} from "@/features/user/services/user.service"
 import { toast } from "@/hooks/use-toast"
 
 interface Client {
   id: string
+  nombres: string
+  apellidos: string
   name: string
   email: string
   phone: string
+  direccion: string | null
+  tipoDocumento: "DNI" | "RUC"
+  numeroDocumento: string
   type: "individual" | "business"
   company?: string
   ruc?: string
@@ -95,6 +106,14 @@ interface Order {
   total: number
   items: number
   productos: string[]
+}
+
+interface EditClientForm {
+  nombres: string
+  apellidos: string
+  email: string
+  telefono: string
+  direccion: string
 }
 
 const estadoConfig = {
@@ -137,9 +156,14 @@ function mapProfileToClient(
 
   return {
     id: String(profile.idUsuario),
+    nombres: profile.nombres,
+    apellidos: profile.apellidos,
     name: `${profile.nombres} ${profile.apellidos}`,
     email: profile.email,
     phone: profile.telefono,
+    direccion: profile.direccion,
+    tipoDocumento: profile.tipoDocumento,
+    numeroDocumento: profile.numeroDocumento,
     type: profile.tipoDocumento === "RUC" ? "business" : "individual",
     company: profile.tipoDocumento === "RUC" ? `${profile.nombres} ${profile.apellidos}` : undefined,
     ruc: profile.tipoDocumento === "RUC" ? profile.numeroDocumento : undefined,
@@ -158,6 +182,8 @@ export default function AdminClientsPage() {
   const [clientsList, setClientsList] = useState<Client[]>([])
   const [isLoadingClients, setIsLoadingClients] = useState(true)
   const [pendingDeactivationMap, setPendingDeactivationMap] = useState<Record<string, number>>({})
+  const [pendingDocumentRequests, setPendingDocumentRequests] = useState<DocumentChangeRequest[]>([])
+  const [isApprovingDocumentRequest, setIsApprovingDocumentRequest] = useState<number | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [typeFilter, setTypeFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -166,14 +192,25 @@ export default function AdminClientsPage() {
   const [clientToDeactivate, setClientToDeactivate] = useState<Client | null>(null)
   const [deactivationError, setDeactivationError] = useState<string | null>(null)
   const [isProcessingDeactivation, setIsProcessingDeactivation] = useState(false)
+  const [clientToEdit, setClientToEdit] = useState<Client | null>(null)
+  const [editClientForm, setEditClientForm] = useState<EditClientForm>({
+    nombres: "",
+    apellidos: "",
+    email: "",
+    telefono: "",
+    direccion: "",
+  })
+  const [editClientErrors, setEditClientErrors] = useState<Record<string, string>>({})
+  const [isSavingClientEdit, setIsSavingClientEdit] = useState(false)
 
   useEffect(() => {
     const loadClients = async () => {
       setIsLoadingClients(true)
       try {
-        const [profiles, pendingRequests] = await Promise.all([
+        const [profiles, pendingRequests, documentRequests] = await Promise.all([
           AdminService.getClients(),
           AdminService.getPendingDeactivationRequests(),
+          AdminService.getPendingDocumentRequests(),
         ])
 
         const pendingMap: Record<string, number> = {}
@@ -181,6 +218,10 @@ export default function AdminClientsPage() {
           pendingMap[String(request.idUsuario)] = request.idSolicitud
         })
         setPendingDeactivationMap(pendingMap)
+
+        setPendingDocumentRequests(
+          documentRequests.filter((request) => request.rol === "CLIENTE"),
+        )
 
         setClientsList(
           profiles.map((profile) =>
@@ -217,6 +258,7 @@ export default function AdminClientsPage() {
   const businessClients = clientsList.filter(c => c.type === "business").length
   const totalRevenue = clientsList.reduce((sum, c) => sum + c.totalSpent, 0)
   const pendingDeactivations = clientsList.filter(c => c.deactivationRequest).length
+  const pendingDocumentChanges = pendingDocumentRequests.length
 
   const handleViewOrders = (client: Client) => {
     setSelectedClient(client)
@@ -226,6 +268,134 @@ export default function AdminClientsPage() {
   const handleViewProfile = (client: Client) => {
     setSelectedClient(client)
     setViewMode("profile")
+  }
+
+  const handleOpenEditClient = (client: Client) => {
+    setClientToEdit(client)
+    setEditClientForm({
+      nombres: client.nombres,
+      apellidos: client.apellidos,
+      email: client.email,
+      telefono: client.phone,
+      direccion: client.direccion ?? "",
+    })
+    setEditClientErrors({})
+  }
+
+  const handleCloseEditClient = () => {
+    setClientToEdit(null)
+    setEditClientErrors({})
+  }
+
+  const handleSaveEditClient = async () => {
+    if (!clientToEdit) return
+
+    setIsSavingClientEdit(true)
+    setEditClientErrors({})
+
+    try {
+      const updated = await AdminService.updateUser(Number(clientToEdit.id), {
+        nombres: editClientForm.nombres.trim(),
+        apellidos: editClientForm.apellidos.trim(),
+        email: editClientForm.email.trim(),
+        telefono: editClientForm.telefono.replace(/\D/g, ""),
+        direccion: editClientForm.direccion.trim() || null,
+      })
+
+      const mapped = mapProfileToClient(
+        updated,
+        Boolean(pendingDeactivationMap[String(updated.idUsuario)]),
+      )
+
+      setClientsList((prev) =>
+        prev.map((client) =>
+          client.id === clientToEdit.id
+            ? mapped
+            : client,
+        ),
+      )
+
+      setSelectedClient((prev) =>
+        prev?.id === clientToEdit.id ? mapped : prev,
+      )
+
+      setClientToEdit(null)
+
+      toast({
+        title: "Cliente actualizado",
+        description: "Los datos del cliente fueron actualizados correctamente.",
+      })
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Revisa los datos ingresados."
+
+      const normalizedMessage = message.toLowerCase()
+
+      if (normalizedMessage.includes("email") || normalizedMessage.includes("correo")) {
+        setEditClientErrors((prev) => ({
+          ...prev,
+          email: message,
+        }))
+      }
+
+      if (normalizedMessage.includes("teléfono") || normalizedMessage.includes("telefono") || normalizedMessage.includes("celular")) {
+        setEditClientErrors((prev) => ({
+          ...prev,
+          telefono: message,
+        }))
+      }
+
+      toast({
+        title: "Error al actualizar cliente",
+        description: message,
+        variant: "destructive",
+      })
+    } finally {
+      setIsSavingClientEdit(false)
+    }
+  }
+
+  const handleApproveDocumentRequest = async (request: DocumentChangeRequest) => {
+    setIsApprovingDocumentRequest(request.idSolicitud)
+
+    try {
+      const updated = await AdminService.approveDocumentRequest(request.idSolicitud)
+      const mapped = mapProfileToClient(
+        updated,
+        Boolean(pendingDeactivationMap[String(updated.idUsuario)]),
+      )
+
+      setClientsList((prev) =>
+        prev.map((client) =>
+          client.id === String(updated.idUsuario)
+            ? mapped
+            : client,
+        ),
+      )
+
+      setSelectedClient((prev) =>
+        prev?.id === String(updated.idUsuario) ? mapped : prev,
+      )
+
+      setPendingDocumentRequests((prev) =>
+        prev.filter((item) => item.idSolicitud !== request.idSolicitud),
+      )
+
+      toast({
+        title: "Solicitud aprobada",
+        description: "El documento del cliente fue actualizado correctamente.",
+      })
+    } catch (error) {
+      toast({
+        title: "No se pudo aprobar la solicitud",
+        description: error instanceof Error ? error.message : "Intenta nuevamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsApprovingDocumentRequest(null)
+    }
   }
 
   const handleDeactivateAccount = async (client: Client) => {
@@ -373,6 +543,69 @@ export default function AdminClientsPage() {
         </Card>
       </div>
 
+      {/* Document Change Requests */}
+      {pendingDocumentChanges > 0 && (
+        <Card className="border-amber-200 bg-amber-50/40">
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h3 className="font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-600" />
+                  Solicitudes de cambio de documento
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Revisa y aprueba las solicitudes de cambio de DNI/RUC enviadas por clientes.
+                </p>
+              </div>
+              <Badge variant="outline" className="border-amber-300 text-amber-700">
+                {pendingDocumentChanges} pendiente{pendingDocumentChanges === 1 ? "" : "s"}
+              </Badge>
+            </div>
+
+            <div className="space-y-3">
+              {pendingDocumentRequests.map((request) => (
+                <div
+                  key={request.idSolicitud}
+                  className="flex flex-col gap-3 rounded-lg border bg-background p-4 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="space-y-1">
+                    <p className="font-medium">
+                      {request.nombres} {request.apellidos}
+                    </p>
+                    <p className="text-sm text-muted-foreground">{request.email}</p>
+                    <div className="flex flex-wrap gap-2 text-sm">
+                      <Badge variant="secondary">
+                        Actual: {request.tipoDocumentoActual} {request.numeroDocumentoActual}
+                      </Badge>
+                      <Badge variant="outline">
+                        Nuevo: {request.tipoDocumentoNuevo} {request.numeroDocumentoNuevo}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Solicitud enviada el{" "}
+                      {new Date(request.fechaSolicitud).toLocaleDateString("es-PE", {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })}
+                    </p>
+                  </div>
+
+                  <Button
+                    onClick={() => handleApproveDocumentRequest(request)}
+                    disabled={isApprovingDocumentRequest === request.idSolicitud}
+                  >
+                    {isApprovingDocumentRequest === request.idSolicitud
+                      ? "Aprobando..."
+                      : "Aprobar"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
@@ -445,6 +678,11 @@ export default function AdminClientsPage() {
                                 Solicita desactivar
                               </Badge>
                             )}
+                            {pendingDocumentRequests.some((request) => String(request.idUsuario) === client.id) && (
+                              <Badge variant="outline" className="text-blue-600 border-blue-300 text-xs">
+                                Solicita documento
+                              </Badge>
+                            )}
                           </div>
                           {client.company && (
                             <p className="text-xs text-muted-foreground">{client.company}</p>
@@ -500,6 +738,10 @@ export default function AdminClientsPage() {
                           <DropdownMenuItem onClick={() => handleViewOrders(client)}>
                             <ShoppingBag className="w-4 h-4 mr-2" />
                             Ver Pedidos
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleOpenEditClient(client)}>
+                            <Edit className="w-4 h-4 mr-2" />
+                            Editar Cliente
                           </DropdownMenuItem>
                           <DropdownMenuItem>
                             <Mail className="w-4 h-4 mr-2" />
@@ -708,6 +950,10 @@ export default function AdminClientsPage() {
                       <Mail className="w-4 h-4 mr-2" />
                       Enviar Email
                     </Button>
+                    <Button variant="outline" onClick={() => handleOpenEditClient(selectedClient)}>
+                      <Edit className="w-4 h-4 mr-2" />
+                      Editar Cliente
+                    </Button>
                     {selectedClient.status === "active" ? (
                       <Button 
                         variant="destructive" 
@@ -730,6 +976,115 @@ export default function AdminClientsPage() {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Client Dialog */}
+      <Dialog open={!!clientToEdit} onOpenChange={(open) => {
+        if (!open) handleCloseEditClient()
+      }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Modificar datos del cliente</DialogTitle>
+            <DialogDescription>
+              Actualiza los datos básicos del cliente. El documento solo puede modificarse mediante solicitud aprobada.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="edit-client-nombres">Nombres</Label>
+                <Input
+                  id="edit-client-nombres"
+                  value={editClientForm.nombres}
+                  onChange={(e) =>
+                    setEditClientForm({ ...editClientForm, nombres: e.target.value })
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-client-apellidos">Apellidos</Label>
+                <Input
+                  id="edit-client-apellidos"
+                  value={editClientForm.apellidos}
+                  onChange={(e) =>
+                    setEditClientForm({ ...editClientForm, apellidos: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-client-email">Correo</Label>
+              <Input
+                id="edit-client-email"
+                type="email"
+                value={editClientForm.email}
+                onChange={(e) => {
+                  setEditClientForm({ ...editClientForm, email: e.target.value })
+                  if (editClientErrors.email) {
+                    setEditClientErrors((prev) => ({ ...prev, email: "" }))
+                  }
+                }}
+                className={editClientErrors.email ? "border-destructive" : ""}
+              />
+              {editClientErrors.email && (
+                <p className="text-xs text-destructive">{editClientErrors.email}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-client-telefono">Celular</Label>
+              <Input
+                id="edit-client-telefono"
+                value={editClientForm.telefono}
+                onChange={(e) => {
+                  setEditClientForm({ ...editClientForm, telefono: e.target.value })
+                  if (editClientErrors.telefono) {
+                    setEditClientErrors((prev) => ({ ...prev, telefono: "" }))
+                  }
+                }}
+                className={editClientErrors.telefono ? "border-destructive" : ""}
+              />
+              {editClientErrors.telefono && (
+                <p className="text-xs text-destructive">{editClientErrors.telefono}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-client-direccion">Dirección</Label>
+              <Input
+                id="edit-client-direccion"
+                value={editClientForm.direccion}
+                onChange={(e) =>
+                  setEditClientForm({ ...editClientForm, direccion: e.target.value })
+                }
+                placeholder="Opcional"
+              />
+            </div>
+
+            {clientToEdit && (
+              <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+                Documento actual:{" "}
+                <strong>
+                  {clientToEdit.tipoDocumento} {clientToEdit.numeroDocumento}
+                </strong>
+                <br />
+                Para modificar este dato, el cliente debe solicitar el cambio y un administrador debe aprobarlo.
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseEditClient} disabled={isSavingClientEdit}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveEditClient} disabled={isSavingClientEdit}>
+              {isSavingClientEdit ? "Guardando..." : "Guardar cambios"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
