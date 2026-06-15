@@ -145,6 +145,7 @@ export default function AdminVendedoresPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [editFieldErrors, setEditFieldErrors] = useState<Record<string, string>>({})
 
   const [newVendor, setNewVendor] = useState({
     nombres: "",
@@ -212,6 +213,7 @@ export default function AdminVendedoresPage() {
         documento: profile.numeroDocumento,
         direccion: profile.direccion ?? "",
       })
+      setEditFieldErrors({})
       setIsEditDialogOpen(true)
     } catch (error) {
       toast({
@@ -226,6 +228,8 @@ export default function AdminVendedoresPage() {
     if (!selectedVendor) return
 
     setIsSavingEdit(true)
+    setEditFieldErrors({})
+
     try {
       const updated = await AdminService.updateUser(Number(selectedVendor.id), {
         nombres: editVendor.nombres.trim(),
@@ -251,9 +255,23 @@ export default function AdminVendedoresPage() {
         description: "Los datos del vendedor fueron actualizados correctamente.",
       })
     } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Revisa los datos ingresados."
+
+      const normalizedMessage = message.toLowerCase()
+
+      if (normalizedMessage.includes("email") || normalizedMessage.includes("correo")) {
+        setEditFieldErrors((prev) => ({
+          ...prev,
+          correo: message,
+        }))
+      }
+
       toast({
         title: "Error al actualizar vendedor",
-        description: error instanceof Error ? error.message : "Revisa los datos ingresados.",
+        description: message,
         variant: "destructive",
       })
     } finally {
@@ -631,8 +649,8 @@ export default function AdminVendedoresPage() {
             <DialogFooter className="pt-4 border-t">
               <Button
                 variant="outline"
-                onClick={() => setIsAddDialogOpen(false)}
-                disabled={isAddingVendor}
+                onClick={() => {setEditFieldErrors({}) 
+                                setIsEditDialogOpen(false)}} disabled={isSavingEdit}
               >
                 Cancelar
               </Button>
@@ -920,8 +938,17 @@ export default function AdminVendedoresPage() {
                 id="edit-correo"
                 type="email"
                 value={editVendor.correo}
-                onChange={(e) => setEditVendor({ ...editVendor, correo: e.target.value })}
+                onChange={(e) => {
+                  setEditVendor({ ...editVendor, correo: e.target.value })
+                  if (editFieldErrors.correo) {
+                    setEditFieldErrors((prev) => ({ ...prev, correo: "" }))
+                  }
+                }}
+                className={cn(editFieldErrors.correo && "border-destructive")}
               />
+              {editFieldErrors.correo && (
+                <p className="text-xs text-destructive">{editFieldErrors.correo}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-celular">Celular</Label>
@@ -949,7 +976,8 @@ export default function AdminVendedoresPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={isSavingEdit}>
+            <Button variant="outline" onClick={() => {setEditFieldErrors({}) 
+                                                      setIsEditDialogOpen(false)}} disabled={isSavingEdit}>
               Cancelar
             </Button>
             <Button onClick={handleSaveEdit} disabled={isSavingEdit}>
