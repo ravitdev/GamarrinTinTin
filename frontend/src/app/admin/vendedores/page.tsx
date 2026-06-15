@@ -213,7 +213,6 @@ export default function AdminVendedoresPage() {
         documento: profile.numeroDocumento,
         direccion: profile.direccion ?? "",
       })
-      setIsEditDialogOpen(true)
       setEditFieldErrors({})
       setIsEditDialogOpen(true)
     } catch (error) {
@@ -650,8 +649,8 @@ export default function AdminVendedoresPage() {
             <DialogFooter className="pt-4 border-t">
               <Button
                 variant="outline"
-                onClick={() => setIsAddDialogOpen(false)}
-                disabled={isAddingVendor}
+                onClick={() => {setEditFieldErrors({}) 
+                                setIsEditDialogOpen(false)}} disabled={isSavingEdit}
               >
                 Cancelar
               </Button>
