@@ -15,7 +15,7 @@ export interface UsuarioRegistro {
   fechaRegistro: Date;
   tipoDocumento: TipoDocumento;
   numeroDocumento: string;
-  direccion: string;
+  direccion: string | null;
   rol: RolUsuario;
   estado: EstadoUsuario;
 }

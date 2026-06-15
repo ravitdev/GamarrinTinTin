@@ -7,7 +7,11 @@ interface UseCheckoutReturn {
   isProcessing: boolean;
   error: string | null;
   order: any | null;
-  confirmOrder: (tokenTarjeta: string) => Promise<void>;
+  confirmOrder: (
+    tokenTarjeta: string,
+    tipoEntrega: 'ENVIO' | 'RECOJO_TIENDA',
+    direccionEnvio?: string | null,
+  ) => Promise<void>;
 }
 
 export function useCheckout(): UseCheckoutReturn {
@@ -16,7 +20,11 @@ export function useCheckout(): UseCheckoutReturn {
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<any | null>(null);
 
-  const confirmOrder = useCallback(async (tokenTarjeta: string) => {
+  const confirmOrder = useCallback(async (
+    tokenTarjeta: string,
+    tipoEntrega: 'ENVIO' | 'RECOJO_TIENDA',
+    direccionEnvio?: string | null,
+  ) => {
     setIsProcessing(true);
     setError(null);
     try {
@@ -39,7 +47,11 @@ export function useCheckout(): UseCheckoutReturn {
       }));
 
       // 1. Registrar el pedido en el backend
-      const orderResult = await CheckoutService.createOrder(itemsPayload);
+      const orderResult = await CheckoutService.createOrder({
+        items: itemsPayload,
+        tipoEntrega,
+        direccionEnvio,
+      });
       const idPedido = orderResult.idPedido;
 
       // 2. Procesar el pago en el backend

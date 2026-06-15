@@ -536,7 +536,7 @@ export class UsuarioManager {
     const telefono = this.normalizarTexto(datos.telefono);
     const tipoDocumento = datos.tipoDocumento;
     const numeroDocumento = this.normalizarTexto(datos.numeroDocumento);
-    const direccion = this.normalizarTexto(datos.direccion);
+    const direccion = this.normalizarTextoOpcional(datos.direccion);
     const contrasena = datos.contrasena;
 
     this.validarContrasena(contrasena);
@@ -566,10 +566,6 @@ export class UsuarioManager {
     this.validarEmail(usuario.email);
     this.validarTelefono(usuario.telefono);
     this.validarDocumento(usuario.tipoDocumento, usuario.numeroDocumento);
-    this.validarTextoObligatorio(
-      usuario.direccion,
-      'La dirección es obligatoria.',
-    );
   }
 
   private async modificarDatosUsuario(
@@ -595,6 +591,11 @@ export class UsuarioManager {
     const cambioDocumento =
       tipoDocumento !== usuario.tipoDocumento ||
       numeroDocumento !== usuario.numeroDocumento;
+
+    const direccionActualizada =
+      datos.direccion === undefined
+        ? usuario.direccion
+        : this.normalizarTextoOpcional(datos.direccion);
 
     if (cambioDocumento && !permitirCambioDocumento) {
       throw new Error(
@@ -626,7 +627,7 @@ export class UsuarioManager {
       usuario.fechaRegistro,
       tipoDocumento,
       numeroDocumento,
-      this.normalizarTexto(datos.direccion ?? usuario.direccion),
+      direccionActualizada,
       usuario.rol,
       datos.estado ?? usuario.estado,
     );
@@ -713,7 +714,12 @@ export class UsuarioManager {
     }
   }
 
-  private normalizarTexto(valor: string | undefined): string {
+  private normalizarTexto(valor: string | null | undefined): string {
     return valor?.trim() ?? '';
+  }
+
+  private normalizarTextoOpcional(valor: string | null | undefined): string | null {
+    const texto = valor?.trim() ?? '';
+    return texto.length > 0 ? texto : null;
   }
 }

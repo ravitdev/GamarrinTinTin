@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CreditCard, User, Truck, CheckCircle } from 'lucide-react';
+import { CreditCard, User, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,18 +10,25 @@ import { useCheckout } from '@/features/checkout/hooks/use-checkout';
 import { useCart } from '@/features/cart/hooks/use-cart';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 
+type CheckoutStep = 'shipping' | 'payment' | 'confirm';
+type TipoEntrega = 'ENVIO' | 'RECOJO_TIENDA';
+
 export function CheckoutScreen() {
   const router = useRouter();
   const { isHydrating, isLoggedIn } = useAuth();
   const { isProcessing, error, order, confirmOrder } = useCheckout();
   const { cart } = useCart();
-  const [step, setStep] = useState<'shipping' | 'payment' | 'confirm'>('shipping');
+
+  const [step, setStep] = useState<CheckoutStep>('shipping');
+  const [tipoEntrega, setTipoEntrega] = useState<TipoEntrega>('ENVIO');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
     phone: '',
     address: '',
-    city: '',
+    city: 'Lima',
     district: '',
     zipCode: '',
     cardName: '',
@@ -30,9 +37,38 @@ export function CheckoutScreen() {
     cvv: '',
   });
 
+  const steps: CheckoutStep[] = ['shipping', 'payment', 'confirm'];
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+
     setFormData((prev) => ({ ...prev, [name]: value }));
+
+    if (fieldErrors[name]) {
+      setFieldErrors((prev) => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  const handleContinueToPayment = () => {
+    const errors: Record<string, string> = {};
+
+    if (tipoEntrega === 'ENVIO' && !formData.address.trim()) {
+      errors.address = 'La dirección de envío es obligatoria.';
+    }
+
+    setFieldErrors(errors);
+
+    if (Object.keys(errors).length === 0) {
+      setStep('payment');
+    }
+  };
+
+  const handleConfirmOrder = () => {
+    confirmOrder(
+      formData.cardNumber || 'tarjeta_valida',
+      tipoEntrega,
+      tipoEntrega === 'ENVIO' ? formData.address.trim() : null,
+    );
   };
 
   useEffect(() => {
@@ -76,31 +112,32 @@ export function CheckoutScreen() {
 
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          {/* Steps */}
           <div className="flex gap-4">
-            {['shipping', 'payment', 'confirm'].map((s, idx) => (
-              <div
+            {steps.map((s, idx) => (
+              <button
+                type="button"
                 key={s}
                 className={`flex items-center gap-2 pb-2 cursor-pointer border-b-2 transition ${
                   step === s
                     ? 'border-accent text-accent'
-                    : idx < ['shipping', 'payment', 'confirm'].indexOf(step)
-                    ? 'border-green-500 text-green-500'
-                    : 'border-muted text-muted-foreground'
+                    : idx < steps.indexOf(step)
+                      ? 'border-green-500 text-green-500'
+                      : 'border-muted text-muted-foreground'
                 }`}
-                onClick={() => setStep(s as any)}
+                onClick={() => setStep(s)}
               >
-                <span className="text-sm font-medium capitalize">{s}</span>
-              </div>
+                <span className="text-sm font-medium">
+                  {s === 'shipping' ? 'Entrega' : s === 'payment' ? 'Pago' : 'Confirmación'}
+                </span>
+              </button>
             ))}
           </div>
 
-          {/* Shipping Form */}
           {step === 'shipping' && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               <h2 className="flex items-center gap-2 font-semibold text-foreground">
                 <User className="h-5 w-5" />
-                Información de envío
+                Información de entrega
               </h2>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -114,6 +151,7 @@ export function CheckoutScreen() {
                     placeholder="Juan Carlos Rodriguez"
                   />
                 </div>
+
                 <div>
                   <Label htmlFor="email">Correo electrónico</Label>
                   <Input
@@ -127,62 +165,114 @@ export function CheckoutScreen() {
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <Label htmlFor="phone">Teléfono</Label>
-                  <Input
-                    id="phone"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleChange}
-                    placeholder="+51 987 654 321"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="address">Dirección</Label>
-                  <Input
-                    id="address"
-                    name="address"
-                    value={formData.address}
-                    onChange={handleChange}
-                    placeholder="Av. Ejemplo 123"
-                  />
+              <div>
+                <Label htmlFor="phone">Teléfono</Label>
+                <Input
+                  id="phone"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  placeholder="+51 987 654 321"
+                />
+              </div>
+
+              <div className="space-y-3">
+                <Label>Tipo de entrega</Label>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Button
+                    type="button"
+                    variant={tipoEntrega === 'ENVIO' ? 'default' : 'outline'}
+                    onClick={() => setTipoEntrega('ENVIO')}
+                  >
+                    Envío a domicilio
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant={tipoEntrega === 'RECOJO_TIENDA' ? 'default' : 'outline'}
+                    onClick={() => {
+                      setTipoEntrega('RECOJO_TIENDA');
+                      setFieldErrors((prev) => ({ ...prev, address: '' }));
+                    }}
+                  >
+                    Recojo en tienda
+                  </Button>
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div>
-                  <Label htmlFor="city">Ciudad</Label>
-                  <Input
-                    id="city"
-                    name="city"
-                    value={formData.city}
-                    onChange={handleChange}
-                    placeholder="Lima"
-                  />
+              {tipoEntrega === 'ENVIO' ? (
+                <div className="space-y-4 rounded-lg border border-border p-4">
+                  <div>
+                    <Label htmlFor="address">
+                      Dirección de envío <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="address"
+                      name="address"
+                      value={formData.address}
+                      onChange={handleChange}
+                      placeholder="Av. Ejemplo 123"
+                      className={fieldErrors.address ? 'border-destructive' : ''}
+                    />
+                    {fieldErrors.address && (
+                      <p className="mt-1 text-xs text-destructive">{fieldErrors.address}</p>
+                    )}
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div>
+                      <Label htmlFor="city">Ciudad</Label>
+                      <Input
+                        id="city"
+                        name="city"
+                        value={formData.city}
+                        onChange={handleChange}
+                        placeholder="Lima"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="district">Distrito</Label>
+                      <Input
+                        id="district"
+                        name="district"
+                        value={formData.district}
+                        onChange={handleChange}
+                        placeholder="La Victoria"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="zipCode">Código postal</Label>
+                      <Input
+                        id="zipCode"
+                        name="zipCode"
+                        value={formData.zipCode}
+                        onChange={handleChange}
+                        placeholder="15001"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="zipCode">Código postal</Label>
-                  <Input
-                    id="zipCode"
-                    name="zipCode"
-                    value={formData.zipCode}
-                    onChange={handleChange}
-                    placeholder="15001"
-                  />
+              ) : (
+                <div className="rounded-lg border border-border bg-muted/50 p-4">
+                  <p className="font-medium text-foreground">Recojo en tienda</p>
+                  <p className="text-sm text-muted-foreground">
+                    Podrás recoger tu pedido directamente en tienda cuando esté listo.
+                  </p>
                 </div>
-              </div>
+              )}
 
               <Button
                 className="w-full gap-2 bg-accent text-accent-foreground hover:bg-accent/90"
-                onClick={() => setStep('payment')}
+                onClick={handleContinueToPayment}
               >
                 Continuar al pago
               </Button>
             </div>
           )}
 
-          {/* Payment Form */}
           {step === 'payment' && (
             <div className="space-y-4">
               <h2 className="flex items-center gap-2 font-semibold text-foreground">
@@ -225,6 +315,7 @@ export function CheckoutScreen() {
                     maxLength={5}
                   />
                 </div>
+
                 <div>
                   <Label htmlFor="cvv">CVV</Label>
                   <Input
@@ -246,6 +337,7 @@ export function CheckoutScreen() {
                 >
                   Atrás
                 </Button>
+
                 <Button
                   className="flex-1 gap-2 bg-accent text-accent-foreground hover:bg-accent/90"
                   onClick={() => setStep('confirm')}
@@ -256,7 +348,6 @@ export function CheckoutScreen() {
             </div>
           )}
 
-          {/* Confirmation */}
           {step === 'confirm' && (
             <div className="space-y-4">
               <h2 className="flex items-center gap-2 font-semibold text-foreground">
@@ -266,9 +357,13 @@ export function CheckoutScreen() {
 
               <div className="rounded-lg border border-border bg-muted/50 p-4 space-y-3">
                 <div>
-                  <p className="text-sm text-muted-foreground">Enviado a:</p>
-                  <p className="font-medium">{formData.fullName}</p>
-                  <p className="text-sm text-muted-foreground">{formData.address}</p>
+                  <p className="text-sm text-muted-foreground">Entrega:</p>
+                  <p className="font-medium">
+                    {tipoEntrega === 'ENVIO' ? 'Envío a domicilio' : 'Recojo en tienda'}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {tipoEntrega === 'ENVIO' ? formData.address : 'Recojo en tienda'}
+                  </p>
                 </div>
               </div>
 
@@ -280,10 +375,11 @@ export function CheckoutScreen() {
                 >
                   Atrás
                 </Button>
+
                 <Button
                   className="flex-1 gap-2 bg-green-600 text-white hover:bg-green-700 cursor-pointer"
                   disabled={isProcessing}
-                  onClick={() => confirmOrder(formData.cardNumber || 'tarjeta_valida')}
+                  onClick={handleConfirmOrder}
                 >
                   {isProcessing ? 'Procesando...' : 'Confirmar pedido'}
                 </Button>
@@ -292,14 +388,15 @@ export function CheckoutScreen() {
           )}
         </div>
 
-        {/* Summary Sidebar */}
         <div className="rounded-lg border border-border bg-card p-6 h-fit">
           <h2 className="font-semibold text-foreground mb-4">Resumen del pedido</h2>
+
           <div className="space-y-3 pb-4 border-b border-border">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Subtotal</span>
               <span>S/ {cart?.subtotal.toFixed(2) || '0.00'}</span>
             </div>
+
             {cart && cart.discountTotal > 0 && (
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Descuento</span>
@@ -307,6 +404,7 @@ export function CheckoutScreen() {
               </div>
             )}
           </div>
+
           <div className="flex justify-between font-semibold mt-4">
             <span>Total</span>
             <span className="text-lg text-accent">S/ {cart?.total.toFixed(2) || '0.00'}</span>

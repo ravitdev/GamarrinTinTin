@@ -109,6 +109,13 @@ enum MetodoPago {
   @@map("metodo_pago")
 }
 
+enum TipoEntrega {
+  ENVIO
+  RECOJO_TIENDA
+
+  @@map("tipo_entrega")
+}
+
 model Usuario {
   idUsuario       Int            @id @default(autoincrement()) @map("id_usuario")
   nombres         String
@@ -118,7 +125,7 @@ model Usuario {
   telefono        String
   tipoDocumento   TipoDocumento  @map("tipo_documento")
   numeroDocumento String         @unique @map("numero_documento")
-  direccion       String
+  direccion       String?
   rol             RolUsuario
   estado          EstadoUsuario  @default(ACTIVO)
   fechaRegistro   DateTime       @default(now()) @map("fecha_registro")
@@ -406,6 +413,7 @@ model Pedido {
   subtotal            Decimal      @db.Decimal(12, 2)
   descuentoTotal      Decimal      @default(0) @db.Decimal(12, 2) @map("descuento_total")
   total               Decimal      @db.Decimal(12, 2)
+  tipoEntrega         TipoEntrega  @default(ENVIO) @map("tipo_entrega")
   direccionSnapshot   String       @db.Text @map("direccion_snapshot")
   fechaCreacion       DateTime     @default(now()) @map("fecha_creacion")
   fechaActualizacion  DateTime     @updatedAt @map("fecha_actualizacion")

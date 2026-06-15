@@ -54,7 +54,7 @@ export class AuthService {
       telefono:   data.celular,
       tipoDocumento: data.tipoDocumento,
       numeroDocumento: data.numeroDocumento,
-      direccion:  data.direccion,
+      direccion: data.direccion?.trim() || null,
     };
     return ApiClient.post<void>('/usuarios/clientes', payload, { auth: false });
   }

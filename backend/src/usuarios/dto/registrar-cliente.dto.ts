@@ -6,5 +6,5 @@ export interface RegistrarClienteDto {
   telefono: string;
   tipoDocumento: 'DNI' | 'RUC';
   numeroDocumento: string;
-  direccion: string;
+  direccion?: string | null;
 }

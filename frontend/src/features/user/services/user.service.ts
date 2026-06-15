@@ -9,7 +9,7 @@ export interface UserProfile {
   telefono: string;
   tipoDocumento: TipoDocumento;
   numeroDocumento: string;
-  direccion: string;
+  direccion: string | null;
   rol: RolUsuario;
   estado: EstadoUsuario;
   fechaRegistro: string;
@@ -38,7 +38,7 @@ export interface UpdateProfilePayload {
   apellidos?: string;
   email?: string;
   telefono?: string;
-  direccion?: string;
+  direccion?: string | null;
   tipoDocumento?: TipoDocumento;
   numeroDocumento?: string;
 }

@@ -19,7 +19,7 @@ export interface UsuarioPerfilDto {
   telefono: string;
   tipoDocumento: TipoDocumento;
   numeroDocumento: string;
-  direccion: string;
+  direccion: string | null;
   rol: RolUsuario;
   estado: EstadoUsuario;
   fechaRegistro: string;
@@ -38,7 +38,7 @@ export interface ActualizarPerfilDto {
   apellidos?: string;
   email?: string;
   telefono?: string;
-  direccion?: string;
+  direccion?: string | null;
   tipoDocumento?: TipoDocumento;
   numeroDocumento?: string;
 }
