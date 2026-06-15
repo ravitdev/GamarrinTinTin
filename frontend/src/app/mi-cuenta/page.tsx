@@ -83,7 +83,7 @@ function profileToForm(profile: UserProfile): EditFormState {
     telefono: profile.telefono,
     tipoDocumento: profile.tipoDocumento,
     numeroDocumento: profile.numeroDocumento,
-    direccion: profile.direccion,
+    direccion: profile.direccion ?? "",
   }
 }
 
@@ -103,7 +103,7 @@ function syncCachedUser(profile: UserProfile) {
         telefono: profile.telefono,
         tipoDocumento: profile.tipoDocumento,
         numeroDocumento: profile.numeroDocumento,
-        direccion: profile.direccion,
+        direccion: profile.direccion ?? "",
       }),
     )
   } catch {
@@ -120,6 +120,7 @@ export default function MiCuentaPage() {
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState<EditFormState | null>(null)
   const [isSavingProfile, setIsSavingProfile] = useState(false)
+  const [profileFieldErrors, setProfileFieldErrors] = useState<Record<string, string>>({})
 
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false)
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
@@ -178,13 +179,15 @@ export default function MiCuentaPage() {
     if (!profile || !editForm) return
 
     setIsSavingProfile(true)
+    setProfileFieldErrors({})
+
     try {
       const payload: UpdateProfilePayload = {
         nombres: editForm.nombres.trim(),
         apellidos: editForm.apellidos.trim(),
         email: editForm.email.trim(),
         telefono: editForm.telefono.replace(/\D/g, ""),
-        direccion: editForm.direccion.trim(),
+        direccion: editForm.direccion.trim() || null,
       }
 
       const updated = await UserService.updateProfile(payload)
@@ -197,9 +200,23 @@ export default function MiCuentaPage() {
         description: "Tus datos fueron actualizados correctamente.",
       })
     } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Revisa los datos ingresados."
+
+      const normalizedMessage = message.toLowerCase()
+
+      if (normalizedMessage.includes("email") || normalizedMessage.includes("correo")) {
+        setProfileFieldErrors((prev) => ({
+          ...prev,
+          email: message,
+        }))
+      }
+
       toast({
         title: "Error al actualizar perfil",
-        description: error instanceof Error ? error.message : "Revisa los datos ingresados.",
+        description: message,
         variant: "destructive",
       })
     } finally {
@@ -209,6 +226,7 @@ export default function MiCuentaPage() {
 
   const handleCancelEdit = () => {
     if (profile) setEditForm(profileToForm(profile))
+    setProfileFieldErrors({})
     setIsEditing(false)
   }
 
@@ -501,8 +519,17 @@ export default function MiCuentaPage() {
                           id="correo"
                           type="email"
                           value={editForm.email}
-                          onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                          onChange={(e) => {
+                            setEditForm({ ...editForm, email: e.target.value })
+                            if (profileFieldErrors.email) {
+                              setProfileFieldErrors((prev) => ({ ...prev, email: "" }))
+                            }
+                          }}
+                          className={profileFieldErrors.email ? "border-destructive" : ""}
                         />
+                        {profileFieldErrors.email && (
+                          <p className="text-xs text-destructive">{profileFieldErrors.email}</p>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="celular">Celular</Label>
@@ -650,7 +677,7 @@ export default function MiCuentaPage() {
                   ) : (
                     <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
                       <MapPin className="w-5 h-5 text-muted-foreground mt-0.5" />
-                      <p className="font-medium">{profile.direccion}</p>
+                      <p className="font-medium">{profile.direccion || "No registrada"}</p>
                     </div>
                   )}
 
