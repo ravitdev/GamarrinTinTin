@@ -85,6 +85,20 @@ class ProductoRepositoryFake {
     return this.productos.filter((producto) => producto.esActivo);
   }
 
+  async existeNombreActivo(
+    nombre: string,
+    idProductoExcluir?: number,
+  ): Promise<boolean> {
+    const nombreNormalizado = nombre.trim().toLowerCase();
+
+    return this.productos.some(
+      (producto) =>
+        producto.esActivo &&
+        producto.nombre.trim().toLowerCase() === nombreNormalizado &&
+        producto.idProducto !== idProductoExcluir,
+    );
+  }
+
   async buscarDetallePorId(idProducto: number): Promise<Producto | null> {
     return (
       this.productos.find(
@@ -219,7 +233,6 @@ class ProductoRepositoryFake {
     return true;
 
   }
-
 
 }
 
@@ -382,10 +395,10 @@ describe('ProductoManager', () => {
   });
 
   it('desactiva producto del catálogo', async () => {
-  const resultado = await manager.desactivarProducto(1);
+    const resultado = await manager.desactivarProducto(1);
 
-  expect(resultado).toBe(true);
-});
+    expect(resultado).toBe(true);
+  });
 
   it('no muestra producto desactivado en el catálogo', async () => {
     await manager.desactivarProducto(1);
@@ -399,6 +412,75 @@ describe('ProductoManager', () => {
     await expect(manager.desactivarProducto(999)).rejects.toThrow(
       'Producto no encontrado.',
     );
+  });
+
+  it('rechaza registrar producto con nombre duplicado activo', async () => {
+    await expect(
+      manager.registrarProducto({
+        idCategoria: 1,
+        nombre: 'Polo básico',
+        descripcion: 'Producto duplicado',
+        precioBase: 50,
+        esPersonalizable: false,
+        variantes: [
+          {
+            colorNombre: 'Blanco',
+            colorHex: '#FFFFFF',
+            talla: 'M',
+            stock: 5,
+          },
+        ],
+        imagenes: [
+          {
+            colorHex: '#FFFFFF',
+            lado: 'FRONT',
+            urlImagen: 'https://example.com/producto.png',
+          },
+        ],
+      }),
+    ).rejects.toThrow('Ya existe un producto activo con ese nombre.');
+  });
+
+  it('rechaza modificar producto usando el nombre de otro producto activo', async () => {
+    const nuevoProducto = await manager.registrarProducto({
+      idCategoria: 1,
+      nombre: 'Producto temporal',
+      descripcion: 'Producto temporal para prueba',
+      precioBase: 55,
+      esPersonalizable: false,
+      variantes: [
+        {
+          colorNombre: 'Blanco',
+          colorHex: '#FFFFFF',
+          talla: 'M',
+          stock: 5,
+        },
+      ],
+      imagenes: [
+        {
+          colorHex: '#FFFFFF',
+          lado: 'FRONT',
+          urlImagen: 'https://example.com/producto-temporal.png',
+        },
+      ],
+    });
+
+    await expect(
+      manager.modificarProducto(nuevoProducto.idProducto, {
+        nombre: 'Polo básico',
+      }),
+    ).rejects.toThrow('Ya existe un producto activo con ese nombre.');
+  });
+
+  it('permite modificar producto manteniendo su mismo nombre', async () => {
+    const producto = await manager.modificarProducto(1, {
+      nombre: 'Polo básico',
+      precioBase: 39.9,
+    });
+
+    expect(producto.idProducto).toBe(1);
+    expect(producto.nombre).toBe('Polo básico');
+    expect(producto.precioBase).toBe(39.9);
   });
 
 });

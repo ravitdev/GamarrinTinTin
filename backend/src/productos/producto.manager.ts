@@ -59,9 +59,12 @@ export class ProductoManager {
   ): Promise<ProductoDetalleResponseDto> {
     this.validarDatosRegistro(datos);
 
+    const nombreNormalizado = this.normalizarTexto(datos.nombre);
+    await this.validarNombreDisponible(nombreNormalizado);
+
     const producto = await this.productoRepository.registrar({
       idCategoria: datos.idCategoria,
-      nombre: this.normalizarTexto(datos.nombre),
+      nombre: nombreNormalizado,
       descripcion: this.normalizarTexto(datos.descripcion),
       precioBase: datos.precioBase,
       esPersonalizable: datos.esPersonalizable,
@@ -93,12 +96,16 @@ export class ProductoManager {
     this.validarId(idProducto, 'El producto no es válido.');
     this.validarDatosModificacion(datos);
 
+    const nombreNormalizado =
+      datos.nombre !== undefined ? this.normalizarTexto(datos.nombre) : undefined;
+
+    if (nombreNormalizado !== undefined) {
+      await this.validarNombreDisponible(nombreNormalizado, idProducto);
+    }
+
     const producto = await this.productoRepository.modificar(idProducto, {
       idCategoria: datos.idCategoria,
-      nombre:
-        datos.nombre !== undefined
-          ? this.normalizarTexto(datos.nombre)
-          : undefined,
+      nombre: nombreNormalizado,
       descripcion:
         datos.descripcion !== undefined
           ? this.normalizarTexto(datos.descripcion)
@@ -366,5 +373,19 @@ export class ProductoManager {
 
   private normalizarColorHex(colorHex: string): string {
     return this.normalizarTexto(colorHex).toUpperCase();
+  }
+
+  private async validarNombreDisponible(
+    nombre: string,
+    idProductoExcluir?: number,
+  ): Promise<void> {
+    const existe = await this.productoRepository.existeNombreActivo(
+      nombre,
+      idProductoExcluir,
+    );
+
+    if (existe) {
+      throw new Error('Ya existe un producto activo con ese nombre.');
+    }
   }
 }
