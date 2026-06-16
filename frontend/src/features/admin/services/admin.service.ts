@@ -135,6 +135,10 @@ export class AdminService {
     return UserService.deactivateUser(id, idSolicitud);
   }
 
+  static async reactivateUser(id: number): Promise<void> {
+    return UserService.reactivateUser(id);
+  }
+
   static async getPendingDocumentRequests(): Promise<DocumentChangeRequest[]> {
     return UserService.listPendingDocumentRequests();
   }

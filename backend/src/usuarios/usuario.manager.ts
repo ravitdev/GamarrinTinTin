@@ -433,6 +433,26 @@ export class UsuarioManager {
     return true;
   }
 
+  async procesarReactivacionCuenta(idUsuario: number): Promise<boolean> {
+    const usuario = await this.usuarioRepository.buscarPorId(idUsuario);
+
+    if (!usuario) {
+      throw new Error('El usuario no existe.');
+    }
+
+    if (usuario.estaActivo()) {
+      throw new Error('La cuenta ya se encuentra activa.');
+    }
+
+    const reactivado = await this.usuarioRepository.reactivar(idUsuario);
+
+    if (!reactivado) {
+      throw new Error('No fue posible reactivar la cuenta.');
+    }
+
+    return true;
+  }
+
   async validarPuedeDesactivarse(
     idUsuario: number,
   ): Promise<{ puede: boolean; motivo?: string }> {
