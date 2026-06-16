@@ -3,7 +3,7 @@
 // ============================================================================
 // CAPA DE PANTALLA / FEATURE (Catalogo) - Vista principal.
 // ----------------------------------------------------------------------------
-// Consume el Custom Hook (use-catalogo) y renderiza el diseno visual
+// Consume el Custom Hook (use-catalogo) y renderiza el diseño visual
 // (Radix UI + Tailwind). Esta limpia de logica pesada: no hace fetch ni
 // calcula filtros; solo distribuye estado y callbacks a los componentes.
 // ============================================================================
@@ -67,7 +67,7 @@ export function CatalogoScreen() {
           {/* Encabezado */}
           <div className="mb-8">
             <h1 className="font-serif text-3xl font-semibold text-foreground">
-              Catalogo de Productos
+              Catálogo de Productos
             </h1>
             <p className="mt-2 text-muted-foreground">
               Encuentra la prenda perfecta para tu marca o evento
@@ -92,7 +92,7 @@ export function CatalogoScreen() {
               <span className="text-sm text-muted-foreground">Filtros activos:</span>
               {filters.buscar.trim() && (
                 <Badge variant="secondary" className="gap-1">
-                  Busqueda: {filters.buscar}
+                  Búsqueda: {filters.buscar}
                   <button onClick={() => setSearchText('')}>
                     <X className="h-3 w-3" />
                   </button>
