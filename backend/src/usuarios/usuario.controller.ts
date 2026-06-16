@@ -318,6 +318,21 @@ export class UsuarioController {
     }
   }
 
+  @Post(':id/reactivar')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMINISTRADOR')
+  async reactivarUsuario(@Param('id', ParseIntPipe) id: number) {
+    try {
+      await this.usuarioManager.procesarReactivacionCuenta(id);
+      return {
+        success: true,
+        message: 'Cuenta reactivada correctamente.',
+      };
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
   @Post('login')
   async iniciarSesion(@Body() body: IniciarSesionDto) {
     try {

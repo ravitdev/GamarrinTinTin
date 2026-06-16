@@ -66,6 +66,18 @@ export class UsuarioRepository implements IUsuarioRepository {
     return resultado.count > 0;
   }
 
+  async reactivar(idUsuario: number): Promise<boolean> {
+    const actualizado = await this.prisma.usuario.update({
+      where: { idUsuario },
+      data: {
+        estado: 'ACTIVO',
+        fechaEliminacion: null,
+      },
+    });
+
+    return actualizado.estado === 'ACTIVO';
+  }
+
   async buscarPorId(idUsuario: number): Promise<Usuario | null> {
     const registro = await this.prisma.usuario.findUnique({
       where: { idUsuario },

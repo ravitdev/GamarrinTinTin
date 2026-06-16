@@ -9,6 +9,7 @@ export interface IUsuarioRepository {
   guardar(usuario: Usuario): Promise<Usuario>;
   actualizar(usuario: Usuario): Promise<boolean>;
   desactivar(idUsuario: number): Promise<boolean>;
+  reactivar(idUsuario: number): Promise<boolean>;
   buscarPorId(idUsuario: number): Promise<Usuario | null>;
   buscarPorEmail(email: string): Promise<Usuario | null>;
   existePorEmail(email: string): Promise<boolean>;

@@ -455,12 +455,35 @@ export default function AdminClientsPage() {
     }
   }
 
-  const handleReactivateAccount = (client: Client) => {
-    setClientsList(clientsList.map(c => 
-      c.id === client.id 
-        ? { ...c, status: "active" as const }
-        : c
-    ))
+  const handleReactivateAccount = async (client: Client) => {
+    try {
+      await AdminService.reactivateUser(Number(client.id))
+
+      setClientsList((prev) =>
+        prev.map((c) =>
+          c.id === client.id
+            ? { ...c, status: "active" as const }
+            : c,
+        ),
+      )
+
+      setSelectedClient((prev) =>
+        prev?.id === client.id
+          ? { ...prev, status: "active" as const }
+          : prev,
+      )
+
+      toast({
+        title: "Cuenta reactivada",
+        description: "La cuenta del cliente fue reactivada correctamente.",
+      })
+    } catch (error) {
+      toast({
+        title: "No se pudo reactivar",
+        description: error instanceof Error ? error.message : "Intenta nuevamente.",
+        variant: "destructive",
+      })
+    }
   }
 
   const clientOrders = selectedClient?.orders ?? []

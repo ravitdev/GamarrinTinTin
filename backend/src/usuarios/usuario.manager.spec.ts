@@ -49,6 +49,10 @@ class UsuarioRepositoryFake implements IUsuarioRepository {
     ];
   }
 
+  async listarPedidosResumenPorCliente(): Promise<any[]> {
+    return [];
+  }
+
   async guardar(usuario: Usuario): Promise<Usuario> {
     const idUsuario =
       Math.max(
@@ -88,6 +92,14 @@ class UsuarioRepositoryFake implements IUsuarioRepository {
     const usuario = await this.buscarPorId(idUsuario);
     if (!usuario) return false;
     usuario.estado = 'INACTIVO';
+    return true;
+  }
+
+  async reactivar(idUsuario: number): Promise<boolean> {
+    const usuario = this.usuarios.find((item) => item.idUsuario === idUsuario);
+    if (!usuario) return false;
+
+    usuario.estado = 'ACTIVO';
     return true;
   }
 
@@ -421,5 +433,18 @@ describe('UsuarioManager', () => {
         refreshToken: sesion.refreshToken,
       }),
     ).rejects.toThrow('Refresh token inválido o expirado.');
+  });
+
+  it('reactiva una cuenta inactiva', async () => {
+    const resultado = await manager.procesarReactivacionCuenta(2);
+
+    expect(resultado).toBe(true);
+
+    const sesion = await manager.iniciarSesion({
+      email: 'inactivo@gamarrintintin.com',
+      contrasena: 'Inactivo123',
+    });
+
+    expect(sesion.usuario.email).toBe('inactivo@gamarrintintin.com');
   });
 });

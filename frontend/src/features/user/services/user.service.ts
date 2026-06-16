@@ -147,6 +147,10 @@ export class UserService {
     return ApiClient.post<void>(`/usuarios/${id}/desactivar`, { idSolicitud });
   }
 
+  static async reactivateUser(id: number): Promise<void> {
+    return ApiClient.post<void>(`/usuarios/${id}/reactivar`, {});
+  }
+
   static async canDeactivateUser(id: number): Promise<DeactivationValidation> {
     return ApiClient.get<DeactivationValidation>(`/usuarios/${id}/puede-desactivar`);
   }
