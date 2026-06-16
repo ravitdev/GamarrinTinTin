@@ -130,7 +130,12 @@ export async function apiClient<TResponse>(
       document.cookie = 'gtt_access_token=; Max-Age=0; path=/';
 
       if (!window.location.pathname.startsWith('/login')) {
-        window.location.href = '/login';
+        const reason =
+          message === 'La cuenta no está disponible.'
+            ? 'account_inactive'
+            : 'session_expired';
+
+        window.location.href = `/login?reason=${reason}`;
       }
     }
 

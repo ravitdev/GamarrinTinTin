@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Eye, EyeOff, Mail, Lock, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -16,6 +17,10 @@ interface LoginScreenProps {
 
 // Validaciones locales (evitan un round-trip innecesario al backend)
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const LOGIN_REASON_MESSAGES: Record<string, string> = {
+  account_inactive: 'La cuenta no está disponible.',
+  session_expired: 'Sesión expirada. Por favor inicia sesión nuevamente.',
+};
 
 function validate(email: string, password: string): Record<string, string> {
   const errors: Record<string, string> = {};
@@ -35,12 +40,22 @@ function validate(email: string, password: string): Record<string, string> {
 export function LoginScreen({ onSuccess }: LoginScreenProps) {
   const { login, isLoading } = useAuth();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
 
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail]               = useState('');
   const [password, setPassword]         = useState('');
   const [fieldErrors, setFieldErrors]   = useState<Record<string, string>>({});
   const [formError, setFormError] = useState('');
+  useEffect(() => {
+    const reason = searchParams.get('reason');
+    if (!reason) return;
+
+    const message = LOGIN_REASON_MESSAGES[reason];
+    if (!message) return;
+
+    setFormError(message);
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
