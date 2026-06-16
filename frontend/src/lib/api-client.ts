@@ -114,22 +114,28 @@ export async function apiClient<TResponse>(
     return undefined as TResponse;
   }
 
+  const data = await response.json().catch(() => null);
+
   // 401 Unauthorized: sesión expirada o token inválido.
-  // Limpia las credenciales locales y redirige al login sin romper el servidor.
+  // Si la petición no usa auth, por ejemplo login, se debe respetar el mensaje real del backend.
   if (response.status === 401) {
-    if (typeof window !== 'undefined') {
+    const message = extractErrorMessage(
+      data,
+      'Sesión expirada. Por favor inicia sesión nuevamente.',
+    );
+
+    if (auth && typeof window !== 'undefined') {
       window.localStorage.removeItem('gtt_access_token');
-      // Eliminar también la cookie que usa el middleware
+      window.localStorage.removeItem('gtt_refresh_token');
       document.cookie = 'gtt_access_token=; Max-Age=0; path=/';
-      // Solo redirigir si no estamos ya en /login para evitar loops
+
       if (!window.location.pathname.startsWith('/login')) {
         window.location.href = '/login';
       }
     }
-    throw new ApiError(401, 'Sesión expirada. Por favor inicia sesión nuevamente.');
-  }
 
-  const data = await response.json().catch(() => null);
+    throw new ApiError(response.status, message, data);
+  }
 
   if (!response.ok) {
     const message = extractErrorMessage(data, `Error HTTP ${response.status}`);

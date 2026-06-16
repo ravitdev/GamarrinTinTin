@@ -40,10 +40,12 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
   const [email, setEmail]               = useState('');
   const [password, setPassword]         = useState('');
   const [fieldErrors, setFieldErrors]   = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFieldErrors({});
+    setFormError('');
 
     const errors = validate(email, password);
     if (Object.keys(errors).length > 0) {
@@ -60,9 +62,16 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
       await login({ email, password });
       onSuccess?.();
     } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Credenciales incorrectas. Intenta de nuevo.';
+
+      setFormError(message);
+
       toast({
         title: 'Error al iniciar sesion',
-        description: err instanceof Error ? err.message : 'Credenciales incorrectas. Intenta de nuevo.',
+        description: message,
         variant: 'destructive',
       });
     }
@@ -100,6 +109,7 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
+                  setFormError('');
                   if (fieldErrors.email) setFieldErrors((p) => ({ ...p, email: '' }));
                 }}
                 className={fieldErrors.email ? 'pl-10 border-destructive' : 'pl-10'}
@@ -134,6 +144,7 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value);
+                  setFormError('');
                   if (fieldErrors.password) setFieldErrors((p) => ({ ...p, password: '' }));
                 }}
                 className={fieldErrors.password ? 'pl-10 pr-10 border-destructive' : 'pl-10 pr-10'}
@@ -155,6 +166,12 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
               <p className="mt-1 text-xs text-destructive">{fieldErrors.password}</p>
             )}
           </div>
+
+          {formError && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {formError}
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
             <Checkbox id="remember" />
