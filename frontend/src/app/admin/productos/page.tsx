@@ -634,6 +634,20 @@ export default function AdminProductsPage() {
     })),
   })
 
+  const applyProductError = (error: unknown): string => {
+    const message =
+      error instanceof Error ? error.message : "Revisa los datos ingresados."
+
+    if (message.toLowerCase().includes("nombre")) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        nombre: message,
+      }))
+    }
+
+    return message
+  }
+
   const validateProductForm = () => {
     const errors: Record<string, string> = {}
 
@@ -709,11 +723,13 @@ export default function AdminProductsPage() {
         setSelectedProduct(null)
         setFormData(defaultFormData)
         setFieldErrors({})
-      } catch (error: any) {
+      } catch (error) {
         console.error('Error al actualizar el producto:', error)
+        const message = applyProductError(error)
+
         toast({
           title: "Error al actualizar producto",
-          description: error instanceof Error ? error.message : "Revisa los datos ingresados.",
+          description: message,
           variant: "destructive",
         })
       } finally {
@@ -734,9 +750,11 @@ export default function AdminProductsPage() {
         setFieldErrors({})
       } catch (error) {
         console.error('Error al crear el producto:', error)
+        const message = applyProductError(error)
+
         toast({
           title: "Error al crear producto",
-          description: error instanceof Error ? error.message : "Revisa los datos ingresados.",
+          description: message,
           variant: "destructive",
         })
       } finally {

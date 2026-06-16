@@ -167,6 +167,34 @@ export class ProductoRepository {
     return registro ? ProductoMapper.aEntidad(registro as ProductoRegistro) : null;
   }
 
+  async existeNombreActivo(
+    nombre: string,
+    idProductoExcluir?: number,
+  ): Promise<boolean> {
+    const producto = await this.prisma.producto.findFirst({
+      where: {
+        nombre: {
+          equals: nombre,
+          mode: 'insensitive',
+        },
+        esActivo: true,
+        fechaEliminacion: null,
+        ...(idProductoExcluir
+          ? {
+              idProducto: {
+                not: idProductoExcluir,
+              },
+            }
+          : {}),
+      },
+      select: {
+        idProducto: true,
+      },
+    });
+
+    return Boolean(producto);
+  }
+
   async registrar(datos: RegistrarProductoDto): Promise<Producto> {
     const registro = await this.prisma.producto.create({
       data: {
