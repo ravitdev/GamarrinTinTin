@@ -142,6 +142,8 @@ export class ProductoManager {
       throw new Error('Producto no encontrado.');
     }
 
+    await this.validarProductoSinPedidosEnProceso(idProducto);
+
     return this.productoRepository.desactivar(idProducto);
   }
 
@@ -154,6 +156,10 @@ export class ProductoManager {
       datos.esActivo,
       'Debe indicar si el producto queda activo o inactivo.',
     );
+
+    if (datos.esActivo === false) {
+      await this.validarProductoSinPedidosEnProceso(idProducto);
+    }
 
     const producto = await this.productoRepository.cambiarEstado(
       idProducto,
@@ -373,6 +379,19 @@ export class ProductoManager {
 
   private normalizarColorHex(colorHex: string): string {
     return this.normalizarTexto(colorHex).toUpperCase();
+  }
+
+  private async validarProductoSinPedidosEnProceso(
+    idProducto: number,
+  ): Promise<void> {
+    const tienePedidosEnProceso =
+      await this.productoRepository.tienePedidosEnProceso(idProducto);
+
+    if (tienePedidosEnProceso) {
+      throw new Error(
+        'No se puede desactivar el producto porque tiene pedidos en proceso.',
+      );
+    }
   }
 
   private async validarNombreDisponible(

@@ -389,6 +389,26 @@ export class ProductoRepository {
     return ProductoMapper.aEntidad(productoActualizado as ProductoRegistro);
   }
 
+  async tienePedidosEnProceso(idProducto: number): Promise<boolean> {
+    const detalle = await this.prisma.pedidoDetalle.findFirst({
+      where: {
+        productoVariante: {
+          idProducto,
+        },
+        pedido: {
+          estado: {
+            in: ['REGISTRADO', 'CONFIRMADO', 'PROCESANDO', 'ENVIADO'],
+          },
+        },
+      },
+      select: {
+        idPedidoDetalle: true,
+      },
+    });
+
+    return Boolean(detalle);
+  }
+
   async desactivar(idProducto: number): Promise<boolean> {
     const resultado = await this.prisma.producto.updateMany({
       where: { idProducto, esActivo: true },
