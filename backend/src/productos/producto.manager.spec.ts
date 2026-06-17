@@ -81,6 +81,8 @@ class ProductoRepositoryFake {
     ),
   ];
 
+  private productosConPedidosEnProceso = new Set<number>();
+
   async listarCatalogo(): Promise<Producto[]> {
     return this.productos.filter((producto) => producto.esActivo);
   }
@@ -222,6 +224,14 @@ class ProductoRepositoryFake {
     return productoActualizado;
   }
 
+  async tienePedidosEnProceso(idProducto: number): Promise<boolean> {
+    return this.productosConPedidosEnProceso.has(idProducto);
+  }
+
+  marcarProductoConPedidosEnProceso(idProducto: number): void {
+    this.productosConPedidosEnProceso.add(idProducto);
+  }
+
   async desactivar(idProducto: number): Promise<boolean> {
     const index = this.productos.findIndex(
       (producto) => producto.idProducto === idProducto && producto.esActivo,
@@ -231,17 +241,32 @@ class ProductoRepositoryFake {
 
     this.productos[index].esActivo = false;
     return true;
-
   }
 
+  async cambiarEstado(idProducto: number, esActivo: boolean): Promise<Producto> {
+    const index = this.productos.findIndex(
+      (producto) => producto.idProducto === idProducto,
+    );
+
+    if (index === -1) {
+      throw new Error('Producto no encontrado.');
+    }
+
+    this.productos[index].esActivo = esActivo;
+
+    return this.productos[index];
+  }
 }
 
 describe('ProductoManager', () => {
   let manager: ProductoManager;
+  let productoRepository: ProductoRepositoryFake;
 
   beforeEach(() => {
+    productoRepository = new ProductoRepositoryFake();
+
     manager = new ProductoManager(
-      new ProductoRepositoryFake() as unknown as ProductoRepository,
+      productoRepository as unknown as ProductoRepository,
     );
   });
 
@@ -406,6 +431,37 @@ describe('ProductoManager', () => {
     const productos = await manager.consultarCatalogo();
 
     expect(productos.find((p) => p.idProducto === 1)).toBeUndefined();
+  });
+
+  it('rechaza desactivar producto con pedidos en proceso', async () => {
+    productoRepository.marcarProductoConPedidosEnProceso(1);
+
+    await expect(manager.desactivarProducto(1)).rejects.toThrow(
+      'No se puede desactivar el producto porque tiene pedidos en proceso.',
+    );
+  });
+
+  it('rechaza cambiar producto a inactivo si tiene pedidos en proceso', async () => {
+    productoRepository.marcarProductoConPedidosEnProceso(1);
+
+    await expect(
+      manager.cambiarEstadoProducto(1, {
+        esActivo: false,
+      }),
+    ).rejects.toThrow(
+      'No se puede desactivar el producto porque tiene pedidos en proceso.',
+    );
+  });
+
+  it('permite cambiar producto a activo aunque tenga pedidos en proceso', async () => {
+    productoRepository.marcarProductoConPedidosEnProceso(2);
+
+    const producto = await manager.cambiarEstadoProducto(2, {
+      esActivo: true,
+    });
+
+    expect(producto.idProducto).toBe(2);
+    expect(producto.esActivo).toBe(true);
   });
 
   it('rechaza desactivar producto inexistente', async () => {
