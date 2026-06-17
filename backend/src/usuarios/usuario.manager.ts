@@ -260,6 +260,10 @@ export class UsuarioManager {
     const numeroDocumento = this.normalizarTexto(datos.numeroDocumento);
     this.validarDocumento(tipoDocumento, numeroDocumento);
 
+    if (usuario.rol === 'VENDEDOR' && tipoDocumento !== 'DNI') {
+      throw new Error('Los vendedores solo pueden solicitar cambio de DNI.');
+    }
+
     if (
       tipoDocumento === usuario.tipoDocumento &&
       numeroDocumento === usuario.numeroDocumento

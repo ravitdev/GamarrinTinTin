@@ -594,7 +594,19 @@ export default function MiCuentaPage() {
                         </p>
                       </div>
                       {!profile.solicitudCambioDocumentoPendiente && (
-                        <Dialog open={isDocumentDialogOpen} onOpenChange={setIsDocumentDialogOpen}>
+                        <Dialog
+                          open={isDocumentDialogOpen}
+                          onOpenChange={(open) => {
+                            setIsDocumentDialogOpen(open)
+
+                            if (open && profile.rol === RolUsuario.VENDEDOR) {
+                              setDocumentForm({
+                                tipoDocumento: TipoDocumento.DNI,
+                                numeroDocumento: "",
+                              })
+                            }
+                          }}
+                        >
                           <DialogTrigger asChild>
                             <Button variant="outline" size="sm">Solicitar cambio</Button>
                           </DialogTrigger>
@@ -608,25 +620,38 @@ export default function MiCuentaPage() {
                             <div className="space-y-4 py-4">
                               <div className="space-y-2">
                                 <Label>Tipo de documento</Label>
-                                <Select
-                                  value={documentForm.tipoDocumento}
-                                  onValueChange={(value: TipoDocumento) =>
-                                    setDocumentForm({ ...documentForm, tipoDocumento: value })
-                                  }
-                                >
-                                  <SelectTrigger><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="DNI">DNI</SelectItem>
-                                    <SelectItem value="RUC">RUC</SelectItem>
-                                  </SelectContent>
-                                </Select>
+                                {profile.rol === RolUsuario.VENDEDOR ? (
+                                  <Input value="DNI" disabled />
+                                ) : (
+                                  <Select
+                                    value={documentForm.tipoDocumento}
+                                    onValueChange={(value: TipoDocumento) =>
+                                      setDocumentForm({ ...documentForm, tipoDocumento: value })
+                                    }
+                                  >
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="DNI">DNI</SelectItem>
+                                      <SelectItem value="RUC">RUC</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                )}
                               </div>
                               <div className="space-y-2">
                                 <Label>Nuevo numero</Label>
                                 <Input
                                   value={documentForm.numeroDocumento}
+                                  maxLength={documentForm.tipoDocumento === TipoDocumento.DNI ? 8 : 11}
+                                  placeholder={
+                                    documentForm.tipoDocumento === TipoDocumento.DNI
+                                      ? "Ingrese 8 dígitos"
+                                      : "Ingrese 11 dígitos"
+                                  }
                                   onChange={(e) =>
-                                    setDocumentForm({ ...documentForm, numeroDocumento: e.target.value })
+                                    setDocumentForm({
+                                      ...documentForm,
+                                      numeroDocumento: e.target.value.replace(/\D/g, ""),
+                                    })
                                   }
                                 />
                               </div>
