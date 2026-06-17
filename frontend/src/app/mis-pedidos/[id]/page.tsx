@@ -42,6 +42,132 @@ const statusLabels: Record<OrderStatus, string> = {
   cancelado: 'Cancelado',
 };
 
+const orderFlowSteps: Array<{
+  status: Exclude<OrderStatus, 'cancelado'>;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+}> = [
+  {
+    status: 'registrado',
+    label: 'Registrado',
+    description: 'Pedido recibido',
+    icon: <Clock className="h-4 w-4" />,
+  },
+  {
+    status: 'confirmado',
+    label: 'Confirmado',
+    description: 'Pedido aprobado',
+    icon: <CheckCircle className="h-4 w-4" />,
+  },
+  {
+    status: 'en_proceso',
+    label: 'Procesando',
+    description: 'En preparación',
+    icon: <Package className="h-4 w-4" />,
+  },
+  {
+    status: 'enviado',
+    label: 'Enviado',
+    description: 'Pedido en camino',
+    icon: <Truck className="h-4 w-4" />,
+  },
+  {
+    status: 'entregado',
+    label: 'Entregado',
+    description: 'Pedido finalizado',
+    icon: <CheckCircle className="h-4 w-4" />,
+  },
+];
+
+const getOrderStepIndex = (estado: OrderStatus): number => {
+  if (estado === 'cancelado') return -1;
+
+  return orderFlowSteps.findIndex((step) => step.status === estado);
+};
+
+function OrderStatusTimeline({ estado }: { estado: OrderStatus }) {
+  const currentStepIndex = getOrderStepIndex(estado);
+  const isCancelled = estado === 'cancelado';
+
+  if (isCancelled) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Estado del pedido</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-destructive">
+            <XCircle className="mt-0.5 h-5 w-5" />
+            <div>
+              <p className="font-medium">Pedido cancelado</p>
+              <p className="text-sm">
+                Este pedido fue cancelado y ya no continuará con el flujo de atención.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Estado del pedido</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-4 md:grid-cols-5">
+          {orderFlowSteps.map((step, index) => {
+            const isCompleted = index < currentStepIndex;
+            const isCurrent = index === currentStepIndex;
+            const isPending = index > currentStepIndex;
+
+            return (
+              <div key={step.status} className="relative">
+                {index < orderFlowSteps.length - 1 && (
+                  <div
+                    className={cn(
+                      'absolute left-6 top-5 hidden h-0.5 w-full md:block',
+                      isCompleted ? 'bg-primary' : 'bg-border',
+                    )}
+                  />
+                )}
+
+                <div className="relative z-10 flex gap-3 md:flex-col md:items-center md:text-center">
+                  <div
+                    className={cn(
+                      'flex h-10 w-10 shrink-0 items-center justify-center rounded-full border bg-background',
+                      isCompleted && 'border-primary bg-primary text-primary-foreground',
+                      isCurrent && 'border-primary text-primary',
+                      isPending && 'border-border text-muted-foreground',
+                    )}
+                  >
+                    {isCompleted ? <CheckCircle className="h-4 w-4" /> : step.icon}
+                  </div>
+
+                  <div>
+                    <p
+                      className={cn(
+                        'font-medium',
+                        isPending && 'text-muted-foreground',
+                        isCurrent && 'text-primary',
+                      )}
+                    >
+                      {step.label}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{step.description}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function PedidoDetallePage() {
   const params = useParams<{ id: string }>();
   const [order, setOrder] = useState<Order | null>(null);
@@ -117,6 +243,8 @@ export default function PedidoDetallePage() {
                   <span className="ml-1">{statusLabels[order.estado]}</span>
                 </Badge>
               </div>
+
+              <OrderStatusTimeline estado={order.estado} />
 
               <Card>
                 <CardHeader>
