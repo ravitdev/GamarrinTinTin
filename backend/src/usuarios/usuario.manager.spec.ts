@@ -399,6 +399,26 @@ describe('UsuarioManager', () => {
     expect(usuario.estado).toBe('ACTIVO');
   });
 
+  it('rechaza solicitud de cambio de documento RUC para vendedor', async () => {
+    const vendedor = await manager.registrarUsuarioVendedor({
+      nombres: 'Nuevo',
+      apellidos: 'Vendedor',
+      email: 'vendedor.documento@gamarrintintin.com',
+      contrasena: 'Vendedor456',
+      telefono: '977666555',
+      tipoDocumento: 'DNI',
+      numeroDocumento: '70000006',
+      direccion: 'Gamarra',
+    });
+
+    await expect(
+      manager.solicitarCambioDocumento(vendedor.idUsuario, {
+        tipoDocumento: 'RUC',
+        numeroDocumento: '20123456789',
+      }),
+    ).rejects.toThrow('Los vendedores solo pueden solicitar cambio de DNI.');
+  });
+
   it('renueva sesión con refresh token y lo rota', async () => {
     const sesionInicial = await manager.iniciarSesion({
       email: 'cliente@gamarrintintin.com',
