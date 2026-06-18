@@ -147,6 +147,10 @@ export class AdminService {
     return UserService.approveDocumentRequest(idSolicitud);
   }
 
+  static async rejectDocumentRequest(idSolicitud: number): Promise<void> {
+    return UserService.rejectDocumentRequest(idSolicitud);
+  }
+
   static async getPendingDeactivationRequests(): Promise<DeactivationRequest[]> {
     return UserService.listPendingDeactivationRequests();
   }
