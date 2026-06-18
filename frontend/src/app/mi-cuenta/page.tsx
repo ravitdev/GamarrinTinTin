@@ -234,6 +234,26 @@ export default function MiCuentaPage() {
     setPasswordError("")
     setPasswordSuccess(false)
 
+    if (!passwordForm.currentPassword.trim()) {
+      setPasswordError("La contraseña actual es obligatoria")
+      return
+    }
+
+    if (!passwordForm.newPassword.trim()) {
+      setPasswordError("La nueva contraseña es obligatoria")
+      return
+    }
+
+    if (!passwordForm.confirmPassword.trim()) {
+      setPasswordError("Debes confirmar la nueva contraseña")
+      return
+    }
+
+    if (passwordForm.currentPassword === passwordForm.newPassword) {
+      setPasswordError("La nueva contraseña debe ser diferente a la actual")
+      return
+    }
+
     if (passwordForm.newPassword.length < 8) {
       setPasswordError("La contraseña debe tener al menos 8 caracteres")
       return
