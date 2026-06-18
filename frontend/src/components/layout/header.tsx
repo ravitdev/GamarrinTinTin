@@ -85,24 +85,6 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
             >
               Catalogo
             </Link>
-            <DropdownMenu>
-              <DropdownMenuTrigger className="flex items-center gap-1 text-sm font-medium text-foreground/80 transition-colors hover:text-foreground">
-                Categorias
-                <ChevronDown className="h-4 w-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="center" className="w-48">
-                <DropdownMenuItem asChild>
-                  <Link href="/catalogo?categoria=polo">Polos</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/catalogo?categoria=polera">Poleras</Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/catalogo?tipo=personalizable">Personalizables</Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
             <Link
               href="/nosotros"
               className="text-sm font-medium text-foreground/80 transition-colors hover:text-foreground"

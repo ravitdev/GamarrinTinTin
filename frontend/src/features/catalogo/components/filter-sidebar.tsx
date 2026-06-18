@@ -75,7 +75,7 @@ export function FilterSidebar({
 
       {/* Tipo de Diseño */}
       <div>
-        <h3 className="mb-3 font-medium text-foreground">Tipo de Diseño</h3>
+        <h3 className="mb-3 font-medium text-foreground">Tipo de diseño</h3>
         <div className="space-y-2">
           <label className="flex cursor-pointer items-center gap-2">
             <Checkbox

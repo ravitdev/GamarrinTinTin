@@ -795,25 +795,30 @@ export default function VendedorProductsPage() {
     setIsAddDialogOpen(true)
   }
 
-  const handleDeleteProduct = async (product: Producto) => {
+  const handleChangeProductStatus = async (product: Producto) => {
+    const nextStatus = !isProductActive(product)
+
     try {
-      await AdminService.deleteProduct(String(product.idProducto))
+      const updatedProduct = await AdminService.changeProductStatus(
+        String(product.idProducto),
+        nextStatus,
+      )
 
       setProducts((prevProducts) =>
         prevProducts.map((item) =>
-          item.idProducto === product.idProducto
-            ? { ...item, esActivo: false, estado: "INACTIVO" }
-            : item,
+          item.idProducto === product.idProducto ? updatedProduct : item,
         ),
       )
 
       toast({
-        title: "Producto desactivado",
-        description: "El producto ya no aparecera en el catalogo publico.",
+        title: nextStatus ? "Producto activado" : "Producto desactivado",
+        description: nextStatus
+          ? "El producto volverá a aparecer en el catálogo público."
+          : "El producto ya no aparecerá en el catálogo público.",
       })
     } catch (error) {
       toast({
-        title: "Error al desactivar producto",
+        title: "Error al cambiar estado",
         description: error instanceof Error ? error.message : "Intenta nuevamente.",
         variant: "destructive",
       })
@@ -1011,15 +1016,17 @@ export default function VendedorProductsPage() {
                               Editar
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            {isProductActive(product) && (
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onClick={() => handleDeleteProduct(product)}
-                              >
+                            <DropdownMenuItem
+                              className={isProductActive(product) ? "text-destructive" : ""}
+                              onClick={() => handleChangeProductStatus(product)}
+                            >
+                              {isProductActive(product) ? (
                                 <Trash2 className="w-4 h-4 mr-2" />
-                                Eliminar
-                              </DropdownMenuItem>
-                            )}
+                              ) : (
+                                <CheckCircle2 className="w-4 h-4 mr-2" />
+                              )}
+                              {isProductActive(product) ? "Desactivar" : "Reactivar"}
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
