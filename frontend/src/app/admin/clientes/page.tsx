@@ -295,11 +295,33 @@ export default function AdminClientsPage() {
     setEditClientErrors({})
 
     try {
+      const nextErrors: Record<string, string> = {}
+      const telefonoNormalizado = editClientForm.telefono.replace(/\D/g, "")
+
+      if (!editClientForm.nombres.trim()) {
+        nextErrors.nombres = "Los nombres son obligatorios."
+      }
+
+      if (!editClientForm.apellidos.trim()) {
+        nextErrors.apellidos = "Los apellidos son obligatorios."
+      }
+
+      if (telefonoNormalizado.length !== 9) {
+        nextErrors.telefono = "El teléfono debe tener 9 dígitos."
+      } else if (!telefonoNormalizado.startsWith("9")) {
+        nextErrors.telefono = "El teléfono debe empezar con 9."
+      }
+
+      if (Object.keys(nextErrors).length > 0) {
+        setEditClientErrors(nextErrors)
+        return
+      }
+
       const updated = await AdminService.updateUser(Number(clientToEdit.id), {
         nombres: editClientForm.nombres.trim(),
         apellidos: editClientForm.apellidos.trim(),
         email: editClientForm.email.trim(),
-        telefono: editClientForm.telefono.replace(/\D/g, ""),
+        telefono: telefonoNormalizado,
         direccion: editClientForm.direccion.trim() || null,
       })
 
@@ -334,6 +356,20 @@ export default function AdminClientsPage() {
 
       const normalizedMessage = message.toLowerCase()
 
+      if (normalizedMessage.includes("nombre")) {
+        setEditClientErrors((prev) => ({
+          ...prev,
+          nombres: message,
+        }))
+      }
+
+      if (normalizedMessage.includes("apellido")) {
+        setEditClientErrors((prev) => ({
+          ...prev,
+          apellidos: message,
+        }))
+      }
+
       if (normalizedMessage.includes("email") || normalizedMessage.includes("correo")) {
         setEditClientErrors((prev) => ({
           ...prev,
@@ -341,7 +377,11 @@ export default function AdminClientsPage() {
         }))
       }
 
-      if (normalizedMessage.includes("teléfono") || normalizedMessage.includes("telefono") || normalizedMessage.includes("celular")) {
+      if (
+        normalizedMessage.includes("teléfono") ||
+        normalizedMessage.includes("telefono") ||
+        normalizedMessage.includes("celular")
+      ) {
         setEditClientErrors((prev) => ({
           ...prev,
           telefono: message,
@@ -1065,10 +1105,17 @@ export default function AdminClientsPage() {
                 <Input
                   id="edit-client-nombres"
                   value={editClientForm.nombres}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setEditClientForm({ ...editClientForm, nombres: e.target.value })
-                  }
+                    if (editClientErrors.nombres) {
+                      setEditClientErrors((prev) => ({ ...prev, nombres: "" }))
+                    }
+                  }}
+                  className={editClientErrors.nombres ? "border-destructive" : ""}
                 />
+                {editClientErrors.nombres && (
+                  <p className="text-xs text-destructive">{editClientErrors.nombres}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -1076,10 +1123,17 @@ export default function AdminClientsPage() {
                 <Input
                   id="edit-client-apellidos"
                   value={editClientForm.apellidos}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setEditClientForm({ ...editClientForm, apellidos: e.target.value })
-                  }
+                    if (editClientErrors.apellidos) {
+                      setEditClientErrors((prev) => ({ ...prev, apellidos: "" }))
+                    }
+                  }}
+                  className={editClientErrors.apellidos ? "border-destructive" : ""}
                 />
+                {editClientErrors.apellidos && (
+                  <p className="text-xs text-destructive">{editClientErrors.apellidos}</p>
+                )}
               </div>
             </div>
 
@@ -1107,8 +1161,11 @@ export default function AdminClientsPage() {
               <Input
                 id="edit-client-telefono"
                 value={editClientForm.telefono}
+                type="tel"
+                maxLength={9}
                 onChange={(e) => {
-                  setEditClientForm({ ...editClientForm, telefono: e.target.value })
+                  const value = e.target.value.replace(/\D/g, "").slice(0, 9)
+                  setEditClientForm({ ...editClientForm, telefono: value })
                   if (editClientErrors.telefono) {
                     setEditClientErrors((prev) => ({ ...prev, telefono: "" }))
                   }

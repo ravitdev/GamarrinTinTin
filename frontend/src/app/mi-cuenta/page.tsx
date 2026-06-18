@@ -144,6 +144,7 @@ export default function MiCuentaPage() {
     numeroDocumento: "",
   })
   const [isRequestingDocumentChange, setIsRequestingDocumentChange] = useState(false)
+  const [documentFieldErrors, setDocumentFieldErrors] = useState<Record<string, string>>({})
 
   const canRequestDocumentChange =
     profile?.rol === RolUsuario.CLIENTE || profile?.rol === RolUsuario.VENDEDOR
@@ -178,15 +179,38 @@ export default function MiCuentaPage() {
   const handleSaveProfile = async () => {
     if (!profile || !editForm) return
 
-    setIsSavingProfile(true)
     setProfileFieldErrors({})
+
+    const nextErrors: Record<string, string> = {}
+    const telefonoNormalizado = editForm.telefono.replace(/\D/g, "")
+
+    if (!editForm.nombres.trim()) {
+      nextErrors.nombres = "Los nombres son obligatorios."
+    }
+
+    if (!editForm.apellidos.trim()) {
+      nextErrors.apellidos = "Los apellidos son obligatorios."
+    }
+
+    if (telefonoNormalizado.length !== 9) {
+      nextErrors.telefono = "El teléfono debe tener 9 dígitos."
+    } else if (!telefonoNormalizado.startsWith("9")) {
+      nextErrors.telefono = "El teléfono debe empezar con 9."
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setProfileFieldErrors(nextErrors)
+      return
+    }
+
+    setIsSavingProfile(true)
 
     try {
       const payload: UpdateProfilePayload = {
         nombres: editForm.nombres.trim(),
         apellidos: editForm.apellidos.trim(),
         email: editForm.email.trim(),
-        telefono: editForm.telefono.replace(/\D/g, ""),
+        telefono: telefonoNormalizado,
         direccion: editForm.direccion.trim() || null,
       }
 
@@ -207,10 +231,35 @@ export default function MiCuentaPage() {
 
       const normalizedMessage = message.toLowerCase()
 
+      if (normalizedMessage.includes("nombre")) {
+        setProfileFieldErrors((prev) => ({
+          ...prev,
+          nombres: message,
+        }))
+      }
+
+      if (normalizedMessage.includes("apellido")) {
+        setProfileFieldErrors((prev) => ({
+          ...prev,
+          apellidos: message,
+        }))
+      }
+
       if (normalizedMessage.includes("email") || normalizedMessage.includes("correo")) {
         setProfileFieldErrors((prev) => ({
           ...prev,
           email: message,
+        }))
+      }
+
+      if (
+        normalizedMessage.includes("teléfono") ||
+        normalizedMessage.includes("telefono") ||
+        normalizedMessage.includes("celular")
+      ) {
+        setProfileFieldErrors((prev) => ({
+          ...prev,
+          telefono: message,
         }))
       }
 
@@ -311,24 +360,64 @@ export default function MiCuentaPage() {
   }
 
   const handleRequestDocumentChange = async () => {
+    const numeroDocumento = documentForm.numeroDocumento.replace(/\D/g, "")
+
+    const nextErrors: Record<string, string> = {}
+
+    if (documentForm.tipoDocumento === TipoDocumento.DNI && numeroDocumento.length !== 8) {
+      nextErrors.numeroDocumento = "El DNI debe tener 8 dígitos."
+    }
+
+    if (documentForm.tipoDocumento === TipoDocumento.RUC && numeroDocumento.length !== 11) {
+      nextErrors.numeroDocumento = "El RUC debe tener 11 dígitos."
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setDocumentFieldErrors(nextErrors)
+      return
+    }
+
     setIsRequestingDocumentChange(true)
+    setDocumentFieldErrors({})
+
     try {
       await UserService.requestDocumentChange({
         tipoDocumento: documentForm.tipoDocumento,
-        numeroDocumento: documentForm.numeroDocumento.trim(),
+        numeroDocumento,
       })
+
       const refreshed = await UserService.getProfile()
       setProfile(refreshed)
       setIsDocumentDialogOpen(false)
-      const message =
+
+      const successMessage =
         profile?.rol === RolUsuario.VENDEDOR
           ? "Su solicitud de cambio de DNI será evaluada por un administrador."
           : "Su solicitud de cambio de RUC o DNI será evaluada por un administrador."
-      toast({ title: "Solicitud registrada", description: message })
+
+      toast({ title: "Solicitud registrada", description: successMessage })
     } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Revisa los datos ingresados."
+
+      const normalizedMessage = message.toLowerCase()
+
+      if (
+        normalizedMessage.includes("documento") ||
+        normalizedMessage.includes("dni") ||
+        normalizedMessage.includes("ruc")
+      ) {
+        setDocumentFieldErrors((prev) => ({
+          ...prev,
+          numeroDocumento: message,
+        }))
+      }
+
       toast({
         title: "Error en la solicitud",
-        description: error instanceof Error ? error.message : "Revisa los datos ingresados.",
+        description: message,
         variant: "destructive",
       })
     } finally {
@@ -522,16 +611,34 @@ export default function MiCuentaPage() {
                         <Input
                           id="nombres"
                           value={editForm.nombres}
-                          onChange={(e) => setEditForm({ ...editForm, nombres: e.target.value })}
+                          onChange={(e) => {
+                            setEditForm({ ...editForm, nombres: e.target.value })
+                            if (profileFieldErrors.nombres) {
+                              setProfileFieldErrors((prev) => ({ ...prev, nombres: "" }))
+                            }
+                          }}
+                          className={profileFieldErrors.nombres ? "border-destructive" : ""}
                         />
+                        {profileFieldErrors.nombres && (
+                          <p className="text-xs text-destructive">{profileFieldErrors.nombres}</p>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="apellidos">Apellidos</Label>
                         <Input
                           id="apellidos"
                           value={editForm.apellidos}
-                          onChange={(e) => setEditForm({ ...editForm, apellidos: e.target.value })}
+                          onChange={(e) => {
+                            setEditForm({ ...editForm, apellidos: e.target.value })
+                            if (profileFieldErrors.apellidos) {
+                              setProfileFieldErrors((prev) => ({ ...prev, apellidos: "" }))
+                            }
+                          }}
+                          className={profileFieldErrors.apellidos ? "border-destructive" : ""}
                         />
+                        {profileFieldErrors.apellidos && (
+                          <p className="text-xs text-destructive">{profileFieldErrors.apellidos}</p>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="correo">Correo Electronico</Label>
@@ -555,9 +662,21 @@ export default function MiCuentaPage() {
                         <Label htmlFor="celular">Celular</Label>
                         <Input
                           id="celular"
+                          type="tel"
+                          maxLength={9}
                           value={editForm.telefono}
-                          onChange={(e) => setEditForm({ ...editForm, telefono: e.target.value })}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/\D/g, "").slice(0, 9)
+                            setEditForm({ ...editForm, telefono: value })
+                            if (profileFieldErrors.telefono) {
+                              setProfileFieldErrors((prev) => ({ ...prev, telefono: "" }))
+                            }
+                          }}
+                          className={profileFieldErrors.telefono ? "border-destructive" : ""}
                         />
+                        {profileFieldErrors.telefono && (
+                          <p className="text-xs text-destructive">{profileFieldErrors.telefono}</p>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="tipoDocumento">Tipo de Documento</Label>
@@ -618,8 +737,16 @@ export default function MiCuentaPage() {
                           open={isDocumentDialogOpen}
                           onOpenChange={(open) => {
                             setIsDocumentDialogOpen(open)
+                            setDocumentFieldErrors({})
 
                             if (open && profile.rol === RolUsuario.VENDEDOR) {
+                              setDocumentForm({
+                                tipoDocumento: TipoDocumento.DNI,
+                                numeroDocumento: "",
+                              })
+                            }
+
+                            if (!open) {
                               setDocumentForm({
                                 tipoDocumento: TipoDocumento.DNI,
                                 numeroDocumento: "",
@@ -645,9 +772,10 @@ export default function MiCuentaPage() {
                                 ) : (
                                   <Select
                                     value={documentForm.tipoDocumento}
-                                    onValueChange={(value: TipoDocumento) =>
-                                      setDocumentForm({ ...documentForm, tipoDocumento: value })
-                                    }
+                                    onValueChange={(value: TipoDocumento) => {
+                                      setDocumentForm({ tipoDocumento: value, numeroDocumento: "" })
+                                      setDocumentFieldErrors({})
+                                    }}
                                   >
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
@@ -667,13 +795,24 @@ export default function MiCuentaPage() {
                                       ? "Ingrese 8 dígitos"
                                       : "Ingrese 11 dígitos"
                                   }
-                                  onChange={(e) =>
+                                  onChange={(e) => {
+                                    const maxLength = documentForm.tipoDocumento === TipoDocumento.DNI ? 8 : 11
+                                    const value = e.target.value.replace(/\D/g, "").slice(0, maxLength)
+
                                     setDocumentForm({
                                       ...documentForm,
-                                      numeroDocumento: e.target.value.replace(/\D/g, ""),
+                                      numeroDocumento: value,
                                     })
-                                  }
+
+                                    if (documentFieldErrors.numeroDocumento) {
+                                      setDocumentFieldErrors((prev) => ({ ...prev, numeroDocumento: "" }))
+                                    }
+                                  }}
+                                  className={documentFieldErrors.numeroDocumento ? "border-destructive" : ""}
                                 />
+                                {documentFieldErrors.numeroDocumento && (
+                                  <p className="text-xs text-destructive">{documentFieldErrors.numeroDocumento}</p>
+                                )}
                               </div>
                             </div>
                             <DialogFooter>
