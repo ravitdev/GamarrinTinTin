@@ -101,16 +101,25 @@ export default function ProductDetailPage() {
   );
   const currentStock = selectedVariant ? selectedVariant.stock : 0;
   const isOutOfStock = selectedSize && currentStock < quantity;
-  const canAddToCart = selectedSize && currentStock >= quantity && quantity > 0;
+  const canAddToCart =
+    !product.esPersonalizable &&
+    selectedSize &&
+    currentStock >= quantity &&
+    quantity > 0;
   const shouldQuote = isOutOfStock || product.esPersonalizable;
+
+  const isPersonalizable = Boolean(product.esPersonalizable);
+  const predefinedDesigns = product.disenosPredefinidos || [];
+  const hasPredefinedDesigns = predefinedDesigns.length > 0;
+  const canCustomize = isPersonalizable;
 
   // discountPercentage calculated above
 
   const unitPrice = product.precio * (1 - discountPercentage / 100);
   const totalPrice = unitPrice * quantity;
 
-  const pechoDesigns = (product.disenosPredefinidos || []).filter((d: any) => d.posicion === 'pecho');
-  const espaldaDesigns = (product.disenosPredefinidos || []).filter((d: any) => d.posicion === 'espalda');
+  const pechoDesigns = predefinedDesigns.filter((d: any) => d.posicion === 'pecho');
+  const espaldaDesigns = predefinedDesigns.filter((d: any) => d.posicion === 'espalda');
 
   const handleAddToCart = async () => {
     if (!selectedSize || !selectedColor || !selectedVariant) return;
@@ -193,10 +202,14 @@ export default function ProductDetailPage() {
                 
                 {/* Badges */}
                 <div className="absolute left-4 top-4 flex flex-col gap-2">
-                  {product.tipoDiseno === 'personalizable' && (
+                  {isPersonalizable ? (
                     <Badge className="bg-accent text-accent-foreground">
                       <Sparkles className="mr-1 h-3 w-3" />
                       Personalizable
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">
+                      Diseño predefinido
                     </Badge>
                   )}
                 </div>
@@ -269,6 +282,26 @@ export default function ProductDetailPage() {
                 <p className="mt-3 text-muted-foreground leading-relaxed">
                   {product.descripcion}
                 </p>
+                <div className="mt-4 rounded-xl border border-border bg-muted/30 p-4">
+                  <div className="flex items-start gap-3">
+                    {isPersonalizable ? (
+                      <Sparkles className="mt-0.5 h-5 w-5 text-accent" />
+                    ) : (
+                      <Check className="mt-0.5 h-5 w-5 text-accent" />
+                    )}
+
+                    <div>
+                      <p className="font-medium text-foreground">
+                        {isPersonalizable ? "Producto personalizable" : "Producto con diseño predefinido"}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {isPersonalizable
+                          ? "Puedes iniciar una personalización o solicitar una cotización según tu diseño."
+                          : "Puedes elegir color, talla y cantidad para agregarlo directamente al carrito si hay stock disponible."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Price */}
@@ -367,7 +400,7 @@ export default function ProductDetailPage() {
               </div>
 
               {/* Design Selection (if available) */}
-              {product.disenosPredefinidos.length > 0 && (
+              {hasPredefinedDesigns && (
                 <div className="space-y-4">
                   {pechoDesigns.length > 0 && (
                     <div>
@@ -439,7 +472,7 @@ export default function ProductDetailPage() {
                     </div>
                   )}
 
-                  {product.tipoDiseno === 'personalizable' && (
+                  {canCustomize && (
                     <Link href={`/personalizar/${product.idProducto}`}>
                       <Button variant="outline" className="w-full gap-2">
                         <Sparkles className="h-4 w-4" />
@@ -509,27 +542,38 @@ export default function ProductDetailPage() {
 
               {/* Actions */}
               <div className="flex flex-col gap-3 pt-2">
-                {canAddToCart ? (
-                  <Button 
-                    size="lg" 
-                    className="w-full gap-2 bg-accent text-accent-foreground hover:bg-accent/90 cursor-pointer"
-                    onClick={handleAddToCart}
-                    disabled={isAdding}
-                  >
-                    <ShoppingCart className="h-5 w-5" />
-                    {isAdding ? 'Agregando...' : 'Agregar al Carrito'}
-                  </Button>
-                ) : !selectedSize ? (
-                  <Button size="lg" className="w-full" disabled>
-                    Selecciona una talla
-                  </Button>
-                ) : (
-                  <Button size="lg" className="w-full" disabled>
-                    Stock Insuficiente
-                  </Button>
+                {canCustomize && (
+                  <Link href={`/personalizar/${product.idProducto}`}>
+                    <Button size="lg" className="w-full gap-2 bg-accent text-accent-foreground hover:bg-accent/90">
+                      <Sparkles className="h-5 w-5" />
+                      Personalizar Producto
+                    </Button>
+                  </Link>
                 )}
 
-                {(shouldQuote || !canAddToCart && selectedSize) && (
+                {!canCustomize && (
+                  canAddToCart ? (
+                    <Button
+                      size="lg"
+                      className="w-full gap-2 bg-accent text-accent-foreground hover:bg-accent/90 cursor-pointer"
+                      onClick={handleAddToCart}
+                      disabled={isAdding}
+                    >
+                      <ShoppingCart className="h-5 w-5" />
+                      {isAdding ? 'Agregando...' : 'Agregar al Carrito'}
+                    </Button>
+                  ) : !selectedSize ? (
+                    <Button size="lg" className="w-full" disabled>
+                      Selecciona una talla
+                    </Button>
+                  ) : (
+                    <Button size="lg" className="w-full" disabled>
+                      Stock Insuficiente
+                    </Button>
+                  )
+                )}
+
+                {(shouldQuote || (!canAddToCart && selectedSize)) && (
                   <Link href={`/solicitar-cotizacion?producto=${product.idProducto}`}>
                     <Button size="lg" variant="outline" className="w-full gap-2">
                       <FileText className="h-5 w-5" />
