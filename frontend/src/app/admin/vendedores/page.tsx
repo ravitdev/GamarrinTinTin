@@ -63,7 +63,10 @@ import {
 } from "lucide-react"
 import { formatPrice } from "@/lib/mock-data"
 import { AdminService } from "@/features/admin/services/admin.service"
-import type { UserProfile } from "@/features/user/services/user.service"
+import type {
+  DocumentChangeRequest,
+  UserProfile,
+} from "@/features/user/services/user.service"
 import { UserService } from "@/features/user/services/user.service"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
@@ -125,6 +128,8 @@ export default function AdminVendedoresPage() {
   const { toast } = useToast()
   const [vendors, setVendors] = useState<VendorMock[]>([])
   const [isLoadingVendors, setIsLoadingVendors] = useState(true)
+  const [pendingDocumentRequests, setPendingDocumentRequests] = useState<DocumentChangeRequest[]>([])
+  const [isApprovingDocumentRequest, setIsApprovingDocumentRequest] = useState<number | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [selectedVendor, setSelectedVendor] = useState<VendorMock | null>(null)
@@ -185,8 +190,15 @@ export default function AdminVendedoresPage() {
     const loadVendors = async () => {
       setIsLoadingVendors(true)
       try {
-        const profiles = await AdminService.getVendedores()
+        const [profiles, documentRequests] = await Promise.all([
+          AdminService.getVendedores(),
+          UserService.listPendingDocumentRequests(),
+        ])
+
         setVendors(profiles.map(mapProfileToVendor))
+        setPendingDocumentRequests(
+          documentRequests.filter((request) => request.rol === "VENDEDOR"),
+        )
       } catch (error) {
         toast({
           title: "Error al cargar vendedores",
@@ -362,6 +374,46 @@ export default function AdminVendedoresPage() {
     })
   }
 
+  const handleApproveDocumentRequest = async (request: DocumentChangeRequest) => {
+    setIsApprovingDocumentRequest(request.idSolicitud)
+
+    try {
+      const updated = await UserService.approveDocumentRequest(request.idSolicitud)
+      const mapped = mapProfileToVendor(updated)
+
+      setVendors((prev) =>
+        prev.map((vendor) =>
+          vendor.id === String(updated.idUsuario)
+            ? { ...vendor, ...mapped, stats: vendor.stats }
+            : vendor,
+        ),
+      )
+
+      setPendingDocumentRequests((prev) =>
+        prev.filter((item) => item.idSolicitud !== request.idSolicitud),
+      )
+
+      if (selectedVendor?.id === String(updated.idUsuario)) {
+        setSelectedVendor((prev) =>
+          prev ? { ...prev, ...mapped, stats: prev.stats } : prev,
+        )
+      }
+
+      toast({
+        title: "Solicitud aprobada",
+        description: "El documento del vendedor fue actualizado correctamente.",
+      })
+    } catch (error) {
+      toast({
+        title: "No se pudo aprobar la solicitud",
+        description: error instanceof Error ? error.message : "Intenta nuevamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsApprovingDocumentRequest(null)
+    }
+  }
+
   const handleAddVendor = async () => {
     if (!validateForm()) {
       toast({
@@ -451,6 +503,7 @@ export default function AdminVendedoresPage() {
 
   const totalVendors = vendors.length
   const activeVendors = vendors.filter(v => v.estado === 'activo').length
+  const pendingDocumentChanges = pendingDocumentRequests.length
   const totalSales = vendors.reduce((sum, v) => sum + v.stats.ventasTotales, 0)
   const avgConversion = vendors.length > 0 
     ? Math.round(vendors.reduce((sum, v) => sum + v.stats.tasaConversion, 0) / vendors.length) 
@@ -702,6 +755,68 @@ export default function AdminVendedoresPage() {
         </Card>
       </div>
 
+      {pendingDocumentChanges > 0 && (
+        <Card className="border-amber-200 bg-amber-50/40">
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h3 className="font-semibold flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-amber-600" />
+                  Solicitudes de cambio de documento
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Revisa y aprueba las solicitudes de cambio de DNI enviadas por vendedores.
+                </p>
+              </div>
+              <Badge variant="outline" className="border-amber-300 text-amber-700">
+                {pendingDocumentChanges} pendiente{pendingDocumentChanges === 1 ? "" : "s"}
+              </Badge>
+            </div>
+
+            <div className="space-y-3">
+              {pendingDocumentRequests.map((request) => (
+                <div
+                  key={request.idSolicitud}
+                  className="flex flex-col gap-3 rounded-lg border bg-background p-4 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="space-y-1">
+                    <p className="font-medium">
+                      {request.nombres} {request.apellidos}
+                    </p>
+                    <p className="text-sm text-muted-foreground">{request.email}</p>
+                    <div className="flex flex-wrap gap-2 text-sm">
+                      <Badge variant="secondary">
+                        Actual: {request.tipoDocumentoActual} {request.numeroDocumentoActual}
+                      </Badge>
+                      <Badge variant="outline">
+                        Nuevo: {request.tipoDocumentoNuevo} {request.numeroDocumentoNuevo}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Solicitud enviada el{" "}
+                      {new Date(request.fechaSolicitud).toLocaleDateString("es-PE", {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })}
+                    </p>
+                  </div>
+
+                  <Button
+                    onClick={() => handleApproveDocumentRequest(request)}
+                    disabled={isApprovingDocumentRequest === request.idSolicitud}
+                  >
+                    {isApprovingDocumentRequest === request.idSolicitud
+                      ? "Aprobando..."
+                      : "Aprobar"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
@@ -761,7 +876,14 @@ export default function AdminVendedoresPage() {
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <p className="font-medium">{vendor.nombres} {vendor.apellidos}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{vendor.nombres} {vendor.apellidos}</p>
+                            {pendingDocumentRequests.some((request) => String(request.idUsuario) === vendor.id) && (
+                              <Badge variant="outline" className="text-blue-600 border-blue-300 text-xs">
+                                Solicita documento
+                              </Badge>
+                            )}
+                          </div>
                           <p className="text-xs text-muted-foreground">
                             Desde {vendor.createdAt.toLocaleDateString('es-PE', { month: 'short', year: 'numeric' })}
                           </p>
