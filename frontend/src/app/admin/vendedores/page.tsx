@@ -757,8 +757,11 @@ export default function AdminVendedoresPage() {
             <DialogFooter className="pt-4 border-t">
               <Button
                 variant="outline"
-                onClick={() => {setEditFieldErrors({}) 
-                                setIsEditDialogOpen(false)}} disabled={isSavingEdit}
+                onClick={() => {
+                  resetNewVendorForm()
+                  setIsAddDialogOpen(false)
+                }}
+                disabled={isAddingVendor}
               >
                 Cancelar
               </Button>
