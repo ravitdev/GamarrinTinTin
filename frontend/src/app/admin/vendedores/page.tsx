@@ -355,6 +355,13 @@ export default function AdminVendedoresPage() {
             v.id === vendor.id ? { ...v, estado: "inactivo" as const } : v,
           ),
         )
+
+        if (selectedVendor?.id === vendor.id) {
+          setSelectedVendor((prev) =>
+            prev ? { ...prev, estado: "inactivo" as const } : prev,
+          )
+        }
+
         toast({
           title: "Cuenta desactivada",
           description: `${vendor.nombres} ${vendor.apellidos} fue desactivado.`,
@@ -369,10 +376,32 @@ export default function AdminVendedoresPage() {
       return
     }
 
-    toast({
-      title: "Reactivacion no disponible",
-      description: "Contacta soporte para reactivar la cuenta del vendedor.",
-    })
+    try {
+      await AdminService.reactivateUser(Number(vendor.id))
+
+      setVendors((prev) =>
+        prev.map((v) =>
+          v.id === vendor.id ? { ...v, estado: "activo" as const } : v,
+        ),
+      )
+
+      if (selectedVendor?.id === vendor.id) {
+        setSelectedVendor((prev) =>
+          prev ? { ...prev, estado: "activo" as const } : prev,
+        )
+      }
+
+      toast({
+        title: "Cuenta reactivada",
+        description: `${vendor.nombres} ${vendor.apellidos} fue reactivado.`,
+      })
+    } catch (error) {
+      toast({
+        title: "No se pudo reactivar",
+        description: error instanceof Error ? error.message : "Intenta nuevamente.",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleApproveDocumentRequest = async (request: DocumentChangeRequest) => {
