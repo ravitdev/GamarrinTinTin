@@ -9,10 +9,16 @@ import {
 import { RegistrarProductoDto } from './dto/registrar-producto.dto';
 import { ProductoMapper } from './producto.mapper';
 import { ProductoRepository } from './producto.repository';
+import {
+  StorageService,
+  type UploadedFile,
+} from '../modules/storage/storage.service';
 
 @Injectable()
 export class ProductoManager {
-  constructor(private readonly productoRepository: ProductoRepository) {}
+  constructor(
+    private readonly productoRepository: ProductoRepository,
+  ) {}
 
   async consultarCatalogo(
     filtros: ConsultarCatalogoProductosDto = {},
@@ -32,12 +38,17 @@ export class ProductoManager {
           : undefined,
     });
 
-    return productos.map((producto) => ProductoMapper.aCatalogoDto(producto));
+    return productos.map((producto) =>
+      this.resolverCatalogoDto(ProductoMapper.aCatalogoDto(producto)),
+    );
   }
 
   async listarProductosParaAdministracion(): Promise<ProductoDetalleResponseDto[]> {
     const productos = await this.productoRepository.listarTodosParaAdministracion();
-    return productos.map((producto) => ProductoMapper.aDetalleDto(producto));
+
+    return productos.map((producto) =>
+      this.resolverDetalleDto(ProductoMapper.aDetalleDto(producto)),
+    );
   }
 
   async consultarDetalleProducto(
@@ -51,7 +62,9 @@ export class ProductoManager {
       throw new Error('Producto no encontrado.');
     }
 
-    return ProductoMapper.aDetalleDto(producto);
+    const dto = ProductoMapper.aDetalleDto(producto);
+
+    return this.resolverDetalleDto(dto);
   }
 
   async registrarProducto(
@@ -86,7 +99,7 @@ export class ProductoManager {
       })),
     });
 
-    return ProductoMapper.aDetalleDto(producto);
+    return this.resolverDetalleDto(ProductoMapper.aDetalleDto(producto));
   }
 
   async modificarProducto(
@@ -130,7 +143,7 @@ export class ProductoManager {
       })),
     });
 
-    return ProductoMapper.aDetalleDto(producto);
+    return this.resolverDetalleDto(ProductoMapper.aDetalleDto(producto));
   }
 
   async desactivarProducto(idProducto: number): Promise<boolean> {
@@ -166,7 +179,106 @@ export class ProductoManager {
       datos.esActivo,
     );
 
-    return ProductoMapper.aDetalleDto(producto);
+    return this.resolverDetalleDto(ProductoMapper.aDetalleDto(producto));
+  }
+
+  async registrarProductoConImagen(
+    datos: RegistrarProductoDto,
+    files: UploadedFile[],
+  ): Promise<ProductoDetalleResponseDto> {
+    if (!files || files.length === 0) {
+      throw new Error('El producto debe tener al menos una imagen.');
+    }
+
+    if (files.length > 2) {
+      throw new Error('Por ahora solo se permiten máximo 2 imágenes por producto.');
+    }
+
+    const colorPrincipal = this.normalizarColorHex(
+      datos.variantes?.[0]?.colorHex ?? '',
+    );
+
+    const imagenesIniciales: RegistrarProductoDto['imagenes'] = files.map(
+      (_file, index) => ({
+        colorHex: colorPrincipal,
+        lado: index === 0 ? 'FRONT' : 'BACK',
+        urlImagen: `pending-${index}`,
+        displayOrder: index,
+      }),
+    );
+
+    const datosParaValidar: RegistrarProductoDto = {
+      ...datos,
+      imagenes: imagenesIniciales,
+    };
+
+    this.validarDatosRegistro(datosParaValidar);
+
+    const nombreNormalizado = this.normalizarTexto(datos.nombre);
+    await this.validarNombreDisponible(nombreNormalizado);
+
+    const timestamp = Date.now();
+
+    const imagenesProcesadas = await Promise.all(
+      files.map(async (file, index) => {
+        const nombreArchivo = this.normalizarNombreArchivo(file.originalname);
+        const key = `products/temp/${timestamp}-${index}-${nombreArchivo}`;
+
+        const uploadedKey = await StorageService.uploadFile(file, key);
+        const imagen = imagenesIniciales[index];
+
+        return {
+          colorHex: this.normalizarColorHex(imagen.colorHex),
+          lado: imagen.lado,
+          urlImagen: uploadedKey,
+          displayOrder: imagen.displayOrder ?? index,
+        };
+      }),
+    );
+
+    const producto = await this.productoRepository.registrar({
+      idCategoria: datos.idCategoria,
+      nombre: nombreNormalizado,
+      descripcion: this.normalizarTexto(datos.descripcion),
+      precioBase: datos.precioBase,
+      esPersonalizable: datos.esPersonalizable,
+      variantes: datos.variantes.map((variante) => ({
+        colorNombre: this.normalizarTexto(variante.colorNombre),
+        colorHex: this.normalizarColorHex(variante.colorHex),
+        talla: variante.talla,
+        stock: variante.stock,
+      })),
+      imagenes: imagenesProcesadas,
+      descuentosVolumen: (datos.descuentosVolumen ?? []).map((descuento) => ({
+        cantidadMinima: descuento.cantidadMinima,
+        porcentajeDescuento: descuento.porcentajeDescuento,
+      })),
+    });
+
+    return this.resolverDetalleDto(ProductoMapper.aDetalleDto(producto));
+  }
+
+  private resolverCatalogoDto(
+    dto: ProductoCatalogoResponseDto,
+  ): ProductoCatalogoResponseDto {
+    return {
+      ...dto,
+      imagenPrincipal: dto.imagenPrincipal
+        ? StorageService.getPublicUrl(dto.imagenPrincipal)
+        : null,
+    };
+  }
+
+  private resolverDetalleDto(
+    dto: ProductoDetalleResponseDto,
+  ): ProductoDetalleResponseDto {
+    return {
+      ...dto,
+      imagenes: dto.imagenes.map((imagen) => ({
+        ...imagen,
+        urlImagen: StorageService.getPublicUrl(imagen.urlImagen),
+      })),
+    };
   }
 
   private validarDatosRegistro(datos: RegistrarProductoDto): void {
@@ -379,6 +491,15 @@ export class ProductoManager {
 
   private normalizarColorHex(colorHex: string): string {
     return this.normalizarTexto(colorHex).toUpperCase();
+  }
+
+  private normalizarNombreArchivo(nombreArchivo: string): string {
+    const nombreSeguro = this.normalizarTexto(nombreArchivo)
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9._-]/g, '');
+
+    return nombreSeguro || 'imagen-producto';
   }
 
   private async validarProductoSinPedidosEnProceso(

@@ -10,7 +10,9 @@ import {
   Post,
   Put,
   Query,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import type { CambiarEstadoProductoDto } from './dto/cambiar-estado-producto.dto';
 import type { RegistrarProductoDto } from './dto/registrar-producto.dto';
@@ -20,12 +22,13 @@ import { ProductoManager } from './producto.manager';
 import { Roles } from '../usuarios/seguridad/auth.decorators';
 import { JwtAuthGuard } from '../usuarios/seguridad/jwt-auth.guard';
 import { RolesGuard } from '../usuarios/seguridad/roles.guard';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import type { UploadedFile } from '../modules/storage/storage.service';
 
 @Controller('productos')
 export class ProductoController {
   constructor(private readonly productoManager: ProductoManager) {}
 
-  @Get()
   @Get()
   async consultarCatalogo(@Query() filtros: ConsultarCatalogoProductosDto) {
     const productos = await this.productoManager.consultarCatalogo(filtros);
@@ -75,6 +78,32 @@ export class ProductoController {
       return {
         success: true,
         message: 'Producto registrado correctamente.',
+        data: producto,
+      };
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Post('con-imagen')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('VENDEDOR', 'ADMINISTRADOR')
+  @UseInterceptors(FilesInterceptor('files', 2))
+  async registrarProductoConImagen(
+    @Body('producto') productoJson: string,
+    @UploadedFiles() files: UploadedFile[],
+  ) {
+    try {
+      const body = this.parsearProductoJson(productoJson);
+
+      const producto = await this.productoManager.registrarProductoConImagen(
+        body,
+        files,
+      );
+
+      return {
+        success: true,
+        message: 'Producto registrado correctamente con imagen.',
         data: producto,
       };
     } catch (error: any) {
@@ -157,6 +186,18 @@ export class ProductoController {
           : HttpStatus.BAD_REQUEST;
 
       throw new HttpException(error.message, estado);
+    }
+  }
+
+  private parsearProductoJson(productoJson: string): RegistrarProductoDto {
+    if (!productoJson) {
+      throw new Error('Debe enviar los datos del producto.');
+    }
+
+    try {
+      return JSON.parse(productoJson) as RegistrarProductoDto;
+    } catch {
+      throw new Error('Los datos del producto no tienen formato JSON válido.');
     }
   }
 }
