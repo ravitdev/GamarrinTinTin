@@ -171,6 +171,12 @@ export class UserService {
     );
   }
 
+  static async rejectDocumentRequest(idSolicitud: number): Promise<void> {
+    return ApiClient.patch<void>(
+      `/usuarios/solicitudes-documento/${idSolicitud}/rechazar`,
+    );
+  }
+
   static async listPendingDeactivationRequests(): Promise<DeactivationRequest[]> {
     return ApiClient.get<DeactivationRequest[]>(
       '/usuarios/solicitudes-desactivacion/pendientes',

@@ -341,6 +341,25 @@ export class UsuarioManager {
     return actualizado;
   }
 
+  async rechazarSolicitudCambioDocumento(
+    idSolicitud: number,
+    idAdmin: number,
+  ): Promise<void> {
+    const solicitudes =
+      await this.usuarioRepository.listarSolicitudesCambioDocumentoPendientes();
+    const solicitudConUsuario = solicitudes.find((s) => s.idSolicitud === idSolicitud);
+
+    if (!solicitudConUsuario) {
+      throw new Error('La solicitud de cambio de documento no existe o ya fue procesada.');
+    }
+
+    await this.usuarioRepository.resolverSolicitudCambioDocumento(
+      idSolicitud,
+      'RECHAZADA',
+      idAdmin,
+    );
+  }
+
   async listarSolicitudesCambioDocumentoPendientes(): Promise<SolicitudCambioDocumentoDto[]> {
     const solicitudes =
       await this.usuarioRepository.listarSolicitudesCambioDocumentoPendientes();

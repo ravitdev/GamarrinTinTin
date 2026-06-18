@@ -295,6 +295,28 @@ export class UsuarioController {
     }
   }
 
+  @Patch('solicitudes-documento/:id/rechazar')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMINISTRADOR')
+  async rechazarSolicitudDocumento(
+    @UsuarioActual() admin: UsuarioAutenticado,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    try {
+      await this.usuarioManager.rechazarSolicitudCambioDocumento(
+        id,
+        admin.idUsuario,
+      );
+
+      return {
+        success: true,
+        message: 'Solicitud de cambio de documento rechazada correctamente.',
+      };
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
   @Post(':id/desactivar')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMINISTRADOR')

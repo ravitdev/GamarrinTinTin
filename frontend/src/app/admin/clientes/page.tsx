@@ -184,6 +184,7 @@ export default function AdminClientsPage() {
   const [pendingDeactivationMap, setPendingDeactivationMap] = useState<Record<string, number>>({})
   const [pendingDocumentRequests, setPendingDocumentRequests] = useState<DocumentChangeRequest[]>([])
   const [isApprovingDocumentRequest, setIsApprovingDocumentRequest] = useState<number | null>(null)
+  const [isRejectingDocumentRequest, setIsRejectingDocumentRequest] = useState<number | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [typeFilter, setTypeFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -395,6 +396,31 @@ export default function AdminClientsPage() {
       })
     } finally {
       setIsApprovingDocumentRequest(null)
+    }
+  }
+
+  const handleRejectDocumentRequest = async (request: DocumentChangeRequest) => {
+    setIsRejectingDocumentRequest(request.idSolicitud)
+
+    try {
+      await AdminService.rejectDocumentRequest(request.idSolicitud)
+
+      setPendingDocumentRequests((prev) =>
+        prev.filter((item) => item.idSolicitud !== request.idSolicitud),
+      )
+
+      toast({
+        title: "Solicitud rechazada",
+        description: "La solicitud de cambio de documento fue rechazada correctamente.",
+      })
+    } catch (error) {
+      toast({
+        title: "No se pudo rechazar la solicitud",
+        description: error instanceof Error ? error.message : "Intenta nuevamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsRejectingDocumentRequest(null)
     }
   }
 
@@ -614,14 +640,32 @@ export default function AdminClientsPage() {
                     </p>
                   </div>
 
-                  <Button
-                    onClick={() => handleApproveDocumentRequest(request)}
-                    disabled={isApprovingDocumentRequest === request.idSolicitud}
-                  >
-                    {isApprovingDocumentRequest === request.idSolicitud
-                      ? "Aprobando..."
-                      : "Aprobar"}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => handleRejectDocumentRequest(request)}
+                      disabled={
+                        isRejectingDocumentRequest === request.idSolicitud ||
+                        isApprovingDocumentRequest === request.idSolicitud
+                      }
+                    >
+                      {isRejectingDocumentRequest === request.idSolicitud
+                        ? "Rechazando..."
+                        : "Rechazar"}
+                    </Button>
+
+                    <Button
+                      onClick={() => handleApproveDocumentRequest(request)}
+                      disabled={
+                        isApprovingDocumentRequest === request.idSolicitud ||
+                        isRejectingDocumentRequest === request.idSolicitud
+                      }
+                    >
+                      {isApprovingDocumentRequest === request.idSolicitud
+                        ? "Aprobando..."
+                        : "Aprobar"}
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
