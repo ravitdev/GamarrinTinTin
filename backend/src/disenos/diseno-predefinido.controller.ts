@@ -66,7 +66,7 @@ export class DisenoPredefinidoController {
 
       return {
         success: true,
-        message: 'Diseño predefinido registrado correctamente.',
+        message: 'Imagen predefinida registrada exitosamente.',
         data: diseno,
       };
     } catch (error: any) {
