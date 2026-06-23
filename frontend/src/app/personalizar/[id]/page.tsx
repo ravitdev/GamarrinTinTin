@@ -25,12 +25,16 @@ import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { formatPrice } from '@/lib/mock-data';
 import { ProductService } from '@/features/product/services/product.service';
-import type { ProductSize, Producto } from '@/lib/types';
+import type { ProductSize, Producto, PredefinedDesign } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { DisenoPredefinidoService } from '@/features/disenos/services/diseno-predefinido.service';
 
-interface UploadedDesign {
+interface CustomizationDesign {
   id: string;
-  file: File;
+  tipo: 'SUBIDO' | 'PREDEFINIDO';
+  file?: File;
+  idDisenoPredefinido?: number;
+  nombre: string;
   preview: string;
   posicion: 'pecho' | 'espalda';
   x: number;
@@ -48,59 +52,59 @@ export default function CustomizePage() {
   const [isLoading, setIsLoading] = useState(true);
   
   useEffect(() => {
-    ProductService.getProductDetail(productId)
-      .then((prod) => {
+    async function cargarDatos() {
+      try {
+        setIsLoading(true);
+        setIsLoadingPredefinedDesigns(true);
+
+        const [prod, disenos] = await Promise.all([
+          ProductService.getProductDetail(productId),
+          DisenoPredefinidoService.listarActivos(),
+        ]);
+
         if (prod.esPersonalizable) {
           setProduct(prod);
         } else {
           setProduct(null);
         }
-      })
-      .finally(() => setIsLoading(false));
+
+        setPredefinedDesigns(
+          disenos.map((diseno) => ({
+            id: diseno.idDisenoPredefinido ?? diseno.idDiseno ?? 0,
+            idDisenoPredefinido: diseno.idDisenoPredefinido,
+            nombre: diseno.nombre,
+            urlImagen: diseno.urlImagen ?? diseno.imagen ?? '',
+            imagen: diseno.urlImagen ?? diseno.imagen ?? '',
+          })),
+        );
+      } finally {
+        setIsLoading(false);
+        setIsLoadingPredefinedDesigns(false);
+      }
+    }
+
+    cargarDatos();
   }, [productId]);
   
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
   const [selectedSize, setSelectedSize] = useState<ProductSize | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [activeSide, setActiveSide] = useState<'pecho' | 'espalda'>('pecho');
-  const [designs, setDesigns] = useState<UploadedDesign[]>([]);
+  const [designs, setDesigns] = useState<CustomizationDesign[]>([]);
+  const [predefinedDesigns, setPredefinedDesigns] = useState<PredefinedDesign[]>([]);
+  const [isLoadingPredefinedDesigns, setIsLoadingPredefinedDesigns] = useState(false);
   const [selectedDesignId, setSelectedDesignId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen flex-col">
-        <Header />
-        <main className="flex flex-1 items-center justify-center">
-          <div className="text-muted-foreground">Cargando producto...</div>
-        </main>
-        <Footer />
-      </div>
-    );
-  }
-
-  if (!product) {
-    return (
-      <div className="flex min-h-screen flex-col">
-        <Header />
-        <main className="flex flex-1 items-center justify-center">
-          <div className="text-center">
-            <h1 className="text-2xl font-semibold text-foreground">Producto no disponible para personalizacion</h1>
-            <Link href="/catalogo" className="mt-4 text-accent hover:underline">
-              Volver al catalogo
-            </Link>
-          </div>
-        </main>
-        <Footer />
-      </div>
-    );
-  }
-
-  const colores = product.colores || [];
-  const selectedColor = colores[selectedColorIndex] || { nombre: '', codigoHex: '', urlImagen: '' };
+  const colores = product?.colores || [];
+  const selectedColor = colores[selectedColorIndex] || {
+    nombre: '',
+    codigoHex: '',
+    urlImagen: '',
+  };
   const currentSideDesigns = designs.filter(d => d.posicion === activeSide);
   const selectedDesign = designs.find(d => d.id === selectedDesignId);
   const totalDesigns = designs.length;
@@ -135,12 +139,14 @@ export default function CustomizePage() {
             return;
           }
 
-          const newDesign: UploadedDesign = {
-            id: `design-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          const newDesign: CustomizationDesign = {
+            id: `uploaded-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            tipo: 'SUBIDO',
             file,
+            nombre: file.name,
             preview: e.target?.result as string,
             posicion: activeSide,
-            x: 50, // Center
+            x: 50,
             y: 50,
             scale: 1,
             rotation: 0,
@@ -154,6 +160,36 @@ export default function CustomizePage() {
       reader.readAsDataURL(file);
     });
   }, [activeSide, totalDesigns]);
+
+  const handleSelectPredefinedDesign = (diseno: PredefinedDesign) => {
+    if (totalDesigns >= maxDesigns) {
+      alert(`Solo puedes agregar hasta ${maxDesigns} diseños.`);
+      return;
+    }
+
+    const imageUrl = diseno.urlImagen || diseno.imagen;
+
+    if (!imageUrl) {
+      alert('El diseño predefinido no tiene imagen disponible.');
+      return;
+    }
+
+    const newDesign: CustomizationDesign = {
+      id: `predefined-${diseno.id}-${Date.now()}`,
+      tipo: 'PREDEFINIDO',
+      idDisenoPredefinido: diseno.idDisenoPredefinido ?? diseno.id,
+      nombre: diseno.nombre,
+      preview: imageUrl,
+      posicion: activeSide,
+      x: 50,
+      y: 50,
+      scale: 1,
+      rotation: 0,
+    };
+
+    setDesigns((prev) => [...prev, newDesign]);
+    setSelectedDesignId(newDesign.id);
+  };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -183,6 +219,35 @@ export default function CustomizePage() {
       setSelectedDesignId(null);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen flex-col">
+        <Header />
+        <main className="flex flex-1 items-center justify-center">
+          <div className="text-muted-foreground">Cargando producto...</div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (!product) {
+    return (
+      <div className="flex min-h-screen flex-col">
+        <Header />
+        <main className="flex flex-1 items-center justify-center">
+          <div className="text-center">
+            <h1 className="text-2xl font-semibold text-foreground">Producto no disponible para personalizacion</h1>
+            <Link href="/catalogo" className="mt-4 text-accent hover:underline">
+              Volver al catalogo
+            </Link>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -278,7 +343,7 @@ export default function CustomizePage() {
                           >
                             <img
                               src={design.preview}
-                              alt="Diseno personalizado"
+                              alt={design.nombre}
                               className="h-20 w-20 object-contain pointer-events-none"
                               draggable={false}
                             />
@@ -328,6 +393,47 @@ export default function CustomizePage() {
                   <p className="text-xs text-muted-foreground">
                     <strong>Requisitos:</strong> PNG o JPG, entre 500x500 y 2000x2000 pixeles, maximo 2MB
                   </p>
+                </div>
+
+                {/* Predefined Designs */}
+                <div className="mt-4 rounded-xl border border-border bg-card p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-sm font-medium text-foreground">
+                      Diseños predefinidos
+                    </h3>
+                    <span className="text-xs text-muted-foreground">
+                      Se agregan al lado activo: {activeSide}
+                    </span>
+                  </div>
+
+                  {isLoadingPredefinedDesigns ? (
+                    <p className="text-sm text-muted-foreground">Cargando diseños...</p>
+                  ) : predefinedDesigns.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No hay diseños predefinidos disponibles.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-3">
+                      {predefinedDesigns.map((diseno) => (
+                        <button
+                          key={diseno.idDisenoPredefinido ?? diseno.id}
+                          type="button"
+                          onClick={() => handleSelectPredefinedDesign(diseno)}
+                          disabled={totalDesigns >= maxDesigns}
+                          className="group flex w-24 flex-col items-center gap-2 rounded-lg border border-border bg-muted p-2 text-center transition-colors hover:border-accent disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <img
+                            src={diseno.urlImagen || diseno.imagen}
+                            alt={diseno.nombre}
+                            className="h-14 w-14 rounded object-contain"
+                          />
+                          <span className="line-clamp-2 text-xs text-foreground">
+                            {diseno.nombre}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -426,7 +532,7 @@ export default function CustomizePage() {
               {/* Uploaded Images List */}
               {designs.length > 0 && (
                 <div className="mt-4">
-                  <h3 className="mb-3 text-sm font-medium text-foreground">Imagenes subidas</h3>
+                  <h3 className="mb-3 text-sm font-medium text-foreground">Diseños seleccionados</h3>
                   <div className="flex flex-wrap gap-2">
                     {designs.map((design: any) => (
                       <div
@@ -444,7 +550,7 @@ export default function CustomizePage() {
                       >
                         <img
                           src={design.preview}
-                          alt="Diseno"
+                          alt={design.nombre}
                           className="h-full w-full object-cover"
                         />
                         <span className="absolute bottom-0 left-0 right-0 bg-primary/80 py-0.5 text-center text-[10px] text-primary-foreground capitalize">
@@ -566,7 +672,7 @@ export default function CustomizePage() {
                     <span className="text-foreground">{quantity}</span>
                   </div>
                   <div className="mt-2 flex justify-between text-sm">
-                    <span className="text-muted-foreground">Disenos</span>
+                    <span className="text-muted-foreground">Diseños</span>
                     <span className="text-foreground">{designs.length}</span>
                   </div>
                   <div className="mt-3 border-t border-border pt-3 flex justify-between">
@@ -589,15 +695,48 @@ export default function CustomizePage() {
                     className="w-full gap-2 bg-accent text-accent-foreground hover:bg-accent/90"
                     disabled={!selectedSize || designs.length === 0}
                     onClick={() => {
-                      // Build URL with all customization data
+                      const customizationId = `customization-${Date.now()}`;
+
+                      const customizationPayload = {
+                        producto: {
+                          idProducto: product.idProducto,
+                          nombre: product.nombre,
+                        },
+                        color: {
+                          nombre: selectedColor.nombre,
+                          codigoHex: selectedColor.codigoHex,
+                        },
+                        talla: selectedSize,
+                        cantidad: quantity,
+                        designs: designs.map((design) => ({
+                          id: design.id,
+                          tipo: design.tipo,
+                          idDisenoPredefinido: design.idDisenoPredefinido ?? null,
+                          nombre: design.nombre,
+                          preview: design.tipo === 'PREDEFINIDO' ? design.preview : null,
+                          posicion: design.posicion,
+                          x: design.x,
+                          y: design.y,
+                          scale: design.scale,
+                          rotation: design.rotation,
+                        })),
+                      };
+
+                      window.sessionStorage.setItem(
+                        `gtt_customization_${customizationId}`,
+                        JSON.stringify(customizationPayload),
+                      );
+
                       const params = new URLSearchParams({
                         producto: String(product.idProducto),
                         color: selectedColor.nombre,
                         talla: selectedSize || '',
                         cantidad: quantity.toString(),
                         personalizacion: 'true',
-                        disenos: designs.length.toString()
+                        disenos: designs.length.toString(),
+                        customizationId,
                       });
+
                       router.push(`/solicitar-cotizacion?${params.toString()}`);
                     }}
                   >

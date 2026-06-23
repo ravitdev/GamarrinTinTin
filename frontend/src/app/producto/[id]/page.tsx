@@ -31,6 +31,8 @@ import type { ProductSize, PredefinedDesign, Producto } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useCart } from '@/features/cart/hooks/use-cart';
 import { toast } from '@/hooks/use-toast';
+import { DisenoPredefinidoService } from '@/features/disenos/services/diseno-predefinido.service';
+
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -39,14 +41,39 @@ export default function ProductDetailPage() {
   const { cart, addToCart } = useCart();
   const [isAdding, setIsAdding] = useState(false);
   const [product, setProduct] = useState<any | null>(null);
+  const [predefinedDesigns, setPredefinedDesigns] = useState<PredefinedDesign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
   useEffect(() => {
-    ProductService.getProductDetail(productId)
-      .then(setProduct)
-      .catch((err) => setError(err.message))
-      .finally(() => setIsLoading(false));
+    async function cargarDetalle() {
+      try {
+        setIsLoading(true);
+
+        const [productoDetalle, disenos] = await Promise.all([
+          ProductService.getProductDetail(productId),
+          DisenoPredefinidoService.listarActivos(),
+        ]);
+
+        setProduct(productoDetalle);
+
+        setPredefinedDesigns(
+          disenos.map((diseno) => ({
+            id: diseno.idDisenoPredefinido ?? diseno.idDiseno ?? 0,
+            idDisenoPredefinido: diseno.idDisenoPredefinido,
+            nombre: diseno.nombre,
+            imagen: diseno.urlImagen ?? diseno.imagen ?? '',
+            urlImagen: diseno.urlImagen,
+          })) as PredefinedDesign[],
+        );
+      } catch (err: any) {
+        setError(err.message || 'No se pudo cargar el producto.');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    cargarDetalle();
   }, [productId]);
   
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
@@ -109,7 +136,6 @@ export default function ProductDetailPage() {
   const shouldQuote = isOutOfStock || product.esPersonalizable;
 
   const isPersonalizable = Boolean(product.esPersonalizable);
-  const predefinedDesigns = product.disenosPredefinidos || [];
   const hasPredefinedDesigns = predefinedDesigns.length > 0;
   const canCustomize = isPersonalizable;
 
@@ -118,8 +144,8 @@ export default function ProductDetailPage() {
   const unitPrice = product.precio * (1 - discountPercentage / 100);
   const totalPrice = unitPrice * quantity;
 
-  const pechoDesigns = predefinedDesigns.filter((d: any) => d.posicion === 'pecho');
-  const espaldaDesigns = predefinedDesigns.filter((d: any) => d.posicion === 'espalda');
+  const pechoDesigns = predefinedDesigns;
+  const espaldaDesigns = predefinedDesigns;
 
   const handleAddToCart = async () => {
     if (!selectedSize || !selectedColor || !selectedVariant) return;
@@ -421,11 +447,11 @@ export default function ProductDetailPage() {
                         </button>
                         {pechoDesigns.map((design: any) => (
                           <button
-                            key={design.id}
+                            key={design.idDisenoPredefinido ?? design.id}
                             onClick={() => setSelectedPechoDesign(design)}
                             className={cn(
                               'rounded-lg border px-3 py-2 text-sm transition-colors',
-                              selectedPechoDesign?.id === design.id
+                              (selectedPechoDesign as any)?.id === (design as any).id
                                 ? 'border-accent bg-accent/10 text-foreground'
                                 : 'border-border bg-card text-muted-foreground hover:border-accent/50'
                             )}

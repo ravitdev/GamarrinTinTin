@@ -1,9 +1,19 @@
-import { ApiClient } from '@/lib/api-client';
 import { mockQuotations } from '@/lib/mock-data';
 import type { Quotation } from '@/lib/types';
 
 export interface CreateQuotationPayload {
   productoId: number;
+  producto?: {
+    id: number;
+    nombre: string;
+    precio: number;
+    descripcion: string;
+    categoria: string;
+    descuentosVolumen: Array<{
+      cantidadMinima: number;
+      porcentajeDescuento: number;
+    }>;
+  };
   colorNombre: string;
   colorHex: string;
   talla: string;
@@ -51,44 +61,14 @@ export class QuotationService {
   static async submitQuotationRequest(data: CreateQuotationPayload): Promise<Quotation> {
     const list = this.getStoredQuotations();
     
-    // Simular que obtenemos el producto
-    let productoInfo = {
-      id: data.productoId,
-      nombre: 'Polo Clásico Algodón',
-      precio: 45.00,
-      descripcion: 'Polo de algodón pima peruano de alta calidad.',
-      categoria: 'Polos',
-      descuentosVolumen: [
-        { cantidadMinima: 10, porcentajeDescuento: 5 },
-        { cantidadMinima: 25, porcentajeDescuento: 10 }
-      ]
-    };
-
-    if (data.productoId === 3) {
-      productoInfo = {
-        id: 3,
-        nombre: 'Polera Básica Unisex',
-        precio: 85.00,
-        descripcion: 'Polera de algodón suave con capucha.',
-        categoria: 'Poleras',
-        descuentosVolumen: [
-          { cantidadMinima: 10, porcentajeDescuento: 5 },
-          { cantidadMinima: 25, porcentajeDescuento: 12 }
-        ]
-      };
-    } else if (data.productoId === 2) {
-      productoInfo = {
-        id: 2,
-        nombre: 'Polo Sport Dry-Fit',
-        precio: 55.00,
-        descripcion: 'Polo deportivo con tecnología dry-fit.',
-        categoria: 'Polos',
-        descuentosVolumen: [
-          { cantidadMinima: 10, porcentajeDescuento: 5 },
-          { cantidadMinima: 25, porcentajeDescuento: 10 }
-        ]
-      };
-    }
+    const productoInfo = data.producto ?? {
+    id: data.productoId,
+    nombre: 'Producto personalizado',
+    precio: 0,
+    descripcion: 'Producto solicitado para cotización.',
+    categoria: 'Prenda',
+    descuentosVolumen: [],
+  };
 
     const nextId = list.length > 0 ? Math.max(...list.map(q => Number(q.id) || 0)) + 1 : 1;
     const nextCodeNum = String(nextId).padStart(3, '0');

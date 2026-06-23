@@ -564,8 +564,8 @@ export interface ColorProducto {
 
 export interface PredefinedDesign {
   id: number;
+  idDisenoPredefinido?: number;
   nombre: string;
-  posicion: 'pecho' | 'espalda';
   urlImagen: string;
+  imagen?: string;
 }
-
