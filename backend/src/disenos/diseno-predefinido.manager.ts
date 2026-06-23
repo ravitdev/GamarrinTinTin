@@ -32,7 +32,9 @@ export class DisenoPredefinidoManager {
       );
 
     if (existente) {
-      throw new Error('Ya existe un estampado con ese nombre.');
+      throw new Error(
+        'Ya existe un estampado con ese nombre. Por favor, ingrese un nombre diferente.',
+      );
     }
 
     const timestamp = Date.now();

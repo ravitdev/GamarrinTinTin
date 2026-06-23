@@ -27,7 +27,8 @@ import {
   ChevronDown,
   Shirt,
   User,
-  Package
+  Package,
+  ImageIcon
 } from "lucide-react"
 
 const navigation = [
@@ -35,6 +36,11 @@ const navigation = [
   { name: "Cotizaciones", href: "/vendedor/cotizaciones", icon: FileText },
   { name: "Pedidos", href: "/vendedor/pedidos", icon: ShoppingBag },
   { name: "Productos", href: "/vendedor/productos", icon: Package },
+  {
+    name: "Diseños predefinidos",
+    href: "/vendedor/disenos-predefinidos",
+    icon: ImageIcon,
+  },
 ]
 
 export default function VendedorLayout({

@@ -29,7 +29,8 @@ import {
   Bell,
   ChevronDown,
   User,
-  Shirt
+  Shirt,
+  ImageIcon
 } from "lucide-react"
 
 const navigation = [
@@ -37,6 +38,11 @@ const navigation = [
   { name: "Pedidos", href: "/admin/pedidos", icon: ShoppingBag },
   { name: "Cotizaciones", href: "/admin/cotizaciones", icon: FileText },
   { name: "Productos", href: "/admin/productos", icon: Package },
+  {
+    name: "Diseños predefinidos",
+    href: "/admin/disenos-predefinidos",
+    icon: ImageIcon,
+  },
   { name: "Clientes", href: "/admin/clientes", icon: Users },
   { name: "Vendedores", href: "/admin/vendedores", icon: Users },
   { name: "Configuracion", href: "/admin/configuracion", icon: Settings },
