@@ -9,20 +9,13 @@ import {
   ChevronLeft, 
   AlertTriangle, 
   Sparkles, 
-  Package, 
-  User, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Building2,
-  Clock
+  Package,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -34,7 +27,7 @@ import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { QuotationService } from '../services/quotation.service';
 import { ProductService } from '@/features/product/services/product.service';
-import type { Producto } from '@/lib/types';
+import type { Producto, ProductoVariante } from '@/lib/types';
 import { formatPrice } from '@/lib/mock-data';
 
 interface CustomizationSummary {
@@ -66,8 +59,7 @@ export function SolicitarCotizacionScreen() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
-  const { user, isLoggedIn, isHydrating } = useAuth();
-
+  const { isLoggedIn, isHydrating } = useAuth();
   // Query params
   const queryProductId = searchParams.get('producto') || '';
   const queryColor = searchParams.get('color') || 'Blanco';
@@ -84,21 +76,12 @@ export function SolicitarCotizacionScreen() {
   useState<CustomizationSummary | null>(null);
 
   // Form state
-  const [comentarios, setComentarios] = useState('');
   const [razon, setRazon] = useState<'PERSONALIZACION' | 'STOCK_INSUFICIENTE'>(
     queryPersonalizacion ? 'PERSONALIZACION' : 'STOCK_INSUFICIENTE'
   );
-
-  // Client info state (pre-filled if logged in)
-  const [clientInfo, setClientInfo] = useState({
-    nombres: '',
-    apellidos: '',
-    correo: '',
-    celular: '',
-    tipoDocumento: 'DNI',
-    documento: '',
-    direccion: '',
-  });
+  const [quantity, setQuantity] = useState(
+    Number.isInteger(queryCantidad) && queryCantidad > 0 ? queryCantidad : 1,
+  );
 
   // Enforce authentication
   useEffect(() => {
@@ -115,21 +98,6 @@ export function SolicitarCotizacionScreen() {
       router.push(`/login?callback=${callbackUrl}`);
     }
   }, [isLoggedIn, isHydrating, router, toast]);
-
-  // Pre-fill client info when user is loaded
-  useEffect(() => {
-    if (user) {
-      setClientInfo({
-        nombres: user.nombres || '',
-        apellidos: user.apellidos || '',
-        correo: user.email || '',
-        celular: user.telefono || '',
-        tipoDocumento: user.tipoDocumento || 'DNI',
-        documento: user.numeroDocumento || '',
-        direccion: user.direccion || '',
-      });
-    }
-  }, [user]);
 
   // Load product info
   useEffect(() => {
@@ -197,12 +165,29 @@ export function SolicitarCotizacionScreen() {
 
   const colorHex = product.colores?.find(c => c.nombre.toLowerCase() === queryColor.toLowerCase())?.codigoHex || '#FFFFFF';
 
+  const selectedVariant = (product.variantes ?? []).find(
+    (variante: ProductoVariante) =>
+      variante.colorNombre.toLowerCase() === queryColor.toLowerCase() &&
+      variante.talla === queryTalla,
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clientInfo.nombres.trim() || !clientInfo.apellidos.trim() || !clientInfo.correo.trim() || !clientInfo.celular.trim() || !clientInfo.documento.trim()) {
+
+    if (!selectedVariant?.idProductoVariante) {
       toast({
-        title: 'Campos obligatorios',
-        description: 'Por favor completa toda la información personal y de contacto.',
+        title: 'Variante no disponible',
+        description:
+          'No se encontró la combinación de color y talla seleccionada para solicitar la cotización.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      toast({
+        title: 'Cantidad inválida',
+        description: 'Debe ingresar una cantidad válida.',
         variant: 'destructive',
       });
       return;
@@ -212,71 +197,36 @@ export function SolicitarCotizacionScreen() {
     try {
       const personalizationDesigns = customizationSummary?.designs ?? [];
 
-      const describeDesign = (design: (typeof personalizationDesigns)[number]) => {
-        const tipo =
-          design.tipo === 'PREDEFINIDO'
-            ? 'Predefinido'
-            : 'Subido por cliente';
-
-        return `${design.nombre} (${tipo}, ${Math.round(design.scale * 100)}%, x:${Math.round(design.x)}%, y:${Math.round(design.y)}%)`;
-      };
-
-      const disenoPecho =
-        personalizationDesigns
-          .filter((design) => design.posicion === 'pecho')
-          .map(describeDesign)
-          .join(', ') || null;
-
-      const disenoEspalda =
-        personalizationDesigns
-          .filter((design) => design.posicion === 'espalda')
-          .map(describeDesign)
-          .join(', ') || null;
-
-      const productSnapshot = {
-        id: product.idProducto,
-        nombre: product.nombre,
-        precio: product.precio ?? product.precioBase,
-        descripcion: product.descripcion,
-        categoria:
-          typeof product.categoria === 'string'
-            ? product.categoria
-            : product.categoria?.nombre ?? 'Prenda',
-        descuentosVolumen: (product.descuentosVolumen ?? []).map((descuento) => ({
-          cantidadMinima: descuento.cantidadMinima,
-          porcentajeDescuento: descuento.porcentajeDescuento,
-        })),
-      };
+      const imagenesPersonalizacion = personalizationDesigns
+        .filter((design) => Boolean(design.preview))
+        .map((design, index) => ({
+          idDisenoPredefinido: design.idDisenoPredefinido ?? null,
+          urlImagen: design.preview as string,
+          lado: design.posicion === 'pecho' ? 'FRONT' as const : 'BACK' as const,
+          xPosicion: design.x,
+          yPosicion: design.y,
+          anchoPorcentaje: Math.min(Math.max(design.scale * 30, 1), 100),
+          altoPorcentaje: Math.min(Math.max(design.scale * 30, 1), 100),
+          displayOrder: index,
+        }));
 
       await QuotationService.submitQuotationRequest({
-        productoId: product.idProducto,
-        producto: productSnapshot,
-        colorNombre: queryColor,
-        colorHex: colorHex,
-        talla: queryTalla,
-        cantidad: queryCantidad,
-        razon: razon,
-        comentarios: comentarios,
-        cliente: {
-          nombres: clientInfo.nombres,
-          apellidos: clientInfo.apellidos,
-          correo: clientInfo.correo,
-          celular: clientInfo.celular,
-          tipoDocumento: clientInfo.tipoDocumento,
-          documento: clientInfo.documento,
-          direccion: clientInfo.direccion,
-        },
-        disenoPecho: disenoPecho ?? (queryPersonalizacion ? 'Diseño personalizado pecho' : null),
-        disenoEspalda:
-          disenoEspalda ??
-          (queryPersonalizacion && queryDisenos > 1
-            ? 'Diseño personalizado espalda'
-            : null),
+        idProductoVariante: selectedVariant.idProductoVariante,
+        cantidad: quantity,
+        razon,
+        ...(imagenesPersonalizacion.length > 0
+          ? {
+              personalizacion: {
+                imagenes: imagenesPersonalizacion,
+              },
+            }
+          : {}),
       });
 
       toast({
-        title: 'Solicitud enviada',
-        description: 'Tu cotización ha sido registrada. Nuestro equipo te responderá pronto.',
+        title: 'Solicitud enviada correctamente',
+        description:
+          'Tu solicitud fue enviada correctamente y está pendiente de revisión por un vendedor.',
       });
       router.push('/mis-cotizaciones');
     } catch (err: any) {
@@ -338,15 +288,20 @@ export function SolicitarCotizacionScreen() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="comentarios">Instrucciones o Comentarios Adicionales</Label>
-                <Textarea
-                  id="comentarios"
-                  placeholder="Detalla aquí cualquier especificación sobre estampados, empaque o entrega..."
-                  rows={4}
-                  value={comentarios}
-                  onChange={(e) => setComentarios(e.target.value)}
+                <Label htmlFor="cantidad">Cantidad solicitada</Label>
+                <Input
+                  id="cantidad"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={quantity}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    setQuantity(Number.isNaN(value) ? 0 : value);
+                  }}
                 />
               </div>
+
             </div>
 
             {customizationSummary && customizationSummary.designs.length > 0 && (
@@ -399,94 +354,6 @@ export function SolicitarCotizacionScreen() {
             </div>
           )}
 
-            {/* Client information */}
-            <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
-              <h3 className="font-medium text-foreground flex items-center gap-2 border-b border-border pb-3">
-                <User className="h-5 w-5 text-accent" />
-                Información del Solicitante
-              </h3>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="nombres">Nombres *</Label>
-                  <Input
-                    id="nombres"
-                    value={clientInfo.nombres}
-                    onChange={(e) => setClientInfo({ ...clientInfo, nombres: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="apellidos">Apellidos *</Label>
-                  <Input
-                    id="apellidos"
-                    value={clientInfo.apellidos}
-                    onChange={(e) => setClientInfo({ ...clientInfo, apellidos: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="correo">Correo Electrónico *</Label>
-                  <Input
-                    id="correo"
-                    type="email"
-                    value={clientInfo.correo}
-                    onChange={(e) => setClientInfo({ ...clientInfo, correo: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="celular">Número Celular *</Label>
-                  <Input
-                    id="celular"
-                    value={clientInfo.celular}
-                    onChange={(e) => setClientInfo({ ...clientInfo, celular: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="space-y-2">
-                  <Label htmlFor="tipoDocumento">Tipo Documento</Label>
-                  <Select 
-                    value={clientInfo.tipoDocumento} 
-                    onValueChange={(v) => setClientInfo({ ...clientInfo, tipoDocumento: v })}
-                  >
-                    <SelectTrigger id="tipoDocumento">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="DNI">DNI</SelectItem>
-                      <SelectItem value="RUC">RUC</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="documento">Número Documento *</Label>
-                  <Input
-                    id="documento"
-                    value={clientInfo.documento}
-                    onChange={(e) => setClientInfo({ ...clientInfo, documento: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="direccion">Dirección de Envío / Tienda de Recojo</Label>
-                <Input
-                  id="direccion"
-                  placeholder="Ej. Calle Los Lirios 123, Lince (O indicar 'Recojo en tienda')"
-                  value={clientInfo.direccion}
-                  onChange={(e) => setClientInfo({ ...clientInfo, direccion: e.target.value })}
-                />
-              </div>
-            </div>
-
             <Button
               type="submit"
               className="w-full gap-2 bg-accent text-accent-foreground hover:bg-accent/90 py-6 text-lg rounded-xl"
@@ -535,7 +402,7 @@ export function SolicitarCotizacionScreen() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Cantidad:</span>
-                  <Badge variant="secondary">{queryCantidad} unidades</Badge>
+                  <Badge variant="secondary">{quantity} unidades</Badge>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Personalización:</span>
@@ -550,7 +417,7 @@ export function SolicitarCotizacionScreen() {
                 </div>
                 <div className="flex justify-between border-t border-dashed border-border pt-2 text-base font-semibold">
                   <span>Precio Base Total:</span>
-                  <span>{formatPrice(product.precioBase * queryCantidad)}</span>
+                  <span>{formatPrice(product.precioBase * quantity)}</span>
                 </div>
               </div>
 

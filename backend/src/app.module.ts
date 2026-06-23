@@ -7,6 +7,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ProductosModule } from './productos/producto.module';
 import { UsuarioModule } from './usuarios/usuario.module';
 import { DisenoPredefinidoModule } from './disenos/diseno-predefinido.module';
+import { CotizacionModule } from './cotizaciones/cotizacion.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { DisenoPredefinidoModule } from './disenos/diseno-predefinido.module';
     UsuarioModule,
     PedidoModule,
     DisenoPredefinidoModule,
+    CotizacionModule,
   ],
   controllers: [AppController],
   providers: [AppService],
