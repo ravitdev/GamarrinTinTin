@@ -37,6 +37,31 @@ import { ProductService } from '@/features/product/services/product.service';
 import type { Producto } from '@/lib/types';
 import { formatPrice } from '@/lib/mock-data';
 
+interface CustomizationSummary {
+  producto: {
+    idProducto: number;
+    nombre: string;
+  };
+  color: {
+    nombre: string;
+    codigoHex: string;
+  };
+  talla: string | null;
+  cantidad: number;
+  designs: Array<{
+    id: string;
+    tipo: 'SUBIDO' | 'PREDEFINIDO';
+    idDisenoPredefinido: number | null;
+    nombre: string;
+    preview: string | null;
+    posicion: 'pecho' | 'espalda';
+    x: number;
+    y: number;
+    scale: number;
+    rotation: number;
+  }>;
+}
+
 export function SolicitarCotizacionScreen() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -50,10 +75,13 @@ export function SolicitarCotizacionScreen() {
   const queryCantidad = parseInt(searchParams.get('cantidad') || '1', 10);
   const queryPersonalizacion = searchParams.get('personalizacion') === 'true';
   const queryDisenos = parseInt(searchParams.get('disenos') || '0', 10);
+  const queryCustomizationId = searchParams.get('customizationId') || '';
 
   const [product, setProduct] = useState<Producto | null>(null);
   const [isLoadingProduct, setIsLoadingProduct] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [customizationSummary, setCustomizationSummary] =
+  useState<CustomizationSummary | null>(null);
 
   // Form state
   const [comentarios, setComentarios] = useState('');
@@ -122,6 +150,22 @@ export function SolicitarCotizacionScreen() {
     }
   }, [queryProductId, toast]);
 
+  useEffect(() => {
+    if (!queryCustomizationId || typeof window === 'undefined') return;
+
+    const raw = window.sessionStorage.getItem(
+      `gtt_customization_${queryCustomizationId}`,
+    );
+
+    if (!raw) return;
+
+    try {
+      setCustomizationSummary(JSON.parse(raw) as CustomizationSummary);
+    } catch {
+      setCustomizationSummary(null);
+    }
+  }, [queryCustomizationId]);
+
   if (isHydrating || !isLoggedIn) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
@@ -166,8 +210,47 @@ export function SolicitarCotizacionScreen() {
 
     setIsSubmitting(true);
     try {
+      const personalizationDesigns = customizationSummary?.designs ?? [];
+
+      const describeDesign = (design: (typeof personalizationDesigns)[number]) => {
+        const tipo =
+          design.tipo === 'PREDEFINIDO'
+            ? 'Predefinido'
+            : 'Subido por cliente';
+
+        return `${design.nombre} (${tipo}, ${Math.round(design.scale * 100)}%, x:${Math.round(design.x)}%, y:${Math.round(design.y)}%)`;
+      };
+
+      const disenoPecho =
+        personalizationDesigns
+          .filter((design) => design.posicion === 'pecho')
+          .map(describeDesign)
+          .join(', ') || null;
+
+      const disenoEspalda =
+        personalizationDesigns
+          .filter((design) => design.posicion === 'espalda')
+          .map(describeDesign)
+          .join(', ') || null;
+
+      const productSnapshot = {
+        id: product.idProducto,
+        nombre: product.nombre,
+        precio: product.precio ?? product.precioBase,
+        descripcion: product.descripcion,
+        categoria:
+          typeof product.categoria === 'string'
+            ? product.categoria
+            : product.categoria?.nombre ?? 'Prenda',
+        descuentosVolumen: (product.descuentosVolumen ?? []).map((descuento) => ({
+          cantidadMinima: descuento.cantidadMinima,
+          porcentajeDescuento: descuento.porcentajeDescuento,
+        })),
+      };
+
       await QuotationService.submitQuotationRequest({
         productoId: product.idProducto,
+        producto: productSnapshot,
         colorNombre: queryColor,
         colorHex: colorHex,
         talla: queryTalla,
@@ -183,8 +266,12 @@ export function SolicitarCotizacionScreen() {
           documento: clientInfo.documento,
           direccion: clientInfo.direccion,
         },
-        disenoPecho: queryPersonalizacion ? 'Diseño Personalizado Pecho' : null,
-        disenoEspalda: queryPersonalizacion && queryDisenos > 1 ? 'Diseño Personalizado Espalda' : null
+        disenoPecho: disenoPecho ?? (queryPersonalizacion ? 'Diseño personalizado pecho' : null),
+        disenoEspalda:
+          disenoEspalda ??
+          (queryPersonalizacion && queryDisenos > 1
+            ? 'Diseño personalizado espalda'
+            : null),
       });
 
       toast({
@@ -261,6 +348,56 @@ export function SolicitarCotizacionScreen() {
                 />
               </div>
             </div>
+
+            {customizationSummary && customizationSummary.designs.length > 0 && (
+            <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
+              <h3 className="font-medium text-foreground flex items-center gap-2 border-b border-border pb-3">
+                <Sparkles className="h-5 w-5 text-accent" />
+                Resumen de Personalización
+              </h3>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {customizationSummary.designs.map((design) => (
+                  <div
+                    key={design.id}
+                    className="rounded-lg border border-border bg-muted p-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      {design.preview ? (
+                        <img
+                          src={design.preview}
+                          alt={design.nombre}
+                          className="h-12 w-12 rounded object-contain bg-card"
+                        />
+                      ) : (
+                        <div className="flex h-12 w-12 items-center justify-center rounded bg-card">
+                          <Sparkles className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                      )}
+
+                      <div>
+                        <p className="text-sm font-medium text-foreground">
+                          {design.nombre}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {design.tipo === 'PREDEFINIDO'
+                            ? 'Diseño predefinido'
+                            : 'Imagen subida por cliente'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                      <span>Lado: {design.posicion}</span>
+                      <span>Tamaño: {Math.round(design.scale * 100)}%</span>
+                      <span>X: {Math.round(design.x)}%</span>
+                      <span>Y: {Math.round(design.y)}%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
             {/* Client information */}
             <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
