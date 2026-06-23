@@ -31,7 +31,7 @@ describe('NotificacionManager', () => {
     await manager.enviarEstadoPedido('cliente@example.com', 12, 'ENVIADO');
 
     expect(adapter.mensajes[0].asunto).toContain('PED-12');
-    expect(adapter.mensajes[0].texto).toContain('ENVIADO');
+    expect(adapter.mensajes[0].html).toContain('Enviado');
   });
 
   it('incluye el enlace de recuperación', async () => {

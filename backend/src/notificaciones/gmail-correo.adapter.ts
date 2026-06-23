@@ -55,7 +55,6 @@ export class GmailCorreoAdapter implements ICorreoAdapter {
         from: this.remitente,
         to: mensaje.destinatario,
         subject: mensaje.asunto,
-        text: mensaje.texto,
         html: mensaje.html,
       });
       return true;

@@ -1,7 +1,6 @@
 export interface MensajeCorreo {
   destinatario: string;
   asunto: string;
-  texto: string;
   html: string;
 }
 
