@@ -7,6 +7,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ProductosModule } from './productos/producto.module';
 import { UsuarioModule } from './usuarios/usuario.module';
 import { CotizacionModule } from './cotizaciones/cotizacion.module';
+import { DisenoPredefinidoModule } from './disenos/diseno-predefinido.module';
 import { NotificacionModule } from './notificaciones/notificacion.module';
 
 @Module({
@@ -15,6 +16,7 @@ import { NotificacionModule } from './notificaciones/notificacion.module';
     ProductosModule,
     UsuarioModule,
     PedidoModule,
+    DisenoPredefinidoModule,
     CotizacionModule,
     NotificacionModule,
   ],

@@ -119,10 +119,12 @@ export class CotizacionManager {
     this.validarId(idCotizacion, 'La cotización no es válida.');
     this.validarId(atendidoPorId, 'El usuario que atiende no es válido.');
 
+    const precioCotizado = datos.precioCotizado ?? datos.precioPropuesto;
+
     if (
-      typeof datos.precioCotizado !== 'number' ||
-      !Number.isFinite(datos.precioCotizado) ||
-      datos.precioCotizado <= 0
+      typeof precioCotizado !== 'number' ||
+      !Number.isFinite(precioCotizado) ||
+      precioCotizado <= 0
     ) {
       throw new Error('El precio cotizado debe ser mayor a cero.');
     }
@@ -133,7 +135,7 @@ export class CotizacionManager {
     const cotizacion = await this.cotizacionRepository.responder(
       idCotizacion,
       atendidoPorId,
-      datos.precioCotizado,
+      precioCotizado,
       fechaExpiracion,
     );
 

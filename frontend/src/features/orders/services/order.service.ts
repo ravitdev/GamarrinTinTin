@@ -1,4 +1,4 @@
-import { ApiClient } from '@/lib/api-client';
+import { apiClient } from '@/lib/api-client';
 import type { Order, OrderStatus } from '@/lib/types';
 
 type BackendPedidoEstado =
@@ -9,6 +9,17 @@ type BackendPedidoEstado =
   | 'ENTREGADO'
   | 'CANCELADO';
 
+interface BackendPedidoCliente {
+  idUsuario?: number;
+  nombres: string;
+  apellidos: string;
+  email: string;
+  telefono: string;
+  tipoDocumento: string;
+  numeroDocumento: string;
+  direccion: string | null;
+}
+
 interface BackendPedidoDetalle {
   idPedidoDetalle: number;
   idProductoVariante: number;
@@ -18,31 +29,26 @@ interface BackendPedidoDetalle {
   subtotal: number;
   nombreProductoSnapshot: string;
   colorSnapshot: string;
+  colorHex?: string;
   tallaSnapshot: string;
 }
 
 interface BackendPedido {
   idPedido: number;
   idCliente: number;
+  cliente?: BackendPedidoCliente;
   fechaCreacion: string | Date;
+  fechaActualizacion?: string | Date;
   estado: BackendPedidoEstado;
   subtotal: number;
   descuentoTotal: number;
   total: number;
+  tipoEntrega?: 'ENVIO' | 'RECOJO_TIENDA';
   direccionSnapshot: string;
   detalles: BackendPedidoDetalle[];
-  cliente?: {
-    nombres: string;
-    apellidos: string;
-    email: string;
-    telefono: string;
-    tipoDocumento: string;
-    numeroDocumento: string;
-    direccion: string | null;
-  };
 }
 
-function mapEstadoPedido(estado: BackendPedidoEstado): OrderStatus {
+function mapBackendEstadoToFrontend(estado: BackendPedidoEstado): OrderStatus {
   const estados: Record<BackendPedidoEstado, OrderStatus> = {
     REGISTRADO: 'registrado',
     CONFIRMADO: 'confirmado',
@@ -50,6 +56,19 @@ function mapEstadoPedido(estado: BackendPedidoEstado): OrderStatus {
     ENVIADO: 'enviado',
     ENTREGADO: 'entregado',
     CANCELADO: 'cancelado',
+  };
+
+  return estados[estado];
+}
+
+function mapFrontendEstadoToBackend(estado: OrderStatus): BackendPedidoEstado {
+  const estados: Record<OrderStatus, BackendPedidoEstado> = {
+    registrado: 'REGISTRADO',
+    confirmado: 'CONFIRMADO',
+    en_proceso: 'PROCESANDO',
+    enviado: 'ENVIADO',
+    entregado: 'ENTREGADO',
+    cancelado: 'CANCELADO',
   };
 
   return estados[estado];
@@ -69,7 +88,7 @@ function mapBackendOrderToFrontend(pedido: BackendPedido): Order {
       direccion: pedido.cliente?.direccion ?? pedido.direccionSnapshot,
     },
     direccionEnvio: pedido.direccionSnapshot,
-    metodoPago: 'No especificado',
+    metodoPago: 'TARJETA',
     items: pedido.detalles.map((detalle) => ({
       id: detalle.idPedidoDetalle,
       producto: {
@@ -78,7 +97,7 @@ function mapBackendOrderToFrontend(pedido: BackendPedido): Order {
       },
       colorSeleccionado: {
         nombre: detalle.colorSnapshot,
-        hexCode: '#000000',
+        hexCode: detalle.colorHex ?? '#E5E7EB',
       },
       tallaSeleccionada: detalle.tallaSnapshot,
       cantidad: detalle.cantidad,
@@ -87,50 +106,75 @@ function mapBackendOrderToFrontend(pedido: BackendPedido): Order {
     subtotal: pedido.subtotal,
     descuento: pedido.descuentoTotal,
     total: pedido.total,
-    estado: mapEstadoPedido(pedido.estado),
+    estado: mapBackendEstadoToFrontend(pedido.estado),
     createdAt: pedido.fechaCreacion,
-    updatedAt: pedido.fechaCreacion,
+    updatedAt: pedido.fechaActualizacion ?? pedido.fechaCreacion,
   };
 }
 
 export class OrderService {
   static async getMyOrders(): Promise<Order[]> {
-    const pedidos = await ApiClient.get<BackendPedido[]>('/pedidos/propios');
+    const pedidos = await apiClient<BackendPedido[]>('/pedidos/propios', {
+      method: 'GET',
+      auth: true,
+    });
+
     return pedidos.map(mapBackendOrderToFrontend);
   }
 
-  static async getOrderDetail(id: string): Promise<Order> {
-    const pedido = await ApiClient.get<BackendPedido>(`/pedidos/propios/${id}`);
+  static async getOrderDetail(id: string | number): Promise<Order> {
+    const pedido = await apiClient<BackendPedido>(`/pedidos/propios/${id}`, {
+      method: 'GET',
+      auth: true,
+    });
+
     return mapBackendOrderToFrontend(pedido);
   }
 
-  static async getAllOrders(): Promise<Order[]> {
-    const pedidos =
-      await ApiClient.get<BackendPedido[]>('/pedidos/gestion/todos');
+  static async getAllOrders(params?: {
+    estado?: OrderStatus | 'all';
+  }): Promise<Order[]> {
+    const query =
+      params?.estado && params.estado !== 'all'
+        ? `?estado=${encodeURIComponent(mapFrontendEstadoToBackend(params.estado))}`
+        : '';
+
+    const pedidos = await apiClient<BackendPedido[]>(`/pedidos${query}`, {
+      method: 'GET',
+      auth: true,
+    });
+
     return pedidos.map(mapBackendOrderToFrontend);
+  }
+
+  static async getManagementOrderDetail(
+    id: string | number,
+  ): Promise<Order> {
+    const pedido = await apiClient<BackendPedido>(`/pedidos/${id}`, {
+      method: 'GET',
+      auth: true,
+    });
+
+    return mapBackendOrderToFrontend(pedido);
   }
 
   static async updateOrderStatus(
     id: string | number,
     estado: OrderStatus,
   ): Promise<Order> {
-    const estadosBackend: Record<OrderStatus, BackendPedidoEstado> = {
-      registrado: 'REGISTRADO',
-      confirmado: 'CONFIRMADO',
-      en_proceso: 'PROCESANDO',
-      enviado: 'ENVIADO',
-      entregado: 'ENTREGADO',
-      cancelado: 'CANCELADO',
-    };
-    const pedido = await ApiClient.patch<BackendPedido>(
-      `/pedidos/gestion/${id}/estado`,
-      { estado: estadosBackend[estado] },
-    );
+    const pedido = await apiClient<BackendPedido>(`/pedidos/${id}/estado`, {
+      method: 'PATCH',
+      auth: true,
+      body: {
+        estado: mapFrontendEstadoToBackend(estado),
+      },
+    });
+
     return mapBackendOrderToFrontend(pedido);
   }
 
   static async cancelOrder(id: string): Promise<void> {
-    return;
+    await this.updateOrderStatus(id, 'cancelado');
   }
 
   static async getOrderTracking(id: string) {

@@ -43,6 +43,12 @@ export class CotizacionController {
     };
   }
 
+  @Get('mis-cotizaciones')
+  @Roles('CLIENTE')
+  async listarMisCotizaciones(@UsuarioActual() usuario: UsuarioAutenticado) {
+    return this.listarPropias(usuario);
+  }
+
   @Get('propias/:idCotizacion')
   @Roles('CLIENTE')
   async consultarPropia(
@@ -82,12 +88,31 @@ export class CotizacionController {
     };
   }
 
+  @Get()
+  @Roles('VENDEDOR', 'ADMINISTRADOR')
+  async listarTodas() {
+    return this.listarSolicitudes();
+  }
+
   @Get('solicitudes/:idCotizacion')
   @Roles('VENDEDOR', 'ADMINISTRADOR')
   async consultarSolicitud(@Param('idCotizacion') idCotizacion: string) {
     return this.ejecutar(() =>
       this.cotizacionManager.consultarSolicitud(Number(idCotizacion)),
     );
+  }
+
+  @Get(':idCotizacion')
+  @Roles('CLIENTE', 'VENDEDOR', 'ADMINISTRADOR')
+  async consultarDetalle(
+    @UsuarioActual() usuario: UsuarioAutenticado,
+    @Param('idCotizacion') idCotizacion: string,
+  ) {
+    if (usuario.rol === 'CLIENTE') {
+      return this.consultarPropia(usuario, idCotizacion);
+    }
+
+    return this.consultarSolicitud(idCotizacion);
   }
 
   @Patch(':idCotizacion/respuesta')
@@ -106,6 +131,16 @@ export class CotizacionController {
         ),
       'Cotización respondida correctamente.',
     );
+  }
+
+  @Patch(':idCotizacion/responder')
+  @Roles('VENDEDOR', 'ADMINISTRADOR')
+  async responderCompatibilidad(
+    @UsuarioActual() usuario: UsuarioAutenticado,
+    @Param('idCotizacion') idCotizacion: string,
+    @Body() body: ResponderCotizacionDto,
+  ) {
+    return this.responder(usuario, idCotizacion, body);
   }
 
   @Post('procesar-vencidas')

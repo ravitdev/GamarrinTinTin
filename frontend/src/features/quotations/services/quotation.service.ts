@@ -1,10 +1,28 @@
 import { ApiClient } from '@/lib/api-client';
 import type { Quotation, QuotationStatus } from '@/lib/types';
 
+export interface ImagenPersonalizacionCotizacionPayload {
+  idDisenoPredefinido?: number | null;
+  urlImagen: string;
+  lado: 'FRONT' | 'BACK';
+  xPosicion: number;
+  yPosicion: number;
+  anchoPorcentaje: number;
+  altoPorcentaje: number;
+  displayOrder?: number;
+}
+
 export interface CreateQuotationPayload {
   idProductoVariante: number;
   cantidad: number;
   razon: 'PERSONALIZACION' | 'STOCK_INSUFICIENTE';
+  personalizacion?: {
+    imagenes: ImagenPersonalizacionCotizacionPayload[];
+  };
+}
+
+export interface RespondQuotationPayload {
+  precioPropuesto: number;
 }
 
 interface BackendQuotation {
@@ -25,6 +43,8 @@ interface BackendQuotation {
   precioBaseSnapshot: number;
   fechaCreacion: string;
   fechaActualizacion: string;
+  disenoPecho?: string | null;
+  disenoEspalda?: string | null;
   cliente?: {
     nombres: string;
     apellidos: string;
@@ -89,6 +109,8 @@ function mapBackendQuotation(cotizacion: BackendQuotation): Quotation {
         ? undefined
         : Number(cotizacion.precioCotizado),
     fechaVencimiento: cotizacion.fechaExpiracion ?? undefined,
+    disenoPecho: cotizacion.disenoPecho ?? null,
+    disenoEspalda: cotizacion.disenoEspalda ?? null,
   };
 }
 
@@ -124,24 +146,33 @@ export class QuotationService {
     return mapBackendQuotation(cotizacion);
   }
 
+  static async respondQuotation(
+    id: string | number,
+    data: RespondQuotationPayload,
+  ): Promise<Quotation> {
+    const cotizacion = await ApiClient.patch<BackendQuotation>(
+      `/cotizaciones/${id}/respuesta`,
+      {
+        precioCotizado: data.precioPropuesto,
+      },
+    );
+    return mapBackendQuotation(cotizacion);
+  }
+
   static async updateQuotation(
     id: string | number,
     updates: Partial<Quotation>,
   ): Promise<Quotation> {
     if (
-      updates.estado !== 'cotizado' ||
-      typeof updates.precioSugerido !== 'number'
+      updates.estado === 'cotizado' &&
+      typeof updates.precioSugerido === 'number'
     ) {
-      throw new Error('La operación solicitada para la cotización no es válida.');
+      return this.respondQuotation(id, {
+        precioPropuesto: updates.precioSugerido,
+      });
     }
 
-    const cotizacion = await ApiClient.patch<BackendQuotation>(
-      `/cotizaciones/${id}/respuesta`,
-      {
-        precioCotizado: updates.precioSugerido,
-      },
-    );
-    return mapBackendQuotation(cotizacion);
+    throw new Error('La operacion solicitada para la cotizacion no es valida.');
   }
 
   static async addQuotationToCart(

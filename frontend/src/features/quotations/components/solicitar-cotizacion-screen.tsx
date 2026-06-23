@@ -9,13 +9,7 @@ import {
   ChevronLeft, 
   AlertTriangle, 
   Sparkles, 
-  Package, 
-  User, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Building2,
-  Clock
+  Package,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -33,15 +27,39 @@ import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { QuotationService } from '../services/quotation.service';
 import { ProductService } from '@/features/product/services/product.service';
-import type { Producto } from '@/lib/types';
+import type { Producto, ProductoVariante } from '@/lib/types';
 import { formatPrice } from '@/lib/mock-data';
+
+interface CustomizationSummary {
+  producto: {
+    idProducto: number;
+    nombre: string;
+  };
+  color: {
+    nombre: string;
+    codigoHex: string;
+  };
+  talla: string | null;
+  cantidad: number;
+  designs: Array<{
+    id: string;
+    tipo: 'SUBIDO' | 'PREDEFINIDO';
+    idDisenoPredefinido: number | null;
+    nombre: string;
+    preview: string | null;
+    posicion: 'pecho' | 'espalda';
+    x: number;
+    y: number;
+    scale: number;
+    rotation: number;
+  }>;
+}
 
 export function SolicitarCotizacionScreen() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
-  const { user, isLoggedIn, isHydrating } = useAuth();
-
+  const { isLoggedIn, isHydrating } = useAuth();
   // Query params
   const queryProductId = searchParams.get('producto') || '';
   const queryColor = searchParams.get('color') || 'Blanco';
@@ -49,26 +67,21 @@ export function SolicitarCotizacionScreen() {
   const queryCantidad = parseInt(searchParams.get('cantidad') || '1', 10);
   const queryPersonalizacion = searchParams.get('personalizacion') === 'true';
   const queryDisenos = parseInt(searchParams.get('disenos') || '0', 10);
+  const queryCustomizationId = searchParams.get('customizationId') || '';
 
   const [product, setProduct] = useState<Producto | null>(null);
   const [isLoadingProduct, setIsLoadingProduct] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [customizationSummary, setCustomizationSummary] =
+  useState<CustomizationSummary | null>(null);
 
   // Form state
   const [razon, setRazon] = useState<'PERSONALIZACION' | 'STOCK_INSUFICIENTE'>(
     queryPersonalizacion ? 'PERSONALIZACION' : 'STOCK_INSUFICIENTE'
   );
-
-  // Client info state (pre-filled if logged in)
-  const [clientInfo, setClientInfo] = useState({
-    nombres: '',
-    apellidos: '',
-    correo: '',
-    celular: '',
-    tipoDocumento: 'DNI',
-    documento: '',
-    direccion: '',
-  });
+  const [quantity, setQuantity] = useState(
+    Number.isInteger(queryCantidad) && queryCantidad > 0 ? queryCantidad : 1,
+  );
 
   // Enforce authentication
   useEffect(() => {
@@ -85,21 +98,6 @@ export function SolicitarCotizacionScreen() {
       router.push(`/login?callback=${callbackUrl}`);
     }
   }, [isLoggedIn, isHydrating, router, toast]);
-
-  // Pre-fill client info when user is loaded
-  useEffect(() => {
-    if (user) {
-      setClientInfo({
-        nombres: user.nombres || '',
-        apellidos: user.apellidos || '',
-        correo: user.email || '',
-        celular: user.telefono || '',
-        tipoDocumento: user.tipoDocumento || 'DNI',
-        documento: user.numeroDocumento || '',
-        direccion: user.direccion || '',
-      });
-    }
-  }, [user]);
 
   // Load product info
   useEffect(() => {
@@ -119,6 +117,22 @@ export function SolicitarCotizacionScreen() {
       setIsLoadingProduct(false);
     }
   }, [queryProductId, toast]);
+
+  useEffect(() => {
+    if (!queryCustomizationId || typeof window === 'undefined') return;
+
+    const raw = window.sessionStorage.getItem(
+      `gtt_customization_${queryCustomizationId}`,
+    );
+
+    if (!raw) return;
+
+    try {
+      setCustomizationSummary(JSON.parse(raw) as CustomizationSummary);
+    } catch {
+      setCustomizationSummary(null);
+    }
+  }, [queryCustomizationId]);
 
   if (isHydrating || !isLoggedIn) {
     return (
@@ -149,19 +163,31 @@ export function SolicitarCotizacionScreen() {
     );
   }
 
-  const varianteSeleccionada = product.variantes?.find(
-    (variante) =>
+  const colorHex = product.colores?.find(c => c.nombre.toLowerCase() === queryColor.toLowerCase())?.codigoHex || '#FFFFFF';
+
+  const selectedVariant = (product.variantes ?? []).find(
+    (variante: ProductoVariante) =>
       variante.colorNombre.toLowerCase() === queryColor.toLowerCase() &&
       variante.talla === queryTalla,
   );
-  const colorHex = varianteSeleccionada?.colorHex ?? '#FFFFFF';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clientInfo.nombres.trim() || !clientInfo.apellidos.trim() || !clientInfo.correo.trim() || !clientInfo.celular.trim() || !clientInfo.documento.trim()) {
+
+    if (!selectedVariant?.idProductoVariante) {
       toast({
-        title: 'Campos obligatorios',
-        description: 'Por favor completa toda la información personal y de contacto.',
+        title: 'Variante no disponible',
+        description:
+          'No se encontró la combinación de color y talla seleccionada para solicitar la cotización.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      toast({
+        title: 'Cantidad inválida',
+        description: 'Debe ingresar una cantidad válida.',
         variant: 'destructive',
       });
       return;
@@ -169,21 +195,38 @@ export function SolicitarCotizacionScreen() {
 
     setIsSubmitting(true);
     try {
-      if (!varianteSeleccionada) {
-        throw new Error(
-          'La combinación de color y talla seleccionada no está disponible.',
-        );
-      }
+      const personalizationDesigns = customizationSummary?.designs ?? [];
+
+      const imagenesPersonalizacion = personalizationDesigns
+        .filter((design) => Boolean(design.preview))
+        .map((design, index) => ({
+          idDisenoPredefinido: design.idDisenoPredefinido ?? null,
+          urlImagen: design.preview as string,
+          lado: design.posicion === 'pecho' ? 'FRONT' as const : 'BACK' as const,
+          xPosicion: design.x,
+          yPosicion: design.y,
+          anchoPorcentaje: Math.min(Math.max(design.scale * 30, 1), 100),
+          altoPorcentaje: Math.min(Math.max(design.scale * 30, 1), 100),
+          displayOrder: index,
+        }));
 
       await QuotationService.submitQuotationRequest({
-        idProductoVariante: varianteSeleccionada.idProductoVariante,
-        cantidad: queryCantidad,
+        idProductoVariante: selectedVariant.idProductoVariante,
+        cantidad: quantity,
         razon,
+        ...(imagenesPersonalizacion.length > 0
+          ? {
+              personalizacion: {
+                imagenes: imagenesPersonalizacion,
+              },
+            }
+          : {}),
       });
 
       toast({
-        title: 'Solicitud enviada',
-        description: 'Tu cotización ha sido registrada. Nuestro equipo te responderá pronto.',
+        title: 'Solicitud enviada correctamente',
+        description:
+          'Tu solicitud fue enviada correctamente y está pendiente de revisión por un vendedor.',
       });
       router.push('/mis-cotizaciones');
     } catch (err: any) {
@@ -244,95 +287,72 @@ export function SolicitarCotizacionScreen() {
                 </Select>
               </div>
 
-            </div>
-
-            {/* Client information */}
-            <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
-              <h3 className="font-medium text-foreground flex items-center gap-2 border-b border-border pb-3">
-                <User className="h-5 w-5 text-accent" />
-                Información del Solicitante
-              </h3>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="nombres">Nombres *</Label>
-                  <Input
-                    id="nombres"
-                    value={clientInfo.nombres}
-                    readOnly
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="apellidos">Apellidos *</Label>
-                  <Input
-                    id="apellidos"
-                    value={clientInfo.apellidos}
-                    readOnly
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="correo">Correo Electrónico *</Label>
-                  <Input
-                    id="correo"
-                    type="email"
-                    value={clientInfo.correo}
-                    readOnly
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="celular">Número Celular *</Label>
-                  <Input
-                    id="celular"
-                    value={clientInfo.celular}
-                    readOnly
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="space-y-2">
-                  <Label htmlFor="tipoDocumento">Tipo Documento</Label>
-                  <Select 
-                    value={clientInfo.tipoDocumento} 
-                    disabled
-                  >
-                    <SelectTrigger id="tipoDocumento">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="DNI">DNI</SelectItem>
-                      <SelectItem value="RUC">RUC</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="documento">Número Documento *</Label>
-                  <Input
-                    id="documento"
-                    value={clientInfo.documento}
-                    readOnly
-                    required
-                  />
-                </div>
-              </div>
-
               <div className="space-y-2">
-                <Label htmlFor="direccion">Dirección de Envío / Tienda de Recojo</Label>
+                <Label htmlFor="cantidad">Cantidad solicitada</Label>
                 <Input
-                  id="direccion"
-                  placeholder="Ej. Calle Los Lirios 123, Lince (O indicar 'Recojo en tienda')"
-                  value={clientInfo.direccion}
-                  readOnly
+                  id="cantidad"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={quantity}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    setQuantity(Number.isNaN(value) ? 0 : value);
+                  }}
                 />
               </div>
+
             </div>
+
+            {customizationSummary && customizationSummary.designs.length > 0 && (
+            <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
+              <h3 className="font-medium text-foreground flex items-center gap-2 border-b border-border pb-3">
+                <Sparkles className="h-5 w-5 text-accent" />
+                Resumen de Personalización
+              </h3>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {customizationSummary.designs.map((design) => (
+                  <div
+                    key={design.id}
+                    className="rounded-lg border border-border bg-muted p-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      {design.preview ? (
+                        <img
+                          src={design.preview}
+                          alt={design.nombre}
+                          className="h-12 w-12 rounded object-contain bg-card"
+                        />
+                      ) : (
+                        <div className="flex h-12 w-12 items-center justify-center rounded bg-card">
+                          <Sparkles className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                      )}
+
+                      <div>
+                        <p className="text-sm font-medium text-foreground">
+                          {design.nombre}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {design.tipo === 'PREDEFINIDO'
+                            ? 'Diseño predefinido'
+                            : 'Imagen subida por cliente'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                      <span>Lado: {design.posicion}</span>
+                      <span>Tamaño: {Math.round(design.scale * 100)}%</span>
+                      <span>X: {Math.round(design.x)}%</span>
+                      <span>Y: {Math.round(design.y)}%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
             <Button
               type="submit"
@@ -382,7 +402,7 @@ export function SolicitarCotizacionScreen() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Cantidad:</span>
-                  <Badge variant="secondary">{queryCantidad} unidades</Badge>
+                  <Badge variant="secondary">{quantity} unidades</Badge>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Personalización:</span>
@@ -397,7 +417,7 @@ export function SolicitarCotizacionScreen() {
                 </div>
                 <div className="flex justify-between border-t border-dashed border-border pt-2 text-base font-semibold">
                   <span>Precio Base Total:</span>
-                  <span>{formatPrice(product.precioBase * queryCantidad)}</span>
+                  <span>{formatPrice(product.precioBase * quantity)}</span>
                 </div>
               </div>
 

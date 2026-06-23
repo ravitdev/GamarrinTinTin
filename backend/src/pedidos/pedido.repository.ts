@@ -1,8 +1,46 @@
 import { Injectable } from '@nestjs/common';
+import {
+  EstadoPedido as PrismaEstadoPedido,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { Pedido } from './domain/pedido.entity';
-import { IPedidoRepository } from './ipedido.repository';
+import {
+  EstadoPedido,
+  Pedido,
+} from './domain/pedido.entity';
+import {
+  IPedidoRepository,
+  PedidoGestionRegistro,
+} from './ipedido.repository';
 import { PedidoMapper, PedidoRegistro } from './pedido.mapper';
+
+const pedidoGestionInclude = {
+  cliente: {
+    select: {
+      idUsuario: true,
+      nombres: true,
+      apellidos: true,
+      email: true,
+      telefono: true,
+      tipoDocumento: true,
+      numeroDocumento: true,
+      direccion: true,
+    },
+  },
+  detalles: {
+    include: {
+      productoVariante: {
+        select: {
+          colorHex: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.PedidoInclude;
+
+type PedidoGestionPrismaRegistro = Prisma.PedidoGetPayload<{
+  include: typeof pedidoGestionInclude;
+}>;
 
 @Injectable()
 export class PedidoRepository implements IPedidoRepository {
@@ -96,10 +134,12 @@ export class PedidoRepository implements IPedidoRepository {
         };
       }),
     );
+
     const subtotal = detallesPreparados.reduce(
       (acumulado, detalle) => acumulado + detalle.subtotal,
       0,
     );
+
     const descuentoTotal = pedido.descuentoTotal;
     const total = subtotal - descuentoTotal;
 
@@ -214,5 +254,86 @@ export class PedidoRepository implements IPedidoRepository {
     });
 
     return registros.map((registro) => PedidoMapper.aEntidad(registro));
+  }
+
+  async listarParaPersonal(
+    estado?: EstadoPedido,
+  ): Promise<PedidoGestionRegistro[]> {
+    const registros = await this.prisma.pedido.findMany({
+      where: estado ? { estado: estado as PrismaEstadoPedido } : undefined,
+      include: pedidoGestionInclude,
+      orderBy: { fechaCreacion: 'desc' },
+    });
+
+    return registros.map((registro) => this.aGestionRegistro(registro));
+  }
+
+  async buscarGestionPorId(
+    idPedido: number,
+  ): Promise<PedidoGestionRegistro | null> {
+    const registro = await this.prisma.pedido.findUnique({
+      where: { idPedido },
+      include: pedidoGestionInclude,
+    });
+
+    return registro ? this.aGestionRegistro(registro) : null;
+  }
+
+  async actualizarEstado(
+    idPedido: number,
+    estado: EstadoPedido,
+  ): Promise<PedidoGestionRegistro> {
+    const registro = await this.prisma.pedido.update({
+      where: { idPedido },
+      data: {
+        estado: estado as PrismaEstadoPedido,
+      },
+      include: pedidoGestionInclude,
+    });
+
+    return this.aGestionRegistro(registro);
+  }
+
+  private aGestionRegistro(
+    registro: PedidoGestionPrismaRegistro,
+  ): PedidoGestionRegistro {
+    return {
+      idPedido: registro.idPedido,
+      idCliente: registro.idCliente,
+      cliente: {
+        idUsuario: registro.cliente.idUsuario,
+        nombres: registro.cliente.nombres,
+        apellidos: registro.cliente.apellidos,
+        email: registro.cliente.email,
+        telefono: registro.cliente.telefono,
+        tipoDocumento: registro.cliente.tipoDocumento,
+        numeroDocumento: registro.cliente.numeroDocumento,
+        direccion: registro.cliente.direccion,
+      },
+      fechaCreacion: registro.fechaCreacion,
+      fechaActualizacion: registro.fechaActualizacion,
+      estado: registro.estado,
+      subtotal: this.aNumero(registro.subtotal),
+      descuentoTotal: this.aNumero(registro.descuentoTotal),
+      total: this.aNumero(registro.total),
+      tipoEntrega: registro.tipoEntrega,
+      direccionSnapshot: registro.direccionSnapshot,
+      detalles: registro.detalles.map((detalle) => ({
+        idPedidoDetalle: detalle.idPedidoDetalle,
+        idProductoVariante: detalle.idProductoVariante,
+        idCotizacion: detalle.idCotizacion,
+        cantidad: detalle.cantidad,
+        precioUnitario: this.aNumero(detalle.precioUnitario),
+        subtotal: this.aNumero(detalle.subtotal),
+        nombreProductoSnapshot: detalle.nombreProductoSnapshot,
+        colorSnapshot: detalle.colorSnapshot,
+        colorHex: detalle.productoVariante.colorHex,
+        tallaSnapshot: detalle.tallaSnapshot,
+      })),
+    };
+  }
+
+  private aNumero(valor: number | { toNumber(): number }): number {
+    return typeof valor === 'number' ? valor : valor.toNumber();
   }
 }

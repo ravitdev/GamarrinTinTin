@@ -3,7 +3,10 @@ import { NotificacionManager } from '../notificaciones/notificacion.manager';
 import type { IUsuarioRepository } from '../usuarios/iusuario.repository';
 import { EstadoPedido, Pedido, PedidoDetalle } from './domain/pedido.entity';
 import type { CrearPedidoDetalleDto } from './dto/crear-pedido.dto';
-import type { IPedidoRepository } from './ipedido.repository';
+import type {
+  IPedidoRepository,
+  PedidoGestionRegistro,
+} from './ipedido.repository';
 
 @Injectable()
 export class PedidoManager {
@@ -271,6 +274,64 @@ export class PedidoManager {
     return pedido;
   }
 
+  async listarParaPersonal(
+    estado?: EstadoPedido,
+  ): Promise<PedidoGestionRegistro[]> {
+    if (estado !== undefined) {
+      this.validarEstadoPedido(estado);
+    }
+
+    return this.pedidoRepo.listarParaPersonal(estado);
+  }
+
+  async consultarDetalleParaPersonal(
+    idPedido: number,
+  ): Promise<PedidoGestionRegistro> {
+    if (!this.esEnteroPositivo(idPedido)) {
+      throw new Error('El pedido no es válido.');
+    }
+
+    const pedido = await this.pedidoRepo.buscarGestionPorId(idPedido);
+
+    if (!pedido) {
+      throw new Error('El pedido no se encuentra disponible.');
+    }
+
+    return pedido;
+  }
+
+  async actualizarEstadoParaPersonal(
+    idPedido: number,
+    nuevoEstado: EstadoPedido,
+  ): Promise<PedidoGestionRegistro> {
+    if (!this.esEnteroPositivo(idPedido)) {
+      throw new Error('El pedido no es válido.');
+    }
+
+    this.validarEstadoPedido(nuevoEstado);
+
+    const pedido = await this.pedidoRepo.buscarGestionPorId(idPedido);
+
+    if (!pedido) {
+      throw new Error('El pedido no se encuentra disponible.');
+    }
+
+    this.validarTransicionEstado(pedido.estado, nuevoEstado);
+
+    const actualizado = await this.pedidoRepo.actualizarEstado(
+      idPedido,
+      nuevoEstado,
+    );
+
+    await this.notificacionManager?.enviarEstadoPedido(
+      actualizado.cliente.email,
+      actualizado.idPedido,
+      actualizado.estado,
+    );
+
+    return actualizado;
+  }
+
   private crearDetalle(item: CrearPedidoDetalleDto): PedidoDetalle {
     if (!item || typeof item !== 'object') {
       throw new Error('El detalle del pedido no es válido.');
@@ -301,6 +362,21 @@ export class PedidoManager {
       '',
       'M',
     );
+  }
+
+  private validarEstadoPedido(estado: EstadoPedido): void {
+    const estadosPermitidos: EstadoPedido[] = [
+      'REGISTRADO',
+      'CONFIRMADO',
+      'PROCESANDO',
+      'ENVIADO',
+      'ENTREGADO',
+      'CANCELADO',
+    ];
+
+    if (!estadosPermitidos.includes(estado)) {
+      throw new Error('El estado del pedido no es válido.');
+    }
   }
 
   private simularPago(tokenTarjeta: string): boolean {
