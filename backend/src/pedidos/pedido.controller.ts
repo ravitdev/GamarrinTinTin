@@ -5,11 +5,15 @@ import {
   HttpException,
   HttpStatus,
   Param,
+  Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
+import type { ActualizarEstadoPedidoDto } from './dto/actualizar-estado-pedido.dto';
 import type { CrearPedidoDto } from './dto/crear-pedido.dto';
 import type { ProcesarPagoDto } from './dto/procesar-pago.dto';
+import type { EstadoPedido } from './domain/pedido.entity';
 import { PedidoManager } from './pedido.manager';
 import { Roles, UsuarioActual } from '../usuarios/seguridad/auth.decorators';
 import { JwtAuthGuard } from '../usuarios/seguridad/jwt-auth.guard';
@@ -18,11 +22,11 @@ import type { UsuarioAutenticado } from '../usuarios/seguridad/usuario-autentica
 
 @Controller('pedidos')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('CLIENTE')
 export class PedidoController {
   constructor(private readonly pedidoManager: PedidoManager) {}
 
   @Post()
+  @Roles('CLIENTE')
   async crearPedido(
     @UsuarioActual() usuario: UsuarioAutenticado,
     @Body() body: CrearPedidoDto,
@@ -34,6 +38,7 @@ export class PedidoController {
         body.tipoEntrega,
         body.direccionEnvio,
       );
+
       return {
         success: true,
         message: 'Pedido registrado correctamente.',
@@ -45,6 +50,7 @@ export class PedidoController {
   }
 
   @Post(':idPedido/pago')
+  @Roles('CLIENTE')
   async procesarPago(
     @UsuarioActual() usuario: UsuarioAutenticado,
     @Param('idPedido') idPedido: string,
@@ -69,11 +75,13 @@ export class PedidoController {
   }
 
   @Get('propios')
+  @Roles('CLIENTE')
   async listarPorCliente(@UsuarioActual() usuario: UsuarioAutenticado) {
     return this.pedidoManager.listarPorCliente(usuario.idUsuario);
   }
 
   @Get('propios/:idPedido')
+  @Roles('CLIENTE')
   async consultarDetallePedidoPropio(
     @UsuarioActual() usuario: UsuarioAutenticado,
     @Param('idPedido') idPedido: string,
@@ -85,6 +93,60 @@ export class PedidoController {
       );
     } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.NOT_FOUND);
+    }
+  }
+
+  @Get()
+  @Roles('VENDEDOR', 'ADMINISTRADOR')
+  async listarParaPersonal(@Query('estado') estado?: EstadoPedido) {
+    try {
+      const pedidos = await this.pedidoManager.listarParaPersonal(estado);
+
+      return {
+        success: true,
+        data: pedidos,
+      };
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Get(':idPedido')
+  @Roles('VENDEDOR', 'ADMINISTRADOR')
+  async consultarDetalleParaPersonal(@Param('idPedido') idPedido: string) {
+    try {
+      const pedido = await this.pedidoManager.consultarDetalleParaPersonal(
+        Number(idPedido),
+      );
+
+      return {
+        success: true,
+        data: pedido,
+      };
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.NOT_FOUND);
+    }
+  }
+
+  @Patch(':idPedido/estado')
+  @Roles('VENDEDOR', 'ADMINISTRADOR')
+  async actualizarEstadoParaPersonal(
+    @Param('idPedido') idPedido: string,
+    @Body() body: ActualizarEstadoPedidoDto,
+  ) {
+    try {
+      const pedido = await this.pedidoManager.actualizarEstadoParaPersonal(
+        Number(idPedido),
+        body.estado,
+      );
+
+      return {
+        success: true,
+        message: 'El estado del pedido fue actualizado correctamente.',
+        data: pedido,
+      };
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
     }
   }
 }
