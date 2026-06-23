@@ -17,7 +17,9 @@ export interface IUsuarioRepository {
   listarUsuarios(): Promise<Usuario[]>;
   listarPorRol(rol: RolUsuario): Promise<Usuario[]>;
   contarPedidosEnProceso(idCliente: number): Promise<number>;
-  listarPedidosResumenPorCliente(idCliente: number): Promise<PedidoClienteResumenDto[]>;
+  listarPedidosResumenPorCliente(
+    idCliente: number,
+  ): Promise<PedidoClienteResumenDto[]>;
   guardarRefreshToken(
     idUsuario: number,
     refreshTokenHash: string,
@@ -27,6 +29,21 @@ export interface IUsuarioRepository {
     idUsuario: number,
   ): Promise<{ refreshTokenHash: string; fechaExpiracion: Date } | null>;
   revocarRefreshToken(idUsuario: number): Promise<boolean>;
+  guardarTokenRecuperacion?(
+    idUsuario: number,
+    tokenHash: string,
+    fechaExpiracion: Date,
+  ): Promise<boolean>;
+  obtenerTokenRecuperacion?(tokenHash: string): Promise<{
+    idToken: number;
+    idUsuario: number;
+    fechaExpiracion: Date;
+  } | null>;
+  consumirTokenRecuperacion?(
+    idToken: number,
+    idUsuario: number,
+    contrasenaHash: string,
+  ): Promise<boolean>;
   crearSolicitudCambioDocumento(
     solicitud: SolicitudCambioDocumento,
   ): Promise<SolicitudCambioDocumento>;

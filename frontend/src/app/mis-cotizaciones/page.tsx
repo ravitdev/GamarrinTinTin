@@ -111,6 +111,7 @@ export default function MisCotizacionesPage() {
 
   const handleAddToCart = async (quotation: Quotation) => {
     try {
+      await QuotationService.addQuotationToCart(quotation.id);
       await addToCart({
         productId: String(quotation.producto.id),
         productName: `${quotation.producto.nombre} (Cotizado)`,

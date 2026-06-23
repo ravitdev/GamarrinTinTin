@@ -10,4 +10,5 @@ export interface IPedidoRepository {
   ): Promise<boolean>;
   buscarPorId(idPedido: number): Promise<Pedido | null>;
   listarPorCliente(idCliente: number): Promise<Pedido[]>;
+  listarTodos?(): Promise<Pedido[]>;
 }

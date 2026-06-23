@@ -211,6 +211,93 @@ export class UsuarioRepository implements IUsuarioRepository {
     return resultado.count > 0;
   }
 
+  async guardarTokenRecuperacion(
+    idUsuario: number,
+    tokenHash: string,
+    fechaExpiracion: Date,
+  ): Promise<boolean> {
+    await this.prisma.$transaction([
+      this.prisma.tokenRecuperacionContrasena.updateMany({
+        where: {
+          idUsuario,
+          fechaUso: null,
+        },
+        data: {
+          fechaUso: new Date(),
+        },
+      }),
+      this.prisma.tokenRecuperacionContrasena.create({
+        data: {
+          idUsuario,
+          tokenHash,
+          fechaExpiracion,
+        },
+      }),
+    ]);
+
+    return true;
+  }
+
+  async obtenerTokenRecuperacion(tokenHash: string): Promise<{
+    idToken: number;
+    idUsuario: number;
+    fechaExpiracion: Date;
+  } | null> {
+    const token = await this.prisma.tokenRecuperacionContrasena.findUnique({
+      where: { tokenHash },
+    });
+
+    if (!token || token.fechaUso !== null) {
+      return null;
+    }
+
+    return {
+      idToken: token.idToken,
+      idUsuario: token.idUsuario,
+      fechaExpiracion: token.fechaExpiracion,
+    };
+  }
+
+  async consumirTokenRecuperacion(
+    idToken: number,
+    idUsuario: number,
+    contrasenaHash: string,
+  ): Promise<boolean> {
+    await this.prisma.$transaction(async (tx) => {
+      const actualizado = await tx.tokenRecuperacionContrasena.updateMany({
+        where: {
+          idToken,
+          idUsuario,
+          fechaUso: null,
+          fechaExpiracion: {
+            gt: new Date(),
+          },
+        },
+        data: {
+          fechaUso: new Date(),
+        },
+      });
+
+      if (actualizado.count === 0) {
+        throw new Error(
+          'El enlace de recuperación no es válido o ha expirado.',
+        );
+      }
+
+      await tx.usuario.update({
+        where: { idUsuario },
+        data: { contrasenaHash },
+      });
+
+      await tx.refreshToken.updateMany({
+        where: { idUsuario, revocado: false },
+        data: { revocado: true },
+      });
+    });
+
+    return true;
+  }
+
   async crearSolicitudCambioDocumento(
     solicitud: SolicitudCambioDocumento,
   ): Promise<SolicitudCambioDocumento> {

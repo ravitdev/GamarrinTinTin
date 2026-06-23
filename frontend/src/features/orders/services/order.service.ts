@@ -31,6 +31,15 @@ interface BackendPedido {
   total: number;
   direccionSnapshot: string;
   detalles: BackendPedidoDetalle[];
+  cliente?: {
+    nombres: string;
+    apellidos: string;
+    email: string;
+    telefono: string;
+    tipoDocumento: string;
+    numeroDocumento: string;
+    direccion: string | null;
+  };
 }
 
 function mapEstadoPedido(estado: BackendPedidoEstado): OrderStatus {
@@ -51,13 +60,13 @@ function mapBackendOrderToFrontend(pedido: BackendPedido): Order {
     id: pedido.idPedido,
     codigo: `PED-${String(pedido.idPedido).padStart(5, '0')}`,
     cliente: {
-      nombres: '',
-      apellidos: '',
-      correo: '',
-      celular: '',
-      tipoDocumento: '',
-      documento: '',
-      direccion: pedido.direccionSnapshot,
+      nombres: pedido.cliente?.nombres ?? '',
+      apellidos: pedido.cliente?.apellidos ?? '',
+      correo: pedido.cliente?.email ?? '',
+      celular: pedido.cliente?.telefono ?? '',
+      tipoDocumento: pedido.cliente?.tipoDocumento ?? '',
+      documento: pedido.cliente?.numeroDocumento ?? '',
+      direccion: pedido.cliente?.direccion ?? pedido.direccionSnapshot,
     },
     direccionEnvio: pedido.direccionSnapshot,
     metodoPago: 'No especificado',
@@ -92,6 +101,31 @@ export class OrderService {
 
   static async getOrderDetail(id: string): Promise<Order> {
     const pedido = await ApiClient.get<BackendPedido>(`/pedidos/propios/${id}`);
+    return mapBackendOrderToFrontend(pedido);
+  }
+
+  static async getAllOrders(): Promise<Order[]> {
+    const pedidos =
+      await ApiClient.get<BackendPedido[]>('/pedidos/gestion/todos');
+    return pedidos.map(mapBackendOrderToFrontend);
+  }
+
+  static async updateOrderStatus(
+    id: string | number,
+    estado: OrderStatus,
+  ): Promise<Order> {
+    const estadosBackend: Record<OrderStatus, BackendPedidoEstado> = {
+      registrado: 'REGISTRADO',
+      confirmado: 'CONFIRMADO',
+      en_proceso: 'PROCESANDO',
+      enviado: 'ENVIADO',
+      entregado: 'ENTREGADO',
+      cancelado: 'CANCELADO',
+    };
+    const pedido = await ApiClient.patch<BackendPedido>(
+      `/pedidos/gestion/${id}/estado`,
+      { estado: estadosBackend[estado] },
+    );
     return mapBackendOrderToFrontend(pedido);
   }
 

@@ -140,6 +140,7 @@ model Usuario {
   disenosPredefinidosCreados DisenoPredefinido[]   @relation("DisenoPredefinidoCreadoPor")
   solicitudesCambioDocumento SolicitudCambioDocumento[]
   solicitudesDesactivacion   SolicitudDesactivacion[]
+  tokensRecuperacion         TokenRecuperacionContrasena[]
 
   @@index([rol, estado])
   @@map("usuarios")
@@ -468,4 +469,18 @@ model Pago {
   @@index([idPedido])
   @@index([estado])
   @@map("pagos")
+}
+
+model TokenRecuperacionContrasena {
+  idToken         Int       @id @default(autoincrement()) @map("id_token")
+  idUsuario       Int       @map("id_usuario")
+  tokenHash       String    @unique @map("token_hash")
+  fechaExpiracion DateTime  @map("fecha_expiracion")
+  fechaUso        DateTime? @map("fecha_uso")
+  fechaCreacion   DateTime  @default(now()) @map("fecha_creacion")
+
+  usuario Usuario @relation(fields: [idUsuario], references: [idUsuario], onDelete: Cascade)
+
+  @@index([idUsuario, fechaExpiracion])
+  @@map("tokens_recuperacion_contrasena")
 }

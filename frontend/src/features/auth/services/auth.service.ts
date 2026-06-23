@@ -77,4 +77,23 @@ export class AuthService {
       usuario: raw.usuario,
     };
   }
+
+  static async requestPasswordReset(email: string): Promise<void> {
+    return ApiClient.post<void>(
+      '/usuarios/recuperar-contrasena',
+      { email },
+      { auth: false },
+    );
+  }
+
+  static async resetPassword(
+    token: string,
+    contrasenaNueva: string,
+  ): Promise<void> {
+    return ApiClient.post<void>(
+      '/usuarios/restablecer-contrasena',
+      { token, contrasenaNueva },
+      { auth: false },
+    );
+  }
 }

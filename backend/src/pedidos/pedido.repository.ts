@@ -23,7 +23,7 @@ export class PedidoRepository implements IPedidoRepository {
         include: { detalles: true },
       });
 
-      return PedidoMapper.aEntidad(registro as PedidoRegistro);
+      return PedidoMapper.aEntidad(registro);
     }
 
     const cliente = await this.prisma.usuario.findUnique({
@@ -46,7 +46,42 @@ export class PedidoRepository implements IPedidoRepository {
           throw new Error('Producto no disponible para el pedido.');
         }
 
-        const precioUnitario = variante.producto.precioBase.toNumber();
+        let precioUnitario = variante.producto.precioBase.toNumber();
+        let nombreProductoSnapshot = variante.producto.nombre;
+        let colorSnapshot = variante.colorNombre;
+        let tallaSnapshot = variante.talla;
+
+        if (detalle.idCotizacion !== null) {
+          const cotizacion = await this.prisma.cotizacion.findFirst({
+            where: {
+              idCotizacion: detalle.idCotizacion,
+              idCliente: pedido.idCliente,
+              idProductoVariante: detalle.idProductoVariante,
+              estado: 'COTIZADO',
+              fechaExpiracion: {
+                gt: new Date(),
+              },
+            },
+          });
+
+          if (!cotizacion || cotizacion.precioCotizado === null) {
+            throw new Error(
+              'La cotización no está disponible para generar el pedido.',
+            );
+          }
+
+          if (detalle.cantidad !== cotizacion.cantidad) {
+            throw new Error(
+              'La cantidad del pedido debe coincidir con la cotización.',
+            );
+          }
+
+          precioUnitario = cotizacion.precioCotizado.toNumber();
+          nombreProductoSnapshot = cotizacion.nombreProductoSnapshot;
+          colorSnapshot = cotizacion.colorSnapshot;
+          tallaSnapshot = cotizacion.tallaSnapshot;
+        }
+
         const subtotal = precioUnitario * detalle.cantidad;
 
         return {
@@ -55,9 +90,9 @@ export class PedidoRepository implements IPedidoRepository {
           cantidad: detalle.cantidad,
           precioUnitario,
           subtotal,
-          nombreProductoSnapshot: variante.producto.nombre,
-          colorSnapshot: variante.colorNombre,
-          tallaSnapshot: variante.talla,
+          nombreProductoSnapshot,
+          colorSnapshot,
+          tallaSnapshot,
         };
       }),
     );
@@ -84,7 +119,7 @@ export class PedidoRepository implements IPedidoRepository {
       include: { detalles: true },
     });
 
-    return PedidoMapper.aEntidad(registro as PedidoRegistro);
+    return PedidoMapper.aEntidad(registro);
   }
 
   async registrarPago(
@@ -93,15 +128,59 @@ export class PedidoRepository implements IPedidoRepository {
     pagoExitoso: boolean,
     referenciaExterna: string,
   ): Promise<boolean> {
-    await this.prisma.pago.create({
-      data: {
-        idPedido,
-        monto,
-        metodoPago: 'TARJETA',
-        estado: pagoExitoso ? 'PAGADO' : 'FALLO',
-        referenciaExterna,
-        fechaPago: pagoExitoso ? new Date() : null,
-      },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.pago.create({
+        data: {
+          idPedido,
+          monto,
+          metodoPago: 'TARJETA',
+          estado: pagoExitoso ? 'PAGADO' : 'FALLO',
+          referenciaExterna,
+          fechaPago: pagoExitoso ? new Date() : null,
+        },
+      });
+
+      if (!pagoExitoso) {
+        return;
+      }
+
+      const detallesCotizados = await tx.pedidoDetalle.findMany({
+        where: {
+          idPedido,
+          idCotizacion: {
+            not: null,
+          },
+        },
+        select: {
+          idCotizacion: true,
+        },
+      });
+      const idsCotizaciones = detallesCotizados
+        .map((detalle) => detalle.idCotizacion)
+        .filter(
+          (idCotizacion): idCotizacion is number => idCotizacion !== null,
+        );
+
+      if (idsCotizaciones.length > 0) {
+        await tx.cotizacion.updateMany({
+          where: {
+            idCotizacion: {
+              in: idsCotizaciones,
+            },
+          },
+          data: {
+            estado: 'PAGADO',
+          },
+        });
+
+        await tx.itemCarrito.deleteMany({
+          where: {
+            idCotizacion: {
+              in: idsCotizaciones,
+            },
+          },
+        });
+      }
     });
 
     return true;
@@ -113,7 +192,7 @@ export class PedidoRepository implements IPedidoRepository {
       include: { detalles: true },
     });
 
-    return registro ? PedidoMapper.aEntidad(registro as PedidoRegistro) : null;
+    return registro ? PedidoMapper.aEntidad(registro) : null;
   }
 
   async listarPorCliente(idCliente: number): Promise<Pedido[]> {
@@ -126,5 +205,14 @@ export class PedidoRepository implements IPedidoRepository {
     return registros.map((registro) =>
       PedidoMapper.aEntidad(registro as PedidoRegistro),
     );
+  }
+
+  async listarTodos(): Promise<Pedido[]> {
+    const registros = await this.prisma.pedido.findMany({
+      include: { detalles: true },
+      orderBy: { fechaCreacion: 'desc' },
+    });
+
+    return registros.map((registro) => PedidoMapper.aEntidad(registro));
   }
 }

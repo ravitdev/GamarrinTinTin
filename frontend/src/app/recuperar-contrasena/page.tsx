@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { Lock, Mail, ArrowLeft, KeyRound } from 'lucide-react';
+import { AuthService } from '@/features/auth/services/auth.service';
 
 export default function RecuperarContrasenaPage() {
   const [email, setEmail] = useState('');
@@ -27,15 +28,23 @@ export default function RecuperarContrasenaPage() {
     }
 
     setIsLoading(true);
-    // Simular envío de correo
-    setTimeout(() => {
+    try {
+      await AuthService.requestPasswordReset(email);
       setIsLoading(false);
       setIsSent(true);
       toast({
         title: 'Correo enviado',
         description: 'Hemos enviado las instrucciones a tu bandeja de correo.',
       });
-    }, 1500);
+    } catch (error) {
+      setIsLoading(false);
+      toast({
+        title: 'No se pudo procesar la solicitud',
+        description:
+          error instanceof Error ? error.message : 'Inténtalo nuevamente.',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (

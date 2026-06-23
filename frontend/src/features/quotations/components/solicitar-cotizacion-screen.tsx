@@ -22,7 +22,6 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -56,7 +55,6 @@ export function SolicitarCotizacionScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form state
-  const [comentarios, setComentarios] = useState('');
   const [razon, setRazon] = useState<'PERSONALIZACION' | 'STOCK_INSUFICIENTE'>(
     queryPersonalizacion ? 'PERSONALIZACION' : 'STOCK_INSUFICIENTE'
   );
@@ -151,7 +149,12 @@ export function SolicitarCotizacionScreen() {
     );
   }
 
-  const colorHex = product.colores?.find(c => c.nombre.toLowerCase() === queryColor.toLowerCase())?.codigoHex || '#FFFFFF';
+  const varianteSeleccionada = product.variantes?.find(
+    (variante) =>
+      variante.colorNombre.toLowerCase() === queryColor.toLowerCase() &&
+      variante.talla === queryTalla,
+  );
+  const colorHex = varianteSeleccionada?.colorHex ?? '#FFFFFF';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -166,25 +169,16 @@ export function SolicitarCotizacionScreen() {
 
     setIsSubmitting(true);
     try {
+      if (!varianteSeleccionada) {
+        throw new Error(
+          'La combinación de color y talla seleccionada no está disponible.',
+        );
+      }
+
       await QuotationService.submitQuotationRequest({
-        productoId: product.idProducto,
-        colorNombre: queryColor,
-        colorHex: colorHex,
-        talla: queryTalla,
+        idProductoVariante: varianteSeleccionada.idProductoVariante,
         cantidad: queryCantidad,
-        razon: razon,
-        comentarios: comentarios,
-        cliente: {
-          nombres: clientInfo.nombres,
-          apellidos: clientInfo.apellidos,
-          correo: clientInfo.correo,
-          celular: clientInfo.celular,
-          tipoDocumento: clientInfo.tipoDocumento,
-          documento: clientInfo.documento,
-          direccion: clientInfo.direccion,
-        },
-        disenoPecho: queryPersonalizacion ? 'Diseño Personalizado Pecho' : null,
-        disenoEspalda: queryPersonalizacion && queryDisenos > 1 ? 'Diseño Personalizado Espalda' : null
+        razon,
       });
 
       toast({
@@ -250,16 +244,6 @@ export function SolicitarCotizacionScreen() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="comentarios">Instrucciones o Comentarios Adicionales</Label>
-                <Textarea
-                  id="comentarios"
-                  placeholder="Detalla aquí cualquier especificación sobre estampados, empaque o entrega..."
-                  rows={4}
-                  value={comentarios}
-                  onChange={(e) => setComentarios(e.target.value)}
-                />
-              </div>
             </div>
 
             {/* Client information */}
@@ -275,7 +259,7 @@ export function SolicitarCotizacionScreen() {
                   <Input
                     id="nombres"
                     value={clientInfo.nombres}
-                    onChange={(e) => setClientInfo({ ...clientInfo, nombres: e.target.value })}
+                    readOnly
                     required
                   />
                 </div>
@@ -284,7 +268,7 @@ export function SolicitarCotizacionScreen() {
                   <Input
                     id="apellidos"
                     value={clientInfo.apellidos}
-                    onChange={(e) => setClientInfo({ ...clientInfo, apellidos: e.target.value })}
+                    readOnly
                     required
                   />
                 </div>
@@ -297,7 +281,7 @@ export function SolicitarCotizacionScreen() {
                     id="correo"
                     type="email"
                     value={clientInfo.correo}
-                    onChange={(e) => setClientInfo({ ...clientInfo, correo: e.target.value })}
+                    readOnly
                     required
                   />
                 </div>
@@ -306,7 +290,7 @@ export function SolicitarCotizacionScreen() {
                   <Input
                     id="celular"
                     value={clientInfo.celular}
-                    onChange={(e) => setClientInfo({ ...clientInfo, celular: e.target.value })}
+                    readOnly
                     required
                   />
                 </div>
@@ -317,7 +301,7 @@ export function SolicitarCotizacionScreen() {
                   <Label htmlFor="tipoDocumento">Tipo Documento</Label>
                   <Select 
                     value={clientInfo.tipoDocumento} 
-                    onValueChange={(v) => setClientInfo({ ...clientInfo, tipoDocumento: v })}
+                    disabled
                   >
                     <SelectTrigger id="tipoDocumento">
                       <SelectValue />
@@ -333,7 +317,7 @@ export function SolicitarCotizacionScreen() {
                   <Input
                     id="documento"
                     value={clientInfo.documento}
-                    onChange={(e) => setClientInfo({ ...clientInfo, documento: e.target.value })}
+                    readOnly
                     required
                   />
                 </div>
@@ -345,7 +329,7 @@ export function SolicitarCotizacionScreen() {
                   id="direccion"
                   placeholder="Ej. Calle Los Lirios 123, Lince (O indicar 'Recojo en tienda')"
                   value={clientInfo.direccion}
-                  onChange={(e) => setClientInfo({ ...clientInfo, direccion: e.target.value })}
+                  readOnly
                 />
               </div>
             </div>

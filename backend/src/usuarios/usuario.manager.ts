@@ -1,4 +1,6 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { createHash, randomBytes } from 'node:crypto';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import { NotificacionManager } from '../notificaciones/notificacion.manager';
 import type { ActualizarPerfilDto, CambiarContrasenaDto, UsuarioPerfilDto } from './dto/perfil.dto';
 import type { IniciarSesionDto } from './dto/iniciar-sesion.dto';
 import type { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -21,6 +23,8 @@ export class UsuarioManager {
     private readonly usuarioRepository: IUsuarioRepository,
     private readonly contrasenaService: ContrasenaService,
     private readonly jwtService: JwtService,
+    @Optional()
+    private readonly notificacionManager?: NotificacionManager,
   ) {}
 
   async iniciarSesion(credenciales: IniciarSesionDto): Promise<SesionDto> {
@@ -59,14 +63,24 @@ export class UsuarioManager {
 
   async registrarCuentaCliente(datos: RegistrarClienteDto): Promise<Usuario> {
     const usuario = this.crearUsuarioDesdeDatos(datos, 'CLIENTE');
-    return this.registrarCliente(usuario);
+    const registrado = await this.registrarCliente(usuario);
+    await this.notificacionManager?.enviarBienvenida(
+      registrado.email,
+      registrado.nombres,
+    );
+    return registrado;
   }
 
   async registrarUsuarioVendedor(
     datos: RegistrarVendedorDto,
   ): Promise<Usuario> {
     const usuario = this.crearUsuarioDesdeDatos(datos, 'VENDEDOR');
-    return this.registrarVendedor(usuario);
+    const registrado = await this.registrarVendedor(usuario);
+    await this.notificacionManager?.enviarBienvenida(
+      registrado.email,
+      registrado.nombres,
+    );
+    return registrado;
   }
 
   async cerrarSesion(idUsuario: number): Promise<boolean> {
@@ -235,12 +249,19 @@ export class UsuarioManager {
 
     this.validarContrasena(datos.contrasenaNueva);
 
-    return this.modificarDatosUsuario(
+    const actualizada = await this.modificarDatosUsuario(
       idUsuario,
       { contrasenaHash: this.contrasenaService.generarHash(datos.contrasenaNueva) },
       usuario.rol,
       false,
     );
+
+    if (actualizada) {
+      await this.usuarioRepository.revocarRefreshToken(idUsuario);
+      await this.notificacionManager?.enviarContrasenaActualizada(usuario.email);
+    }
+
+    return actualizada;
   }
 
   async solicitarCambioDocumento(
@@ -510,7 +531,79 @@ export class UsuarioManager {
   async recuperarContrasena(email: string): Promise<boolean> {
     const emailNormalizado = this.normalizarTexto(email).toLowerCase();
     this.validarEmail(emailNormalizado);
-    return this.usuarioRepository.existePorEmail(emailNormalizado);
+
+    const usuario = await this.usuarioRepository.buscarPorEmail(emailNormalizado);
+
+    // La respuesta no revela si una cuenta existe.
+    if (!usuario || !usuario.estaActivo()) {
+      return true;
+    }
+
+    if (
+      !this.usuarioRepository.guardarTokenRecuperacion ||
+      !this.notificacionManager
+    ) {
+      throw new Error('El servicio de recuperación no está disponible.');
+    }
+
+    const token = randomBytes(32).toString('hex');
+    const fechaExpiracion = new Date(Date.now() + 60 * 60 * 1000);
+
+    await this.usuarioRepository.guardarTokenRecuperacion(
+      usuario.idUsuario,
+      this.generarHashToken(token),
+      fechaExpiracion,
+    );
+
+    const frontendUrl =
+      process.env.FRONTEND_URL?.replace(/\/+$/, '') || 'http://localhost:3001';
+    const enlace = `${frontendUrl}/restablecer-contrasena?token=${encodeURIComponent(token)}`;
+
+    await this.notificacionManager.enviarRecuperacionContrasena(
+      usuario.email,
+      enlace,
+    );
+    return true;
+  }
+
+  async restablecerContrasena(
+    token: string,
+    contrasenaNueva: string,
+  ): Promise<boolean> {
+    const tokenNormalizado = token?.trim();
+    if (!tokenNormalizado) {
+      throw new Error('El token de recuperación es obligatorio.');
+    }
+
+    this.validarContrasena(contrasenaNueva);
+
+    if (
+      !this.usuarioRepository.obtenerTokenRecuperacion ||
+      !this.usuarioRepository.consumirTokenRecuperacion
+    ) {
+      throw new Error('El servicio de recuperación no está disponible.');
+    }
+
+    const registro = await this.usuarioRepository.obtenerTokenRecuperacion(
+      this.generarHashToken(tokenNormalizado),
+    );
+
+    if (!registro || registro.fechaExpiracion <= new Date()) {
+      throw new Error('El enlace de recuperación no es válido o ha expirado.');
+    }
+
+    const usuario = await this.usuarioRepository.buscarPorId(registro.idUsuario);
+    if (!usuario || !usuario.estaActivo()) {
+      throw new Error('El enlace de recuperación no es válido o ha expirado.');
+    }
+
+    await this.usuarioRepository.consumirTokenRecuperacion(
+      registro.idToken,
+      usuario.idUsuario,
+      this.contrasenaService.generarHash(contrasenaNueva),
+    );
+    await this.notificacionManager?.enviarContrasenaActualizada(usuario.email);
+    return true;
   }
 
   async obtenerUsuario(idUsuario: number): Promise<Usuario | null> {
@@ -764,5 +857,9 @@ export class UsuarioManager {
   private normalizarTextoOpcional(valor: string | null | undefined): string | null {
     const texto = valor?.trim() ?? '';
     return texto.length > 0 ? texto : null;
+  }
+
+  private generarHashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
   }
 }

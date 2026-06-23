@@ -14,6 +14,10 @@ import {
 import type { ActualizarPerfilDto, CambiarContrasenaDto } from './dto/perfil.dto';
 import type { IniciarSesionDto } from './dto/iniciar-sesion.dto';
 import type { RefreshTokenDto } from './dto/refresh-token.dto';
+import type {
+  RestablecerContrasenaDto,
+  SolicitarRecuperacionContrasenaDto,
+} from './dto/recuperar-contrasena.dto';
 import type { RegistrarClienteDto } from './dto/registrar-cliente.dto';
 import type { RegistrarVendedorDto } from './dto/registrar-vendedor.dto';
 import type { SolicitarCambioDocumentoDto } from './dto/solicitud-cambio-documento.dto';
@@ -372,6 +376,46 @@ export class UsuarioController {
           : HttpStatus.UNAUTHORIZED;
 
       throw new HttpException(mensaje, estado);
+    }
+  }
+
+  @Post('recuperar-contrasena')
+  async solicitarRecuperacion(
+    @Body() body: SolicitarRecuperacionContrasenaDto,
+  ) {
+    try {
+      await this.usuarioManager.recuperarContrasena(body.email);
+      return {
+        success: true,
+        message:
+          'Si el correo está registrado, recibirá un enlace de recuperación.',
+      };
+    } catch (error: unknown) {
+      const mensaje =
+        error instanceof Error
+          ? error.message
+          : 'No fue posible procesar la solicitud.';
+      throw new HttpException(mensaje, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Post('restablecer-contrasena')
+  async restablecerContrasena(@Body() body: RestablecerContrasenaDto) {
+    try {
+      await this.usuarioManager.restablecerContrasena(
+        body.token,
+        body.contrasenaNueva,
+      );
+      return {
+        success: true,
+        message: 'Contraseña restablecida correctamente.',
+      };
+    } catch (error: unknown) {
+      const mensaje =
+        error instanceof Error
+          ? error.message
+          : 'No fue posible restablecer la contraseña.';
+      throw new HttpException(mensaje, HttpStatus.BAD_REQUEST);
     }
   }
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -41,8 +41,9 @@ import {
   MapPin,
   CreditCard
 } from "lucide-react"
-import { mockOrders, formatPrice } from "@/lib/mock-data"
+import { formatPrice } from "@/lib/mock-data"
 import type { Order, OrderStatus } from "@/lib/types"
+import { OrderService } from "@/features/orders/services/order.service"
 
 const statusConfig: Record<OrderStatus, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: typeof Clock; nextStatus?: OrderStatus }> = {
   registrado: { label: "Registrado", variant: "secondary", icon: Clock, nextStatus: 'confirmado' },
@@ -58,8 +59,15 @@ export default function VendedorPedidosPage() {
   const [activeTab, setActiveTab] = useState<string>("todos")
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [orders, setOrders] = useState<Order[]>([])
 
-  const filteredOrders = mockOrders.filter(order => {
+  useEffect(() => {
+    OrderService.getAllOrders()
+      .then(setOrders)
+      .catch((error) => alert(error.message || "No se pudieron cargar los pedidos"))
+  }, [])
+
+  const filteredOrders = orders.filter(order => {
     const matchesSearch = 
       order.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.cliente.nombres.toLowerCase().includes(searchTerm.toLowerCase())
@@ -69,16 +77,17 @@ export default function VendedorPedidosPage() {
     return matchesSearch && matchesTab
   })
 
-  const pendingCount = mockOrders.filter(o => o.estado === 'registrado' || o.estado === 'confirmado').length
+  const pendingCount = orders.filter(o => o.estado === 'registrado' || o.estado === 'confirmado').length
 
-  const handleUpdateStatus = (order: Order, newStatus: OrderStatus) => {
-    const index = mockOrders.findIndex(o => o.id === order.id)
-    if (index !== -1) {
-      mockOrders[index] = {
-        ...mockOrders[index],
-        estado: newStatus,
-        updatedAt: new Date()
-      }
+  const handleUpdateStatus = async (order: Order, newStatus: OrderStatus) => {
+    try {
+      const updated = await OrderService.updateOrderStatus(order.id, newStatus)
+      setOrders((current) =>
+        current.map((item) => item.id === updated.id ? updated : item),
+      )
+      setSelectedOrder(updated)
+    } catch (error: any) {
+      alert(error.message || "No se pudo actualizar el estado")
     }
   }
 
@@ -95,31 +104,31 @@ export default function VendedorPedidosPage() {
         <Card>
           <CardContent className="pt-4">
             <p className="text-sm text-muted-foreground">Registrados</p>
-            <p className="text-2xl font-bold">{mockOrders.filter(o => o.estado === 'registrado').length}</p>
+            <p className="text-2xl font-bold">{orders.filter(o => o.estado === 'registrado').length}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4">
             <p className="text-sm text-muted-foreground">Confirmados</p>
-            <p className="text-2xl font-bold">{mockOrders.filter(o => o.estado === 'confirmado').length}</p>
+            <p className="text-2xl font-bold">{orders.filter(o => o.estado === 'confirmado').length}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4">
             <p className="text-sm text-muted-foreground">En Proceso</p>
-            <p className="text-2xl font-bold">{mockOrders.filter(o => o.estado === 'en_proceso').length}</p>
+            <p className="text-2xl font-bold">{orders.filter(o => o.estado === 'en_proceso').length}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4">
             <p className="text-sm text-muted-foreground">Enviados</p>
-            <p className="text-2xl font-bold">{mockOrders.filter(o => o.estado === 'enviado').length}</p>
+            <p className="text-2xl font-bold">{orders.filter(o => o.estado === 'enviado').length}</p>
           </CardContent>
         </Card>
         <Card className="bg-green-50/50 border-green-200">
           <CardContent className="pt-4">
             <p className="text-sm text-green-700">Entregados</p>
-            <p className="text-2xl font-bold text-green-700">{mockOrders.filter(o => o.estado === 'entregado').length}</p>
+            <p className="text-2xl font-bold text-green-700">{orders.filter(o => o.estado === 'entregado').length}</p>
           </CardContent>
         </Card>
       </div>
@@ -141,8 +150,8 @@ export default function VendedorPedidosPage() {
           <TabsTrigger value="todos">Todos</TabsTrigger>
           <TabsTrigger value="registrado" className="gap-2">
             Registrados
-            {mockOrders.filter(o => o.estado === 'registrado').length > 0 && (
-              <Badge variant="secondary" className="ml-1">{mockOrders.filter(o => o.estado === 'registrado').length}</Badge>
+            {orders.filter(o => o.estado === 'registrado').length > 0 && (
+              <Badge variant="secondary" className="ml-1">{orders.filter(o => o.estado === 'registrado').length}</Badge>
             )}
           </TabsTrigger>
           <TabsTrigger value="confirmado">Confirmados</TabsTrigger>
@@ -344,8 +353,7 @@ export default function VendedorPedidosPage() {
                       <Select
                         defaultValue={selectedOrder.estado}
                         onValueChange={(value) => {
-                          handleUpdateStatus(selectedOrder, value as OrderStatus)
-                          setSelectedOrder({ ...selectedOrder, estado: value as OrderStatus })
+                          void handleUpdateStatus(selectedOrder, value as OrderStatus)
                         }}
                       >
                         <SelectTrigger className="w-[200px]">

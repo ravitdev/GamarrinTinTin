@@ -374,6 +374,90 @@ async function main() {
     ],
   });
 
+  const cotizacionesExistentes = await prisma.cotizacion.findMany({
+    where: { idCliente: cliente.idUsuario },
+    select: { idCotizacion: true },
+  });
+  const idsCotizaciones = cotizacionesExistentes.map(
+    (cotizacion) => cotizacion.idCotizacion,
+  );
+
+  if (idsCotizaciones.length > 0) {
+    await prisma.itemCarrito.deleteMany({
+      where: { idCotizacion: { in: idsCotizaciones } },
+    });
+    await prisma.cotizacion.deleteMany({
+      where: { idCotizacion: { in: idsCotizaciones } },
+    });
+  }
+
+  const ahora = new Date();
+  const variantePersonalizable = variantes[0];
+  const varianteSinStock = variantes[4];
+
+  await prisma.cotizacion.create({
+    data: {
+      idCliente: cliente.idUsuario,
+      idProductoVariante: variantePersonalizable.idProductoVariante,
+      cantidad: 20,
+      razon: 'PERSONALIZACION',
+      estado: 'PENDIENTE',
+      nombreProductoSnapshot: variantePersonalizable.producto.nombre,
+      colorSnapshot: variantePersonalizable.colorNombre,
+      tallaSnapshot: variantePersonalizable.talla,
+      precioBaseSnapshot: variantePersonalizable.producto.precioBase,
+    },
+  });
+
+  const cotizacionVigente = await prisma.cotizacion.create({
+    data: {
+      idCliente: cliente.idUsuario,
+      atendidoPorId: vendedor.idUsuario,
+      idProductoVariante: varianteSinStock.idProductoVariante,
+      cantidad: 30,
+      razon: 'STOCK_INSUFICIENTE',
+      estado: 'COTIZADO',
+      precioCotizado: 79.9,
+      fechaCotizacion: ahora,
+      fechaExpiracion: new Date(ahora.getTime() + 48 * 60 * 60 * 1000),
+      nombreProductoSnapshot: varianteSinStock.producto.nombre,
+      colorSnapshot: varianteSinStock.colorNombre,
+      tallaSnapshot: varianteSinStock.talla,
+      precioBaseSnapshot: varianteSinStock.producto.precioBase,
+    },
+  });
+
+  await prisma.cotizacion.create({
+    data: {
+      idCliente: cliente.idUsuario,
+      atendidoPorId: admin.idUsuario,
+      idProductoVariante: variantePersonalizable.idProductoVariante,
+      cantidad: 12,
+      razon: 'PERSONALIZACION',
+      estado: 'EXPIRADO',
+      precioCotizado: 34.9,
+      fechaCotizacion: new Date(ahora.getTime() - 72 * 60 * 60 * 1000),
+      fechaExpiracion: new Date(ahora.getTime() - 24 * 60 * 60 * 1000),
+      nombreProductoSnapshot: variantePersonalizable.producto.nombre,
+      colorSnapshot: variantePersonalizable.colorNombre,
+      tallaSnapshot: variantePersonalizable.talla,
+      precioBaseSnapshot: variantePersonalizable.producto.precioBase,
+    },
+  });
+
+  const carritoCliente = await prisma.carrito.findUniqueOrThrow({
+    where: { idUsuario: cliente.idUsuario },
+  });
+  await prisma.itemCarrito.create({
+    data: {
+      idCarrito: carritoCliente.idCarrito,
+      tipoItem: 'COTIZACION',
+      idProductoVariante: cotizacionVigente.idProductoVariante,
+      idCotizacion: cotizacionVigente.idCotizacion,
+      cantidad: cotizacionVigente.cantidad,
+    },
+  });
+
   console.log('Seed completado.');
   console.log(`Admin: ${admin.email} / ${PASSWORD}`);
   console.log(`Vendedor: ${vendedor.email} / ${PASSWORD}`);

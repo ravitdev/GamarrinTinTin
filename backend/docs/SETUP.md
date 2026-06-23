@@ -25,6 +25,33 @@ El archivo `backend/.env` contiene la configuracion local y no se sube al
 repositorio. Los valores incluidos en `.env.example` estan preparados para el
 entorno local con Docker.
 
+## Configuracion de correos con Gmail
+
+Por defecto, el envio de correos esta desactivado para que el proyecto pueda
+levantarse sin credenciales externas:
+
+```env
+MAIL_ENABLED=false
+```
+
+Para habilitarlo se necesita una cuenta Gmail del proyecto:
+
+1. Activar la verificacion en dos pasos de la cuenta de Google.
+2. Generar una contrasena de aplicacion para correo.
+3. Configurar en `backend/.env`:
+
+```env
+MAIL_ENABLED=true
+GMAIL_USER=correo-del-proyecto@gmail.com
+GMAIL_APP_PASSWORD=contrasena-de-aplicacion-de-16-caracteres
+MAIL_FROM=correo-del-proyecto@gmail.com
+FRONTEND_URL=http://localhost:3001
+```
+
+`GMAIL_APP_PASSWORD` no es la contrasena normal de Gmail y nunca debe subirse al
+repositorio. Cuando los correos estan desactivados, el backend registra en sus
+logs que la notificacion fue omitida, pero los flujos del sistema continúan.
+
 ## Primera ejecucion con Docker
 
 Estos pasos levantan la base de datos, aplican las migraciones, cargan los datos
