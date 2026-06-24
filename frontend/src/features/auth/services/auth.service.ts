@@ -15,6 +15,11 @@ export interface AuthCredentials {
   password: string;
 }
 
+export interface RegistroPendienteResponse {
+  email: string;
+  fechaExpiracion: string | Date;
+}
+
 // Re-export so consumers can import from the service if they prefer
 export type { RegistroData };
 
@@ -45,7 +50,7 @@ export class AuthService {
    * POST /usuarios/clientes
    * Envía los campos de registro requeridos por el backend.
    */
-  static async register(data: RegistroData): Promise<void> {
+  static async register(data: RegistroData): Promise<RegistroPendienteResponse> {
     const payload = {
       nombres:    data.nombres,
       apellidos:  data.apellidos,
@@ -56,7 +61,42 @@ export class AuthService {
       numeroDocumento: data.numeroDocumento,
       direccion: data.direccion?.trim() || null,
     };
-    return ApiClient.post<void>('/usuarios/clientes', payload, { auth: false });
+    return ApiClient.post<RegistroPendienteResponse>('/usuarios/clientes', payload, { auth: false });
+  }
+
+  static async confirmRegistration(email: string, codigo: string): Promise<AuthResponse> {
+    const raw = await ApiClient.post<any>(
+      '/usuarios/clientes/confirmar',
+      { email, codigo },
+      { auth: false },
+    );
+
+    if (typeof window !== 'undefined' && raw.refreshToken) {
+      window.localStorage.setItem('gtt_refresh_token', raw.refreshToken);
+    }
+
+    return {
+      access_token: raw.accessToken,
+      usuario: raw.usuario,
+    };
+  }
+
+  static async resendRegistrationCode(
+    email: string,
+  ): Promise<RegistroPendienteResponse> {
+    return ApiClient.post<RegistroPendienteResponse>(
+      '/usuarios/clientes/reenviar-codigo',
+      { email },
+      { auth: false },
+    );
+  }
+
+  static async cancelRegistration(token: string): Promise<void> {
+    await ApiClient.post<void>(
+      '/usuarios/clientes/anular',
+      { token },
+      { auth: false },
+    );
   }
 
   /**
@@ -76,5 +116,24 @@ export class AuthService {
       access_token: raw.accessToken,
       usuario: raw.usuario,
     };
+  }
+
+  static async requestPasswordReset(email: string): Promise<void> {
+    return ApiClient.post<void>(
+      '/usuarios/recuperar-contrasena',
+      { email },
+      { auth: false },
+    );
+  }
+
+  static async resetPassword(
+    token: string,
+    contrasenaNueva: string,
+  ): Promise<void> {
+    return ApiClient.post<void>(
+      '/usuarios/restablecer-contrasena',
+      { token, contrasenaNueva },
+      { auth: false },
+    );
   }
 }

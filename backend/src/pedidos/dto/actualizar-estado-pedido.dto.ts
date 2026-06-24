@@ -1,9 +1,5 @@
+import type { EstadoPedido } from '../domain/pedido.entity';
+
 export interface ActualizarEstadoPedidoDto {
-  estado:
-    | 'REGISTRADO'
-    | 'CONFIRMADO'
-    | 'PROCESANDO'
-    | 'ENVIADO'
-    | 'ENTREGADO'
-    | 'CANCELADO';
+  estado: EstadoPedido;
 }

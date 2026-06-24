@@ -5,12 +5,21 @@ import {
   SolicitudDesactivacion,
 } from './domain/solicitud.entity';
 
-export interface PasswordResetTokenRegistro {
-  idPasswordResetToken: number;
-  idUsuario: number;
-  tokenHash: string;
+export interface RegistroPendienteUsuarioData {
+  idRegistro?: number;
+  nombres: string;
+  apellidos: string;
+  email: string;
+  contrasenaHash: string;
+  telefono: string;
+  tipoDocumento: 'DNI' | 'RUC';
+  numeroDocumento: string;
+  direccion: string | null;
+  rol: RolUsuario;
+  codigoHash: string;
+  tokenAnulacionHash: string;
+  estado?: 'PENDIENTE' | 'CONFIRMADO' | 'ANULADO' | 'EXPIRADO';
   fechaExpiracion: Date;
-  usadoEn: Date | null;
 }
 
 export interface IUsuarioRepository {
@@ -22,10 +31,31 @@ export interface IUsuarioRepository {
   buscarPorEmail(email: string): Promise<Usuario | null>;
   existePorEmail(email: string): Promise<boolean>;
   existePorDocumento(numeroDocumento: string): Promise<boolean>;
+  guardarRegistroPendiente(
+    registro: RegistroPendienteUsuarioData,
+  ): Promise<RegistroPendienteUsuarioData>;
+  buscarRegistroPendientePorEmail(
+    email: string,
+  ): Promise<RegistroPendienteUsuarioData | null>;
+  buscarRegistroPendientePorTokenAnulacion(
+    tokenAnulacionHash: string,
+  ): Promise<RegistroPendienteUsuarioData | null>;
+  actualizarCodigoRegistroPendiente(
+    idRegistro: number,
+    codigoHash: string,
+    tokenAnulacionHash: string,
+    fechaExpiracion: Date,
+  ): Promise<RegistroPendienteUsuarioData>;
+  actualizarEstadoRegistroPendiente(
+    idRegistro: number,
+    estado: 'CONFIRMADO' | 'ANULADO' | 'EXPIRADO',
+  ): Promise<boolean>;
   listarUsuarios(): Promise<Usuario[]>;
   listarPorRol(rol: RolUsuario): Promise<Usuario[]>;
   contarPedidosEnProceso(idCliente: number): Promise<number>;
-  listarPedidosResumenPorCliente(idCliente: number): Promise<PedidoClienteResumenDto[]>;
+  listarPedidosResumenPorCliente(
+    idCliente: number,
+  ): Promise<PedidoClienteResumenDto[]>;
   guardarRefreshToken(
     idUsuario: number,
     refreshTokenHash: string,
@@ -35,6 +65,21 @@ export interface IUsuarioRepository {
     idUsuario: number,
   ): Promise<{ refreshTokenHash: string; fechaExpiracion: Date } | null>;
   revocarRefreshToken(idUsuario: number): Promise<boolean>;
+  guardarTokenRecuperacion?(
+    idUsuario: number,
+    tokenHash: string,
+    fechaExpiracion: Date,
+  ): Promise<boolean>;
+  obtenerTokenRecuperacion?(tokenHash: string): Promise<{
+    idToken: number;
+    idUsuario: number;
+    fechaExpiracion: Date;
+  } | null>;
+  consumirTokenRecuperacion?(
+    idToken: number,
+    idUsuario: number,
+    contrasenaHash: string,
+  ): Promise<boolean>;
   crearSolicitudCambioDocumento(
     solicitud: SolicitudCambioDocumento,
   ): Promise<SolicitudCambioDocumento>;
@@ -63,18 +108,4 @@ export interface IUsuarioRepository {
     estado: 'PROCESADA' | 'RECHAZADA',
     idAdmin: number,
   ): Promise<SolicitudDesactivacion | null>;
-
-  crearPasswordResetToken(
-    idUsuario: number,
-    tokenHash: string,
-    fechaExpiracion: Date,
-  ): Promise<boolean>;
-
-  buscarPasswordResetTokenValido(
-    tokenHash: string,
-  ): Promise<PasswordResetTokenRegistro | null>;
-
-  marcarPasswordResetTokenUsado(idPasswordResetToken: number): Promise<boolean>;
-
-  invalidarPasswordResetTokensActivos(idUsuario: number): Promise<boolean>;
 }

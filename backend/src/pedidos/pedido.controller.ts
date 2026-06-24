@@ -111,6 +111,24 @@ export class PedidoController {
     }
   }
 
+  @Get('gestion/todos')
+  @Roles('VENDEDOR', 'ADMINISTRADOR')
+  async listarTodosCompatibilidad() {
+    return {
+      success: true,
+      data: await this.pedidoManager.listarParaPersonal(),
+    };
+  }
+
+  @Patch('gestion/:idPedido/estado')
+  @Roles('VENDEDOR', 'ADMINISTRADOR')
+  async actualizarEstadoCompatibilidad(
+    @Param('idPedido') idPedido: string,
+    @Body() body: ActualizarEstadoPedidoDto,
+  ) {
+    return this.actualizarEstadoGestion(idPedido, body);
+  }
+
   @Get(':idPedido')
   @Roles('VENDEDOR', 'ADMINISTRADOR')
   async consultarDetalleParaPersonal(@Param('idPedido') idPedido: string) {
@@ -133,6 +151,13 @@ export class PedidoController {
   async actualizarEstadoParaPersonal(
     @Param('idPedido') idPedido: string,
     @Body() body: ActualizarEstadoPedidoDto,
+  ) {
+    return this.actualizarEstadoGestion(idPedido, body);
+  }
+
+  private async actualizarEstadoGestion(
+    idPedido: string,
+    body: ActualizarEstadoPedidoDto,
   ) {
     try {
       const pedido = await this.pedidoManager.actualizarEstadoParaPersonal(

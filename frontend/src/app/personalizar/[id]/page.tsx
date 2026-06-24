@@ -207,7 +207,7 @@ export default function CustomizePage() {
     setIsDragging(false);
   }, []);
 
-  const updateDesign = (id: string, updates: Partial<UploadedDesign>) => {
+  const updateDesign = (id: string, updates: Partial<CustomizationDesign>) => {
     setDesigns((prev) => prev.map((d) => 
       d.id === id ? { ...d, ...updates } : d
     ));

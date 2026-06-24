@@ -1,3 +1,4 @@
 export interface ResponderCotizacionDto {
-  precioPropuesto: number;
+  precioCotizado?: number;
+  precioPropuesto?: number;
 }

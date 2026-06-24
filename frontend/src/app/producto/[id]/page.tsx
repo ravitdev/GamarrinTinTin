@@ -600,7 +600,9 @@ export default function ProductDetailPage() {
                 )}
 
                 {(shouldQuote || (!canAddToCart && selectedSize)) && (
-                  <Link href={`/solicitar-cotizacion?producto=${product.idProducto}`}>
+                  <Link
+                    href={`/solicitar-cotizacion?producto=${product.idProducto}&color=${encodeURIComponent(selectedColor.nombre)}&talla=${selectedSize}&cantidad=${quantity}`}
+                  >
                     <Button size="lg" variant="outline" className="w-full gap-2">
                       <FileText className="h-5 w-5" />
                       Solicitar Cotizacion

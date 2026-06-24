@@ -6,9 +6,9 @@ import { PedidoModule } from './pedidos/pedido.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductosModule } from './productos/producto.module';
 import { UsuarioModule } from './usuarios/usuario.module';
-import { DisenoPredefinidoModule } from './disenos/diseno-predefinido.module';
 import { CotizacionModule } from './cotizaciones/cotizacion.module';
-import { NotificacionesModule } from './notificaciones/notificaciones.module';
+import { DisenoPredefinidoModule } from './disenos/diseno-predefinido.module';
+import { NotificacionModule } from './notificaciones/notificacion.module';
 
 @Module({
   imports: [
@@ -18,7 +18,7 @@ import { NotificacionesModule } from './notificaciones/notificaciones.module';
     PedidoModule,
     DisenoPredefinidoModule,
     CotizacionModule,
-    NotificacionesModule,
+    NotificacionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

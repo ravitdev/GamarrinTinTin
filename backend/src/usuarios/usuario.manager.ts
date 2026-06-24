@@ -1,4 +1,6 @@
-import { Inject, Injectable } from '@nestjs/common';
+﻿import { createHash, randomBytes } from 'node:crypto';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import { NotificacionManager } from '../notificaciones/notificacion.manager';
 import type { ActualizarPerfilDto, CambiarContrasenaDto, UsuarioPerfilDto } from './dto/perfil.dto';
 import type { IniciarSesionDto } from './dto/iniciar-sesion.dto';
 import type { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -13,12 +15,6 @@ import type { IUsuarioRepository } from './iusuario.repository';
 import { ContrasenaService } from './seguridad/contrasena.service';
 import { JwtService } from './seguridad/jwt.service';
 import { UsuarioMapper } from './usuario.mapper';
-import { randomBytes, createHash } from 'crypto';
-import type {
-  RestablecerContrasenaDto,
-  SolicitarRecuperacionContrasenaDto,
-} from './dto/recuperar-contrasena.dto';
-import { NotificacionesService } from '../notificaciones/notificaciones.service';
 
 @Injectable()
 export class UsuarioManager {
@@ -27,7 +23,8 @@ export class UsuarioManager {
     private readonly usuarioRepository: IUsuarioRepository,
     private readonly contrasenaService: ContrasenaService,
     private readonly jwtService: JwtService,
-    private readonly notificacionesService: NotificacionesService,
+    @Optional()
+    private readonly notificacionManager?: NotificacionManager,
   ) {}
 
   async iniciarSesion(credenciales: IniciarSesionDto): Promise<SesionDto> {
@@ -64,16 +61,216 @@ export class UsuarioManager {
     return this.registrarUsuario(usuario, 'VENDEDOR');
   }
 
-  async registrarCuentaCliente(datos: RegistrarClienteDto): Promise<Usuario> {
+  async registrarCuentaCliente(
+    datos: RegistrarClienteDto,
+  ): Promise<{ email: string; fechaExpiracion: Date }> {
     const usuario = this.crearUsuarioDesdeDatos(datos, 'CLIENTE');
-    return this.registrarCliente(usuario);
+    this.validarDatosRegistro(usuario);
+
+    if (await this.usuarioRepository.existePorEmail(usuario.email)) {
+      throw new Error('El email ya está en uso.');
+    }
+
+    if (
+      await this.usuarioRepository.existePorDocumento(
+        usuario.numeroDocumento,
+      )
+    ) {
+      throw new Error('El numero de documento ya está en uso.');
+    }
+
+    const codigo = this.generarCodigoVerificacion();
+    const tokenAnulacion = this.generarTokenSeguro();
+    const fechaExpiracion = new Date(Date.now() + 5 * 60 * 1000);
+
+    await this.usuarioRepository.guardarRegistroPendiente({
+      nombres: usuario.nombres,
+      apellidos: usuario.apellidos,
+      email: usuario.email,
+      contrasenaHash: usuario.contrasenaHash,
+      telefono: usuario.telefono,
+      tipoDocumento: usuario.tipoDocumento,
+      numeroDocumento: usuario.numeroDocumento,
+      direccion: usuario.direccion,
+      rol: 'CLIENTE',
+      codigoHash: this.contrasenaService.generarHash(codigo),
+      tokenAnulacionHash: this.generarHashToken(tokenAnulacion),
+      estado: 'PENDIENTE',
+      fechaExpiracion,
+    });
+
+    await this.notificacionManager?.enviarCodigoVerificacionRegistro(
+      usuario.email,
+      usuario.nombres,
+      codigo,
+      tokenAnulacion,
+    );
+
+    return {
+      email: usuario.email,
+      fechaExpiracion,
+    };
   }
 
+  async confirmarRegistroCliente(
+    email: string,
+    codigo: string,
+  ): Promise<SesionDto> {
+    const emailNormalizado = this.normalizarTexto(email).toLowerCase();
+    const codigoNormalizado = this.normalizarTexto(codigo).toUpperCase();
+
+    this.validarEmail(emailNormalizado);
+
+    if (!/^[A-Z0-9]{6}$/.test(codigoNormalizado)) {
+      throw new Error('El código de verificación debe tener 6 caracteres.');
+    }
+
+    const pendiente =
+      await this.usuarioRepository.buscarRegistroPendientePorEmail(
+        emailNormalizado,
+      );
+
+    if (!pendiente || pendiente.estado !== 'PENDIENTE') {
+      throw new Error('No existe un registro pendiente para este correo.');
+    }
+
+    if (pendiente.fechaExpiracion < new Date()) {
+      await this.usuarioRepository.actualizarEstadoRegistroPendiente(
+        pendiente.idRegistro!,
+        'EXPIRADO',
+      );
+      throw new Error('El código de verificación ha expirado.');
+    }
+
+    if (
+      !this.contrasenaService.verificar(
+        codigoNormalizado,
+        pendiente.codigoHash,
+      )
+    ) {
+      throw new Error('El código de verificación no es correcto.');
+    }
+
+    if (await this.usuarioRepository.existePorEmail(pendiente.email)) {
+      throw new Error('El email ya está en uso.');
+    }
+
+    if (
+      await this.usuarioRepository.existePorDocumento(
+        pendiente.numeroDocumento,
+      )
+    ) {
+      throw new Error('El numero de documento ya está en uso.');
+    }
+
+    const usuario = await this.usuarioRepository.guardar(
+      new Usuario(
+        0,
+        pendiente.nombres,
+        pendiente.apellidos,
+        pendiente.email,
+        pendiente.contrasenaHash,
+        pendiente.telefono,
+        new Date(),
+        pendiente.tipoDocumento,
+        pendiente.numeroDocumento,
+        pendiente.direccion,
+        'CLIENTE',
+        'ACTIVO',
+      ),
+    );
+
+    await this.usuarioRepository.actualizarEstadoRegistroPendiente(
+      pendiente.idRegistro!,
+      'CONFIRMADO',
+    );
+
+    await this.notificacionManager?.enviarBienvenida(
+      usuario.email,
+      usuario.nombres,
+    );
+
+    return this.generarSesion(usuario);
+  }
+
+  async reenviarCodigoRegistroCliente(
+    email: string,
+  ): Promise<{ email: string; fechaExpiracion: Date }> {
+    const emailNormalizado = this.normalizarTexto(email).toLowerCase();
+    this.validarEmail(emailNormalizado);
+
+    const pendiente =
+      await this.usuarioRepository.buscarRegistroPendientePorEmail(
+        emailNormalizado,
+      );
+
+    if (
+      !pendiente ||
+      !['PENDIENTE', 'EXPIRADO'].includes(pendiente.estado ?? 'PENDIENTE')
+    ) {
+      throw new Error('No existe un registro pendiente para este correo.');
+    }
+
+    if (await this.usuarioRepository.existePorEmail(pendiente.email)) {
+      throw new Error('El email ya está en uso.');
+    }
+
+    const codigo = this.generarCodigoVerificacion();
+    const tokenAnulacion = this.generarTokenSeguro();
+    const fechaExpiracion = new Date(Date.now() + 5 * 60 * 1000);
+
+    const actualizado =
+      await this.usuarioRepository.actualizarCodigoRegistroPendiente(
+        pendiente.idRegistro!,
+        this.contrasenaService.generarHash(codigo),
+        this.generarHashToken(tokenAnulacion),
+        fechaExpiracion,
+      );
+
+    await this.notificacionManager?.enviarCodigoVerificacionRegistro(
+      actualizado.email,
+      actualizado.nombres,
+      codigo,
+      tokenAnulacion,
+    );
+
+    return {
+      email: actualizado.email,
+      fechaExpiracion: actualizado.fechaExpiracion,
+    };
+  }
+
+  async anularRegistroCliente(token: string): Promise<boolean> {
+    const tokenNormalizado = this.normalizarTexto(token);
+
+    if (!tokenNormalizado) {
+      throw new Error('El token de anulación es obligatorio.');
+    }
+
+    const pendiente =
+      await this.usuarioRepository.buscarRegistroPendientePorTokenAnulacion(
+        this.generarHashToken(tokenNormalizado),
+      );
+
+    if (!pendiente || pendiente.estado !== 'PENDIENTE') {
+      return true;
+    }
+
+    return this.usuarioRepository.actualizarEstadoRegistroPendiente(
+      pendiente.idRegistro!,
+      'ANULADO',
+    );
+  }
   async registrarUsuarioVendedor(
     datos: RegistrarVendedorDto,
   ): Promise<Usuario> {
     const usuario = this.crearUsuarioDesdeDatos(datos, 'VENDEDOR');
-    return this.registrarVendedor(usuario);
+    const registrado = await this.registrarVendedor(usuario);
+    await this.notificacionManager?.enviarBienvenida(
+      registrado.email,
+      registrado.nombres,
+    );
+    return registrado;
   }
 
   async cerrarSesion(idUsuario: number): Promise<boolean> {
@@ -242,12 +439,19 @@ export class UsuarioManager {
 
     this.validarContrasena(datos.contrasenaNueva);
 
-    return this.modificarDatosUsuario(
+    const actualizada = await this.modificarDatosUsuario(
       idUsuario,
       { contrasenaHash: this.contrasenaService.generarHash(datos.contrasenaNueva) },
       usuario.rol,
       false,
     );
+
+    if (actualizada) {
+      await this.usuarioRepository.revocarRefreshToken(idUsuario);
+      await this.notificacionManager?.enviarContrasenaActualizada(usuario.email);
+    }
+
+    return actualizada;
   }
 
   async solicitarCambioDocumento(
@@ -517,7 +721,79 @@ export class UsuarioManager {
   async recuperarContrasena(email: string): Promise<boolean> {
     const emailNormalizado = this.normalizarTexto(email).toLowerCase();
     this.validarEmail(emailNormalizado);
-    return this.usuarioRepository.existePorEmail(emailNormalizado);
+
+    const usuario = await this.usuarioRepository.buscarPorEmail(emailNormalizado);
+
+    // La respuesta no revela si una cuenta existe.
+    if (!usuario || !usuario.estaActivo()) {
+      return true;
+    }
+
+    if (
+      !this.usuarioRepository.guardarTokenRecuperacion ||
+      !this.notificacionManager
+    ) {
+      throw new Error('El servicio de recuperación no está disponible.');
+    }
+
+    const token = randomBytes(32).toString('hex');
+    const fechaExpiracion = new Date(Date.now() + 60 * 60 * 1000);
+
+    await this.usuarioRepository.guardarTokenRecuperacion(
+      usuario.idUsuario,
+      this.generarHashToken(token),
+      fechaExpiracion,
+    );
+
+    const frontendUrl =
+      process.env.FRONTEND_URL?.replace(/\/+$/, '') || 'http://localhost:3001';
+    const enlace = `${frontendUrl}/restablecer-contrasena?token=${encodeURIComponent(token)}`;
+
+    await this.notificacionManager.enviarRecuperacionContrasena(
+      usuario.email,
+      enlace,
+    );
+    return true;
+  }
+
+  async restablecerContrasena(
+    token: string,
+    contrasenaNueva: string,
+  ): Promise<boolean> {
+    const tokenNormalizado = token?.trim();
+    if (!tokenNormalizado) {
+      throw new Error('El token de recuperación es obligatorio.');
+    }
+
+    this.validarContrasena(contrasenaNueva);
+
+    if (
+      !this.usuarioRepository.obtenerTokenRecuperacion ||
+      !this.usuarioRepository.consumirTokenRecuperacion
+    ) {
+      throw new Error('El servicio de recuperación no está disponible.');
+    }
+
+    const registro = await this.usuarioRepository.obtenerTokenRecuperacion(
+      this.generarHashToken(tokenNormalizado),
+    );
+
+    if (!registro || registro.fechaExpiracion <= new Date()) {
+      throw new Error('El enlace de recuperación no es válido o ha expirado.');
+    }
+
+    const usuario = await this.usuarioRepository.buscarPorId(registro.idUsuario);
+    if (!usuario || !usuario.estaActivo()) {
+      throw new Error('El enlace de recuperación no es válido o ha expirado.');
+    }
+
+    await this.usuarioRepository.consumirTokenRecuperacion(
+      registro.idToken,
+      usuario.idUsuario,
+      this.contrasenaService.generarHash(contrasenaNueva),
+    );
+    await this.notificacionManager?.enviarContrasenaActualizada(usuario.email);
+    return true;
   }
 
   async obtenerUsuario(idUsuario: number): Promise<Usuario | null> {
@@ -527,102 +803,6 @@ export class UsuarioManager {
 
   async listarUsuarios(): Promise<Usuario[]> {
     return this.usuarioRepository.listarUsuarios();
-  }
-
-  async solicitarRecuperacionContrasena(
-    datos: SolicitarRecuperacionContrasenaDto,
-  ): Promise<void> {
-    const email = this.normalizarTexto(datos.email).toLowerCase();
-
-    if (!email) {
-      throw new Error('Debe ingresar un correo electrónico.');
-    }
-
-    this.validarEmail(email);
-
-    const usuario = await this.usuarioRepository.buscarPorEmail(email);
-
-    if (!usuario || !usuario.estaActivo()) {
-      return;
-    }
-
-    const token = this.generarTokenRecuperacion();
-    const tokenHash = this.generarHashToken(token);
-    const fechaExpiracion = new Date(Date.now() + 30 * 60 * 1000);
-
-    await this.usuarioRepository.invalidarPasswordResetTokensActivos(
-      usuario.idUsuario,
-    );
-
-    await this.usuarioRepository.crearPasswordResetToken(
-      usuario.idUsuario,
-      tokenHash,
-      fechaExpiracion,
-    );
-
-    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3001';
-    const resetUrl = `${frontendUrl}/recuperar-contrasena?token=${encodeURIComponent(token)}`;
-
-    await this.notificacionesService.enviarRecuperacionContrasena({
-      email: usuario.email,
-      nombres: usuario.nombres,
-      resetUrl,
-    });
-  }
-
-  async restablecerContrasena(
-    datos: RestablecerContrasenaDto,
-  ): Promise<boolean> {
-    const token = this.normalizarTexto(datos.token);
-    const contrasenaNueva = datos.contrasenaNueva;
-
-    if (!token) {
-      throw new Error('Token de recuperación requerido.');
-    }
-
-    this.validarContrasena(contrasenaNueva);
-
-    const tokenHash = this.generarHashToken(token);
-    const resetToken =
-      await this.usuarioRepository.buscarPasswordResetTokenValido(tokenHash);
-
-    if (!resetToken) {
-      throw new Error('El enlace de recuperación no es válido o ha expirado.');
-    }
-
-    const usuario = await this.usuarioRepository.buscarPorId(resetToken.idUsuario);
-    if (!usuario || !usuario.estaActivo()) {
-      throw new Error('El enlace de recuperación no es válido o ha expirado.');
-    }
-
-    const actualizado = await this.modificarDatosUsuario(
-      usuario.idUsuario,
-      {
-        contrasenaHash: this.contrasenaService.generarHash(contrasenaNueva),
-      },
-      usuario.rol,
-      false,
-    );
-
-    if (!actualizado) {
-      throw new Error('No fue posible restablecer la contraseña.');
-    }
-
-    await this.usuarioRepository.marcarPasswordResetTokenUsado(
-      resetToken.idPasswordResetToken,
-    );
-
-    await this.usuarioRepository.revocarRefreshToken(usuario.idUsuario);
-
-    return true;
-  }
-
-  private generarTokenRecuperacion(): string {
-    return randomBytes(32).toString('hex');
-  }
-
-  private generarHashToken(token: string): string {
-    return createHash('sha256').update(token).digest('hex');
   }
 
   private async registrarUsuario(
@@ -867,5 +1047,24 @@ export class UsuarioManager {
   private normalizarTextoOpcional(valor: string | null | undefined): string | null {
     const texto = valor?.trim() ?? '';
     return texto.length > 0 ? texto : null;
+  }
+
+  private generarCodigoVerificacion(): string {
+    const caracteres = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let codigo = '';
+
+    for (let i = 0; i < 6; i += 1) {
+      codigo += caracteres[randomBytes(1)[0] % caracteres.length];
+    }
+
+    return codigo;
+  }
+
+  private generarTokenSeguro(): string {
+    return randomBytes(32).toString('base64url');
+  }
+
+  private generarHashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
   }
 }

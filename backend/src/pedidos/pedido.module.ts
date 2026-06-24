@@ -3,10 +3,9 @@ import { UsuarioModule } from '../usuarios/usuario.module';
 import { PedidoController } from './pedido.controller';
 import { PedidoManager } from './pedido.manager';
 import { PedidoRepository } from './pedido.repository';
-import { NotificacionesModule } from 'src/notificaciones/notificaciones.module';
 
 @Module({
-  imports: [UsuarioModule, NotificacionesModule],
+  imports: [UsuarioModule],
   controllers: [PedidoController],
   providers: [
     {

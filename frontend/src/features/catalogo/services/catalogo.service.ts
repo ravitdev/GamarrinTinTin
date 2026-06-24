@@ -75,12 +75,15 @@ function applyLocalFilters(data: Producto[], query: CatalogoQuery): Producto[] {
   if (query.categorias && query.categorias.length > 1) {
     filtered = filtered.filter((p) =>
       query.categorias!.some((catNameOrId) => {
-        const catName = p.categoriaObjeto?.nombre || p.categoria || '';
+        const catName =
+          (p as any).categoriaObjeto?.nombre ||
+          (typeof p.categoria === 'string' ? p.categoria : p.categoria?.nombre) ||
+          '';
 
         return (
           catName.toLowerCase().includes(catNameOrId.toLowerCase()) ||
           catNameOrId.toLowerCase().includes(catName.toLowerCase()) ||
-          String(p.categoriaObjeto?.idCategoria) === catNameOrId
+          String(p.categoria?.idCategoria) === catNameOrId
         );
       }),
     );

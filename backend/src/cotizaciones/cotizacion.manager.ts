@@ -1,358 +1,236 @@
-import { Injectable, Logger } from '@nestjs/common';
-import {
-  EstadoCotizacion,
-  LadoProducto,
-  RazonCotizacion,
-} from '@prisma/client';
-import {
-  CotizacionConDetalle,
-  CotizacionRepository,
-} from './cotizacion.repository';
-import { SolicitarCotizacionDto } from './dto/solicitar-cotizacion.dto';
-import { ResponderCotizacionDto } from './dto/responder-cotizacion.dto';
-import { NotificacionesService } from '../notificaciones/notificaciones.service';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import { NotificacionManager } from '../notificaciones/notificacion.manager';
+import { CotizacionMapper } from './cotizacion.mapper';
+import type { CotizacionResponseDto } from './dto/cotizacion-response.dto';
+import type { CrearCotizacionDto } from './dto/crear-cotizacion.dto';
+import type { ResponderCotizacionDto } from './dto/responder-cotizacion.dto';
+import type { ICotizacionRepository } from './icotizacion.repository';
 
-interface UsuarioAutenticado {
-  idUsuario: number;
-  email: string;
-  rol: string;
-}
-
-export interface CotizacionResponseDto {
-  id: number;
-  idCotizacion: number;
-  codigo: string;
-  cliente: {
-    nombres: string;
-    apellidos: string;
-    correo: string;
-    celular: string;
-    tipoDocumento: string;
-    documento: string;
-    direccion: string;
-  };
-  producto: {
-    id: number;
-    nombre: string;
-    precio: number;
-    descripcion: string;
-    categoria: string;
-    descuentosVolumen: Array<{
-      cantidadMinima: number;
-      porcentajeDescuento: number;
-    }>;
-  };
-  colorSeleccionado: {
-    nombre: string;
-    hexCode: string;
-  };
-  tallaSeleccionada: string;
-  cantidad: number;
-  estado: 'pendiente' | 'cotizado' | 'pagado' | 'rechazado' | 'vencido';
-  createdAt: Date;
-  updatedAt: Date;
-  precioSugerido?: number;
-  fechaVencimiento?: Date;
-  disenoPecho?: string | null;
-  disenoEspalda?: string | null;
-}
+const HORAS_VIGENCIA_COTIZACION = 48;
 
 @Injectable()
 export class CotizacionManager {
-  private readonly logger = new Logger(CotizacionManager.name);
-
   constructor(
-    private readonly cotizacionRepository: CotizacionRepository,
-    private readonly notificacionesService: NotificacionesService,
+    @Inject('ICotizacionRepository')
+    private readonly cotizacionRepository: ICotizacionRepository,
+    @Optional()
+    private readonly notificacionManager?: NotificacionManager,
   ) {}
 
-  async solicitar(
-    usuario: UsuarioAutenticado,
-    dto: SolicitarCotizacionDto,
+  async crearSolicitud(
+    idCliente: number,
+    datos: CrearCotizacionDto,
   ): Promise<CotizacionResponseDto> {
-    this.validarCliente(usuario);
-    this.validarSolicitud(dto);
-
-    const variante = await this.cotizacionRepository.buscarProductoVariante(
-      dto.idProductoVariante,
+    this.validarId(idCliente, 'El cliente no es válido.');
+    this.validarId(
+      datos.idProductoVariante,
+      'La variante del producto no es válida.',
     );
 
-    if (!variante) {
-      throw new Error('La variante seleccionada no existe.');
-    }
-
-    if (!variante.esActivo) {
-      throw new Error('La variante seleccionada no está disponible.');
-    }
-
-    const imagenes = dto.personalizacion?.imagenes ?? [];
-
-    const cotizacion = await this.cotizacionRepository.crear({
-      cliente: {
-        connect: {
-          idUsuario: usuario.idUsuario,
-        },
-      },
-      productoVariante: {
-        connect: {
-          idProductoVariante: dto.idProductoVariante,
-        },
-      },
-      cantidad: dto.cantidad,
-      razon: dto.razon as RazonCotizacion,
-      estado: EstadoCotizacion.PENDIENTE,
-      nombreProductoSnapshot: variante.producto.nombre,
-      colorSnapshot: variante.colorNombre,
-      tallaSnapshot: variante.talla,
-      precioBaseSnapshot: variante.producto.precioBase,
-      ...(imagenes.length > 0
-        ? {
-            personalizacion: {
-              create: {
-                imagenes: {
-                  create: imagenes.map((imagen, index) => ({
-                    idDisenoPredefinido:
-                      imagen.idDisenoPredefinido ?? undefined,
-                    urlImagen: imagen.urlImagen,
-                    lado: imagen.lado as LadoProducto,
-                    xPosicion: imagen.xPosicion,
-                    yPosicion: imagen.yPosicion,
-                    anchoPorcentaje: imagen.anchoPorcentaje,
-                    altoPorcentaje: imagen.altoPorcentaje,
-                    displayOrder: imagen.displayOrder ?? index,
-                  })),
-                },
-              },
-            },
-          }
-        : {}),
-    });
-
-    return this.aResponseDto(cotizacion);
-  }
-
-  async listarMisCotizaciones(
-    usuario: UsuarioAutenticado,
-  ): Promise<CotizacionResponseDto[]> {
-    this.validarCliente(usuario);
-    await this.cotizacionRepository.expirarCotizacionesVencidas(new Date());
-
-    const cotizaciones = await this.cotizacionRepository.listarPorCliente(
-      usuario.idUsuario,
-    );
-
-    return cotizaciones.map((cotizacion) => this.aResponseDto(cotizacion));
-  }
-
-  async listarTodas(
-    usuario: UsuarioAutenticado,
-  ): Promise<CotizacionResponseDto[]> {
-    this.validarPersonalNegocio(usuario);
-    await this.cotizacionRepository.expirarCotizacionesVencidas(new Date());
-
-    const cotizaciones = await this.cotizacionRepository.listarTodas();
-
-    return cotizaciones.map((cotizacion) => this.aResponseDto(cotizacion));
-  }
-
-  async consultarDetalle(
-    usuario: UsuarioAutenticado,
-    idCotizacion: number,
-  ): Promise<CotizacionResponseDto> {
-    await this.cotizacionRepository.expirarCotizacionesVencidas(new Date());
-
-    const cotizacion = await this.cotizacionRepository.buscarPorId(idCotizacion);
-
-    if (!cotizacion) {
-      throw new Error('Cotización no encontrada.');
-    }
-
-    const esClientePropietario =
-      usuario.rol === 'CLIENTE' && cotizacion.idCliente === usuario.idUsuario;
-
-    const esPersonalNegocio =
-      usuario.rol === 'VENDEDOR' || usuario.rol === 'ADMINISTRADOR';
-
-    if (!esClientePropietario && !esPersonalNegocio) {
-      throw new Error('No tienes permiso para ver esta cotización.');
-    }
-
-    return this.aResponseDto(cotizacion);
-  }
-
-  async responder(
-    usuario: UsuarioAutenticado,
-    idCotizacion: number,
-    dto: ResponderCotizacionDto,
-  ): Promise<CotizacionResponseDto> {
-    this.validarPersonalNegocio(usuario);
-    this.validarPrecio(dto.precioPropuesto);
-
-    const cotizacion = await this.cotizacionRepository.buscarPorId(idCotizacion);
-
-    if (!cotizacion) {
-      throw new Error('Cotización no encontrada.');
-    }
-
-    if (cotizacion.estado !== EstadoCotizacion.PENDIENTE) {
+    if (!Number.isInteger(datos.cantidad) || datos.cantidad <= 0) {
       throw new Error(
-        'La cotización no se encuentra en estado pendiente y no puede ser atendida.',
+        'La cantidad solicitada debe ser un entero mayor a cero.',
       );
     }
 
-    const fechaCotizacion = new Date();
+    if (!['PERSONALIZACION', 'STOCK_INSUFICIENTE'].includes(datos.razon)) {
+      throw new Error('La razón de la cotización no es válida.');
+    }
+
+    const cotizacion = await this.cotizacionRepository.crear(idCliente, datos);
+    if (cotizacion.cliente?.email) {
+      await this.notificacionManager?.enviarCotizacionCreada(
+        cotizacion.cliente.email,
+        cotizacion.idCotizacion,
+        cotizacion,
+      );
+    }
+    return CotizacionMapper.aResponseDto(cotizacion);
+  }
+
+  async listarPorCliente(idCliente: number): Promise<CotizacionResponseDto[]> {
+    this.validarId(idCliente, 'El cliente no es válido.');
+    await this.cancelarVencidas();
+
+    const cotizaciones =
+      await this.cotizacionRepository.listarPorCliente(idCliente);
+    return cotizaciones.map((cotizacion) =>
+      CotizacionMapper.aResponseDto(cotizacion),
+    );
+  }
+
+  async consultarPropia(
+    idCliente: number,
+    idCotizacion: number,
+  ): Promise<CotizacionResponseDto> {
+    this.validarId(idCliente, 'El cliente no es válido.');
+    this.validarId(idCotizacion, 'La cotización no es válida.');
+    await this.cancelarVencidas();
+
+    const cotizacion =
+      await this.cotizacionRepository.buscarPorId(idCotizacion);
+
+    if (!cotizacion || cotizacion.idCliente !== idCliente) {
+      throw new Error('Cotización no encontrada.');
+    }
+
+    return CotizacionMapper.aResponseDto(cotizacion);
+  }
+
+  async listarSolicitudes(): Promise<CotizacionResponseDto[]> {
+    await this.cancelarVencidas();
+
+    const cotizaciones = await this.cotizacionRepository.listarSolicitudes();
+    return cotizaciones.map((cotizacion) =>
+      CotizacionMapper.aResponseDto(cotizacion),
+    );
+  }
+
+  async consultarSolicitud(
+    idCotizacion: number,
+  ): Promise<CotizacionResponseDto> {
+    this.validarId(idCotizacion, 'La cotización no es válida.');
+    await this.cancelarVencidas();
+
+    const cotizacion =
+      await this.cotizacionRepository.buscarPorId(idCotizacion);
+
+    if (!cotizacion) {
+      throw new Error('Cotización no encontrada.');
+    }
+
+    return CotizacionMapper.aResponseDto(cotizacion);
+  }
+
+  async responderCotizacion(
+    idCotizacion: number,
+    atendidoPorId: number,
+    datos: ResponderCotizacionDto,
+  ): Promise<CotizacionResponseDto> {
+    this.validarId(idCotizacion, 'La cotización no es válida.');
+    this.validarId(atendidoPorId, 'El usuario que atiende no es válido.');
+
+    const precioCotizado = datos.precioCotizado ?? datos.precioPropuesto;
+
+    if (
+      typeof precioCotizado !== 'number' ||
+      !Number.isFinite(precioCotizado) ||
+      precioCotizado <= 0
+    ) {
+      throw new Error('El precio cotizado debe ser mayor a cero.');
+    }
+
     const fechaExpiracion = new Date(
-      fechaCotizacion.getTime() + 48 * 60 * 60 * 1000,
+      Date.now() + HORAS_VIGENCIA_COTIZACION * 60 * 60 * 1000,
+    );
+    const cotizacion = await this.cotizacionRepository.responder(
+      idCotizacion,
+      atendidoPorId,
+      precioCotizado,
+      fechaExpiracion,
     );
 
-    const actualizada = await this.cotizacionRepository.responder({
-      idCotizacion,
-      atendidoPorId: usuario.idUsuario,
-      precioPropuesto: dto.precioPropuesto,
-      fechaCotizacion,
-      fechaExpiracion,
-    });
+    if (!cotizacion) {
+      const existente =
+        await this.cotizacionRepository.buscarPorId(idCotizacion);
 
-    await this.notificarCotizacionRespondida(actualizada, dto.precioPropuesto);
+      if (!existente) {
+        throw new Error('Cotización no encontrada.');
+      }
 
-    return this.aResponseDto(actualizada);
-  }
+      throw new Error('Solo puede responderse una cotización pendiente.');
+    }
 
-  private async notificarCotizacionRespondida(
-    cotizacion: CotizacionConDetalle,
-    precioCotizado: number,
-  ): Promise<void> {
-    try {
-      await this.notificacionesService.enviarCotizacionRespondida({
-        email: cotizacion.cliente.email,
-        nombres: cotizacion.cliente.nombres,
-        codigoCotizacion: this.generarCodigo(cotizacion.idCotizacion),
-        precioCotizado,
-      });
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Error desconocido';
-
-      this.logger.warn(
-        `No se pudo enviar correo de cotización respondida ${this.generarCodigo(
-          cotizacion.idCotizacion,
-        )}: ${message}`,
+    if (cotizacion.cliente?.email) {
+      await this.notificacionManager?.enviarEstadoCotizacion(
+        cotizacion.cliente.email,
+        cotizacion.idCotizacion,
+        cotizacion.estado,
+        cotizacion.precioCotizado,
+        cotizacion.fechaExpiracion,
+        cotizacion,
       );
     }
+
+    return CotizacionMapper.aResponseDto(cotizacion);
   }
 
-  private validarSolicitud(dto: SolicitarCotizacionDto): void {
-    if (!Number.isInteger(dto.idProductoVariante) || dto.idProductoVariante <= 0) {
-      throw new Error('La variante seleccionada no es válida.');
+  async agregarCotizacionAlCarrito(
+    idCliente: number,
+    idCotizacion: number,
+  ): Promise<CotizacionResponseDto> {
+    this.validarId(idCliente, 'El cliente no es válido.');
+    this.validarId(idCotizacion, 'La cotización no es válida.');
+    await this.cancelarVencidas();
+
+    const cotizacion = await this.cotizacionRepository.agregarAlCarrito(
+      idCotizacion,
+      idCliente,
+    );
+
+    if (!cotizacion) {
+      throw new Error('Cotización no encontrada.');
     }
 
-    if (!Number.isInteger(dto.cantidad) || dto.cantidad <= 0) {
-      throw new Error('Debe ingresar una cantidad válida.');
+    return CotizacionMapper.aResponseDto(cotizacion);
+  }
+
+  async cancelarCotizacionPropia(
+    idCliente: number,
+    idCotizacion: number,
+  ): Promise<CotizacionResponseDto> {
+    this.validarId(idCliente, 'El cliente no es válido.');
+    this.validarId(idCotizacion, 'La cotización no es válida.');
+
+    const cotizacion = await this.cotizacionRepository.cancelarPropia(
+      idCotizacion,
+      idCliente,
+    );
+
+    if (!cotizacion) {
+      throw new Error('Cotización no encontrada.');
     }
 
-    const razonesPermitidas = [
-      RazonCotizacion.PERSONALIZACION,
-      RazonCotizacion.STOCK_INSUFICIENTE,
-    ];
-
-    if (!razonesPermitidas.includes(dto.razon as RazonCotizacion)) {
-      throw new Error('La razón de cotización no es válida.');
+    if (cotizacion.cliente?.email) {
+      await this.notificacionManager?.enviarEstadoCotizacion(
+        cotizacion.cliente.email,
+        cotizacion.idCotizacion,
+        cotizacion.estado,
+        cotizacion.precioCotizado,
+        cotizacion.fechaExpiracion,
+        cotizacion,
+      );
     }
+
+    return CotizacionMapper.aResponseDto(cotizacion);
   }
 
-  private validarPrecio(precio: number): void {
-    if (typeof precio !== 'number' || Number.isNaN(precio) || precio <= 0) {
-      throw new Error('El precio ingresado no es válido.');
+  async cancelarVencidas(): Promise<number> {
+    const cotizaciones = await this.cotizacionRepository.cancelarVencidas(
+      new Date(),
+    );
+
+    await Promise.all(
+      cotizaciones.map(async (cotizacion) => {
+        if (cotizacion.cliente?.email) {
+          await this.notificacionManager?.enviarEstadoCotizacion(
+            cotizacion.cliente.email,
+            cotizacion.idCotizacion,
+            'EXPIRADO',
+            cotizacion.precioCotizado,
+            cotizacion.fechaExpiracion,
+            cotizacion,
+          );
+        }
+      }),
+    );
+
+    return cotizaciones.length;
+  }
+
+  private validarId(id: number, mensaje: string): void {
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new Error(mensaje);
     }
-  }
-
-  private validarCliente(usuario: UsuarioAutenticado): void {
-    if (usuario.rol !== 'CLIENTE') {
-      throw new Error('Solo los clientes pueden realizar esta operación.');
-    }
-  }
-
-  private validarPersonalNegocio(usuario: UsuarioAutenticado): void {
-    if (usuario.rol !== 'VENDEDOR' && usuario.rol !== 'ADMINISTRADOR') {
-      throw new Error('No tienes permiso para realizar esta operación.');
-    }
-  }
-
-  private aResponseDto(cotizacion: CotizacionConDetalle): CotizacionResponseDto {
-    const imagenes = cotizacion.personalizacion?.imagenes ?? [];
-
-    const disenoPecho =
-      imagenes
-        .filter((imagen) => imagen.lado === LadoProducto.FRONT)
-        .map((imagen) => imagen.disenoPredefinido?.nombre ?? imagen.urlImagen)
-        .join(', ') || null;
-
-    const disenoEspalda =
-      imagenes
-        .filter((imagen) => imagen.lado === LadoProducto.BACK)
-        .map((imagen) => imagen.disenoPredefinido?.nombre ?? imagen.urlImagen)
-        .join(', ') || null;
-
-    return {
-      id: cotizacion.idCotizacion,
-      idCotizacion: cotizacion.idCotizacion,
-      codigo: this.generarCodigo(cotizacion.idCotizacion),
-      cliente: {
-        nombres: cotizacion.cliente.nombres,
-        apellidos: cotizacion.cliente.apellidos,
-        correo: cotizacion.cliente.email,
-        celular: cotizacion.cliente.telefono,
-        tipoDocumento: cotizacion.cliente.tipoDocumento,
-        documento: cotizacion.cliente.numeroDocumento,
-        direccion: cotizacion.cliente.direccion ?? '',
-      },
-      producto: {
-        id: cotizacion.productoVariante.producto.idProducto,
-        nombre: cotizacion.nombreProductoSnapshot,
-        precio: Number(cotizacion.precioBaseSnapshot),
-        descripcion: cotizacion.productoVariante.producto.descripcion,
-        categoria: 'Prenda',
-        descuentosVolumen:
-          cotizacion.productoVariante.producto.descuentosVolumen.map(
-            (descuento) => ({
-              cantidadMinima: descuento.cantidadMinima,
-              porcentajeDescuento: Number(descuento.porcentajeDescuento),
-            }),
-          ),
-      },
-      colorSeleccionado: {
-        nombre: cotizacion.colorSnapshot,
-        hexCode: cotizacion.productoVariante.colorHex,
-      },
-      tallaSeleccionada: cotizacion.tallaSnapshot,
-      cantidad: cotizacion.cantidad,
-      estado: this.mapearEstado(cotizacion.estado),
-      createdAt: cotizacion.fechaCreacion,
-      updatedAt: cotizacion.fechaActualizacion,
-      precioSugerido: cotizacion.precioCotizado
-        ? Number(cotizacion.precioCotizado)
-        : undefined,
-      fechaVencimiento: cotizacion.fechaExpiracion ?? undefined,
-      disenoPecho,
-      disenoEspalda,
-    };
-  }
-
-  private generarCodigo(idCotizacion: number): string {
-    return `COT-${String(idCotizacion).padStart(6, '0')}`;
-  }
-
-  private mapearEstado(
-    estado: EstadoCotizacion,
-  ): 'pendiente' | 'cotizado' | 'pagado' | 'rechazado' | 'vencido' {
-    const mapping = {
-      [EstadoCotizacion.PENDIENTE]: 'pendiente',
-      [EstadoCotizacion.COTIZADO]: 'cotizado',
-      [EstadoCotizacion.PAGADO]: 'pagado',
-      [EstadoCotizacion.RECHAZADO]: 'rechazado',
-      [EstadoCotizacion.EXPIRADO]: 'vencido',
-    } as const;
-
-    return mapping[estado];
   }
 }

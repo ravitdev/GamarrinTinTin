@@ -12,15 +12,10 @@ import {
 import { Roles, UsuarioActual } from '../usuarios/seguridad/auth.decorators';
 import { JwtAuthGuard } from '../usuarios/seguridad/jwt-auth.guard';
 import { RolesGuard } from '../usuarios/seguridad/roles.guard';
+import type { UsuarioAutenticado } from '../usuarios/seguridad/usuario-autenticado.interface';
 import { CotizacionManager } from './cotizacion.manager';
-import type { SolicitarCotizacionDto } from './dto/solicitar-cotizacion.dto';
+import type { CrearCotizacionDto } from './dto/crear-cotizacion.dto';
 import type { ResponderCotizacionDto } from './dto/responder-cotizacion.dto';
-
-interface UsuarioAutenticado {
-  idUsuario: number;
-  email: string;
-  rol: string;
-}
 
 @Controller('cotizaciones')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -29,45 +24,98 @@ export class CotizacionController {
 
   @Post()
   @Roles('CLIENTE')
-  async solicitar(
+  async crearSolicitud(
     @UsuarioActual() usuario: UsuarioAutenticado,
-    @Body() body: SolicitarCotizacionDto,
+    @Body() body: CrearCotizacionDto,
   ) {
-    try {
-      const cotizacion = await this.cotizacionManager.solicitar(usuario, body);
+    return this.ejecutar(
+      () => this.cotizacionManager.crearSolicitud(usuario.idUsuario, body),
+      'Solicitud de cotización registrada correctamente.',
+    );
+  }
 
-      return {
-        success: true,
-        message:
-          'Tu solicitud de cotización fue enviada correctamente y está pendiente de revisión por un vendedor.',
-        data: cotizacion,
-      };
-    } catch (error: any) {
-      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
-    }
+  @Get('propias')
+  @Roles('CLIENTE')
+  async listarPropias(@UsuarioActual() usuario: UsuarioAutenticado) {
+    return {
+      success: true,
+      data: await this.cotizacionManager.listarPorCliente(usuario.idUsuario),
+    };
   }
 
   @Get('mis-cotizaciones')
   @Roles('CLIENTE')
   async listarMisCotizaciones(@UsuarioActual() usuario: UsuarioAutenticado) {
-    const cotizaciones =
-      await this.cotizacionManager.listarMisCotizaciones(usuario);
+    return this.listarPropias(usuario);
+  }
 
+  @Get('propias/:idCotizacion')
+  @Roles('CLIENTE')
+  async consultarPropia(
+    @UsuarioActual() usuario: UsuarioAutenticado,
+    @Param('idCotizacion') idCotizacion: string,
+  ) {
+    return this.ejecutar(() =>
+      this.cotizacionManager.consultarPropia(
+        usuario.idUsuario,
+        Number(idCotizacion),
+      ),
+    );
+  }
+
+  @Post('propias/:idCotizacion/carrito')
+  @Roles('CLIENTE')
+  async agregarAlCarrito(
+    @UsuarioActual() usuario: UsuarioAutenticado,
+    @Param('idCotizacion') idCotizacion: string,
+  ) {
+    return this.ejecutar(
+      () =>
+        this.cotizacionManager.agregarCotizacionAlCarrito(
+          usuario.idUsuario,
+          Number(idCotizacion),
+        ),
+      'Cotización agregada al carrito correctamente.',
+    );
+  }
+
+  @Patch('propias/:idCotizacion/cancelar')
+  @Roles('CLIENTE')
+  async cancelarPropia(
+    @UsuarioActual() usuario: UsuarioAutenticado,
+    @Param('idCotizacion') idCotizacion: string,
+  ) {
+    return this.ejecutar(
+      () =>
+        this.cotizacionManager.cancelarCotizacionPropia(
+          usuario.idUsuario,
+          Number(idCotizacion),
+        ),
+      'Cotización cancelada correctamente.',
+    );
+  }
+
+  @Get('solicitudes')
+  @Roles('VENDEDOR', 'ADMINISTRADOR')
+  async listarSolicitudes() {
     return {
       success: true,
-      data: cotizaciones,
+      data: await this.cotizacionManager.listarSolicitudes(),
     };
   }
 
   @Get()
   @Roles('VENDEDOR', 'ADMINISTRADOR')
-  async listarTodas(@UsuarioActual() usuario: UsuarioAutenticado) {
-    const cotizaciones = await this.cotizacionManager.listarTodas(usuario);
+  async listarTodas() {
+    return this.listarSolicitudes();
+  }
 
-    return {
-      success: true,
-      data: cotizaciones,
-    };
+  @Get('solicitudes/:idCotizacion')
+  @Roles('VENDEDOR', 'ADMINISTRADOR')
+  async consultarSolicitud(@Param('idCotizacion') idCotizacion: string) {
+    return this.ejecutar(() =>
+      this.cotizacionManager.consultarSolicitud(Number(idCotizacion)),
+    );
   }
 
   @Get(':idCotizacion')
@@ -76,47 +124,72 @@ export class CotizacionController {
     @UsuarioActual() usuario: UsuarioAutenticado,
     @Param('idCotizacion') idCotizacion: string,
   ) {
-    try {
-      const cotizacion = await this.cotizacionManager.consultarDetalle(
-        usuario,
-        Number(idCotizacion),
-      );
-
-      return {
-        success: true,
-        data: cotizacion,
-      };
-    } catch (error: any) {
-      const status =
-        error.message === 'Cotización no encontrada.'
-          ? HttpStatus.NOT_FOUND
-          : HttpStatus.BAD_REQUEST;
-
-      throw new HttpException(error.message, status);
+    if (usuario.rol === 'CLIENTE') {
+      return this.consultarPropia(usuario, idCotizacion);
     }
+
+    return this.consultarSolicitud(idCotizacion);
   }
 
-  @Patch(':idCotizacion/responder')
+  @Patch(':idCotizacion/respuesta')
   @Roles('VENDEDOR', 'ADMINISTRADOR')
   async responder(
     @UsuarioActual() usuario: UsuarioAutenticado,
     @Param('idCotizacion') idCotizacion: string,
     @Body() body: ResponderCotizacionDto,
   ) {
-    try {
-      const cotizacion = await this.cotizacionManager.responder(
-        usuario,
-        Number(idCotizacion),
-        body,
-      );
+    return this.ejecutar(
+      () =>
+        this.cotizacionManager.responderCotizacion(
+          Number(idCotizacion),
+          usuario.idUsuario,
+          body,
+        ),
+      'Cotización respondida correctamente.',
+    );
+  }
 
+  @Patch(':idCotizacion/responder')
+  @Roles('VENDEDOR', 'ADMINISTRADOR')
+  async responderCompatibilidad(
+    @UsuarioActual() usuario: UsuarioAutenticado,
+    @Param('idCotizacion') idCotizacion: string,
+    @Body() body: ResponderCotizacionDto,
+  ) {
+    return this.responder(usuario, idCotizacion, body);
+  }
+
+  @Post('procesar-vencidas')
+  @Roles('ADMINISTRADOR')
+  async procesarVencidas() {
+    const cantidad = await this.cotizacionManager.cancelarVencidas();
+    return {
+      success: true,
+      message: `${cantidad} cotizaciones vencidas procesadas.`,
+      data: { cantidad },
+    };
+  }
+
+  private async ejecutar<T>(
+    operacion: () => Promise<T>,
+    message?: string,
+  ): Promise<{ success: true; message?: string; data: T }> {
+    try {
       return {
         success: true,
-        message: 'Cotización respondida correctamente.',
-        data: cotizacion,
+        ...(message ? { message } : {}),
+        data: await operacion(),
       };
-    } catch (error: any) {
-      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    } catch (error: unknown) {
+      const mensaje =
+        error instanceof Error
+          ? error.message
+          : 'No se pudo completar la operación.';
+      const noEncontrado = mensaje.toLowerCase().includes('no encontrada');
+      throw new HttpException(
+        mensaje,
+        noEncontrado ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST,
+      );
     }
   }
 }
