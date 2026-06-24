@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   EstadoPedido,
   Pedido,
@@ -9,12 +9,16 @@ import type {
   IPedidoRepository,
   PedidoGestionRegistro,
 } from './ipedido.repository';
+import { NotificacionesService } from '../notificaciones/notificaciones.service';
 
 @Injectable()
 export class PedidoManager {
+  private readonly logger = new Logger(PedidoManager.name);
+
   constructor(
     @Inject('IPedidoRepository')
     private readonly pedidoRepo: IPedidoRepository,
+    private readonly notificacionesService: NotificacionesService,
   ) {}
 
   async crearPedido(
@@ -196,7 +200,40 @@ export class PedidoManager {
       throw new Error('El pedido no se encuentra disponible.');
     }
 
-    return this.pedidoRepo.actualizarEstado(idPedido, nuevoEstado);
+    const actualizado = await this.pedidoRepo.actualizarEstado(
+      idPedido,
+      nuevoEstado,
+    );
+
+    await this.notificarEstadoPedidoActualizado(actualizado);
+
+    return actualizado;
+  }
+
+  private async notificarEstadoPedidoActualizado(
+    pedido: PedidoGestionRegistro,
+  ): Promise<void> {
+    try {
+      await this.notificacionesService.enviarEstadoPedidoActualizado({
+        email: pedido.cliente.email,
+        nombres: pedido.cliente.nombres,
+        codigoPedido: this.generarCodigoPedido(pedido.idPedido),
+        estado: pedido.estado,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Error desconocido';
+
+      this.logger.warn(
+        `No se pudo enviar correo de actualización de pedido ${this.generarCodigoPedido(
+          pedido.idPedido,
+        )}: ${message}`,
+      );
+    }
+  }
+
+  private generarCodigoPedido(idPedido: number): string {
+    return `PED-${String(idPedido).padStart(6, '0')}`;
   }
 
   private crearDetalle(item: CrearPedidoDetalleDto): PedidoDetalle {

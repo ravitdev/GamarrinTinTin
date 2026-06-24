@@ -133,6 +133,7 @@ model Usuario {
 
   
   refreshTokens              RefreshToken[]
+  passwordResetTokens        PasswordResetToken[]
   carrito                    Carrito?
   pedidos                    Pedido[]              @relation("PedidoCliente")
   cotizacionesCliente        Cotizacion[]          @relation("CotizacionCliente")
@@ -187,6 +188,21 @@ model RefreshToken {
 
   @@index([idUsuario])
   @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  idPasswordResetToken Int       @id @default(autoincrement()) @map("id_password_reset_token")
+  idUsuario            Int       @map("id_usuario")
+  tokenHash            String    @map("token_hash")
+  fechaCreacion        DateTime  @default(now()) @map("fecha_creacion")
+  fechaExpiracion      DateTime  @map("fecha_expiracion")
+  usadoEn              DateTime? @map("usado_en")
+
+  usuario Usuario @relation(fields: [idUsuario], references: [idUsuario], onDelete: Cascade)
+
+  @@index([idUsuario])
+  @@index([tokenHash])
+  @@map("password_reset_tokens")
 }
 
 model Categoria {
