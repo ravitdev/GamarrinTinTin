@@ -14,9 +14,18 @@ import {
 import type { ActualizarPerfilDto, CambiarContrasenaDto } from './dto/perfil.dto';
 import type { IniciarSesionDto } from './dto/iniciar-sesion.dto';
 import type { RefreshTokenDto } from './dto/refresh-token.dto';
+import type {
+  RestablecerContrasenaDto,
+  SolicitarRecuperacionContrasenaDto,
+} from './dto/recuperar-contrasena.dto';
 import type { RegistrarClienteDto } from './dto/registrar-cliente.dto';
 import type { RegistrarVendedorDto } from './dto/registrar-vendedor.dto';
 import type { SolicitarCambioDocumentoDto } from './dto/solicitud-cambio-documento.dto';
+import type {
+  AnularRegistroClienteDto,
+  ConfirmarRegistroClienteDto,
+  ReenviarCodigoRegistroClienteDto,
+} from './dto/verificar-registro.dto';
 import type { RolUsuario } from './domain/usuario.entity';
 import { Roles, UsuarioActual } from './seguridad/auth.decorators';
 import { JwtAuthGuard } from './seguridad/jwt-auth.guard';
@@ -24,10 +33,6 @@ import { RolesGuard } from './seguridad/roles.guard';
 import type { UsuarioAutenticado } from './seguridad/usuario-autenticado.interface';
 import { UsuarioManager } from './usuario.manager';
 import { UsuarioMapper } from './usuario.mapper';
-import type {
-  RestablecerContrasenaDto,
-  SolicitarRecuperacionContrasenaDto,
-} from './dto/recuperar-contrasena.dto';
 
 @Controller('usuarios')
 export class UsuarioController {
@@ -36,40 +41,63 @@ export class UsuarioController {
   @Post('clientes')
   async registrarCliente(@Body() body: RegistrarClienteDto) {
     try {
-      const usuario = await this.usuarioManager.registrarCuentaCliente(body);
-      return {
-        success: true,
-        message: 'Cuenta de cliente registrada correctamente.',
-        data: UsuarioMapper.aSesionDto(usuario),
-      };
-    } catch (error: any) {
-      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
-    }
-  }
-
-  @Post('recuperar-contrasena')
-  async solicitarRecuperacionContrasena(
-    @Body() body: SolicitarRecuperacionContrasenaDto,
-  ) {
-    try {
-      await this.usuarioManager.solicitarRecuperacionContrasena(body);
+      const verificacion =
+        await this.usuarioManager.registrarCuentaCliente(body);
       return {
         success: true,
         message:
-          'Si el correo está registrado, recibirás instrucciones para recuperar tu contraseña.',
+          'Te enviamos un codigo de verificacion al correo ingresado.',
+        data: verificacion,
       };
     } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
     }
   }
 
-  @Post('restablecer-contrasena')
-  async restablecerContrasena(@Body() body: RestablecerContrasenaDto) {
+  @Post('clientes/confirmar')
+  async confirmarRegistroCliente(@Body() body: ConfirmarRegistroClienteDto) {
     try {
-      await this.usuarioManager.restablecerContrasena(body);
+      const sesion = await this.usuarioManager.confirmarRegistroCliente(
+        body.email,
+        body.codigo,
+      );
+
       return {
         success: true,
-        message: 'Contraseña restablecida correctamente.',
+        message: 'Cuenta de cliente registrada correctamente.',
+        data: sesion,
+      };
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Post('clientes/reenviar-codigo')
+  async reenviarCodigoRegistroCliente(
+    @Body() body: ReenviarCodigoRegistroClienteDto,
+  ) {
+    try {
+      const verificacion =
+        await this.usuarioManager.reenviarCodigoRegistroCliente(body.email);
+      return {
+        success: true,
+        message:
+          'Se envió un nuevo código de verificación al correo ingresado.',
+        data: verificacion,
+      };
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Post('clientes/anular')
+  async anularRegistroCliente(@Body() body: AnularRegistroClienteDto) {
+    try {
+      await this.usuarioManager.anularRegistroCliente(body.token);
+
+      return {
+        success: true,
+        message: 'El intento de registro fue anulado correctamente.',
       };
     } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
@@ -405,6 +433,46 @@ export class UsuarioController {
           : HttpStatus.UNAUTHORIZED;
 
       throw new HttpException(mensaje, estado);
+    }
+  }
+
+  @Post('recuperar-contrasena')
+  async solicitarRecuperacion(
+    @Body() body: SolicitarRecuperacionContrasenaDto,
+  ) {
+    try {
+      await this.usuarioManager.recuperarContrasena(body.email);
+      return {
+        success: true,
+        message:
+          'Si el correo está registrado, recibirá un enlace de recuperación.',
+      };
+    } catch (error: unknown) {
+      const mensaje =
+        error instanceof Error
+          ? error.message
+          : 'No fue posible procesar la solicitud.';
+      throw new HttpException(mensaje, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Post('restablecer-contrasena')
+  async restablecerContrasena(@Body() body: RestablecerContrasenaDto) {
+    try {
+      await this.usuarioManager.restablecerContrasena(
+        body.token,
+        body.contrasenaNueva,
+      );
+      return {
+        success: true,
+        message: 'Contraseña restablecida correctamente.',
+      };
+    } catch (error: unknown) {
+      const mensaje =
+        error instanceof Error
+          ? error.message
+          : 'No fue posible restablecer la contraseña.';
+      throw new HttpException(mensaje, HttpStatus.BAD_REQUEST);
     }
   }
 

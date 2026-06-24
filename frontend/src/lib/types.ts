@@ -158,6 +158,7 @@ export interface Producto {
 
   // Relaciones opcionales
   categoria?:          Categoria;
+  categoriaObjeto?:    Categoria;
   variantes?:          ProductoVariante[];
   imagenes?:           ProductoImagen[];
   descuentosVolumen?:  DescuentoVolumen[];

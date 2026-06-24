@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { NotificacionModule } from '../notificaciones/notificacion.module';
 import { ContrasenaService } from './seguridad/contrasena.service';
 import { JwtAuthGuard } from './seguridad/jwt-auth.guard';
 import { JwtService } from './seguridad/jwt.service';
@@ -6,10 +7,9 @@ import { RolesGuard } from './seguridad/roles.guard';
 import { UsuarioController } from './usuario.controller';
 import { UsuarioManager } from './usuario.manager';
 import { UsuarioRepository } from './usuario.repository';
-import { NotificacionesModule } from '../notificaciones/notificaciones.module';
 
 @Module({
-  imports: [NotificacionesModule],
+  imports: [NotificacionModule],
   controllers: [UsuarioController],
   providers: [
     ContrasenaService,

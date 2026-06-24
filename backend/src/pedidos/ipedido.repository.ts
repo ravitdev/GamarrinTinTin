@@ -58,6 +58,8 @@ export interface IPedidoRepository {
 
   listarPorCliente(idCliente: number): Promise<Pedido[]>;
 
+  listarTodos?(): Promise<Pedido[]>;
+
   listarParaPersonal(estado?: EstadoPedido): Promise<PedidoGestionRegistro[]>;
 
   buscarGestionPorId(idPedido: number): Promise<PedidoGestionRegistro | null>;

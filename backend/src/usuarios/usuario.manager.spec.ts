@@ -7,9 +7,28 @@ import { IUsuarioRepository } from './iusuario.repository';
 import { ContrasenaService } from './seguridad/contrasena.service';
 import { JwtService } from './seguridad/jwt.service';
 import { UsuarioManager } from './usuario.manager';
+import type { RegistroPendienteUsuarioData } from './iusuario.repository';
+
+class NotificacionManagerFake {
+  codigos = new Map<string, string>();
+
+  enviarCodigoVerificacionRegistro(
+    destinatario: string,
+    _nombre: string,
+    codigo: string,
+  ): Promise<boolean> {
+    this.codigos.set(destinatario, codigo);
+    return Promise.resolve(true);
+  }
+
+  enviarBienvenida(): Promise<boolean> {
+    return Promise.resolve(true);
+  }
+}
 
 class UsuarioRepositoryFake implements IUsuarioRepository {
   private usuarios: Usuario[];
+  private registrosPendientes: RegistroPendienteUsuarioData[] = [];
   private refreshTokens = new Map<
     number,
     { refreshTokenHash: string; fechaExpiracion: Date }
@@ -127,6 +146,84 @@ class UsuarioRepositoryFake implements IUsuarioRepository {
     );
   }
 
+  async guardarRegistroPendiente(
+    registro: RegistroPendienteUsuarioData,
+  ): Promise<RegistroPendienteUsuarioData> {
+    const existente = this.registrosPendientes.findIndex(
+      (item) => item.email === registro.email,
+    );
+    const guardado = {
+      ...registro,
+      idRegistro:
+        existente >= 0
+          ? this.registrosPendientes[existente].idRegistro
+          : this.registrosPendientes.length + 1,
+      estado: 'PENDIENTE' as const,
+    };
+
+    if (existente >= 0) {
+      this.registrosPendientes[existente] = guardado;
+    } else {
+      this.registrosPendientes.push(guardado);
+    }
+
+    return guardado;
+  }
+
+  async buscarRegistroPendientePorEmail(
+    email: string,
+  ): Promise<RegistroPendienteUsuarioData | null> {
+    return (
+      this.registrosPendientes.find(
+        (registro) => registro.email.toLowerCase() === email.toLowerCase(),
+      ) ?? null
+    );
+  }
+
+  async buscarRegistroPendientePorTokenAnulacion(
+    tokenAnulacionHash: string,
+  ): Promise<RegistroPendienteUsuarioData | null> {
+    return (
+      this.registrosPendientes.find(
+        (registro) => registro.tokenAnulacionHash === tokenAnulacionHash,
+      ) ?? null
+    );
+  }
+
+  async actualizarCodigoRegistroPendiente(
+    idRegistro: number,
+    codigoHash: string,
+    tokenAnulacionHash: string,
+    fechaExpiracion: Date,
+  ): Promise<RegistroPendienteUsuarioData> {
+    const registro = this.registrosPendientes.find(
+      (item) => item.idRegistro === idRegistro,
+    );
+
+    if (!registro) {
+      throw new Error('Registro pendiente no encontrado.');
+    }
+
+    registro.codigoHash = codigoHash;
+    registro.tokenAnulacionHash = tokenAnulacionHash;
+    registro.fechaExpiracion = fechaExpiracion;
+    registro.estado = 'PENDIENTE';
+    return registro;
+  }
+
+  async actualizarEstadoRegistroPendiente(
+    idRegistro: number,
+    estado: 'CONFIRMADO' | 'ANULADO' | 'EXPIRADO',
+  ): Promise<boolean> {
+    const registro = this.registrosPendientes.find(
+      (item) => item.idRegistro === idRegistro,
+    );
+
+    if (!registro) return false;
+    registro.estado = estado;
+    return true;
+  }
+
   async listarUsuarios(): Promise<Usuario[]> {
     return [...this.usuarios];
   }
@@ -237,14 +334,17 @@ class UsuarioRepositoryFake implements IUsuarioRepository {
 
 describe('UsuarioManager', () => {
   let manager: UsuarioManager;
+  let notificaciones: NotificacionManagerFake;
 
   beforeEach(() => {
     const contrasenaService = new ContrasenaService();
     const repository = new UsuarioRepositoryFake(contrasenaService);
+    notificaciones = new NotificacionManagerFake();
     manager = new UsuarioManager(
       repository,
       contrasenaService,
       new JwtService(),
+      notificaciones as any,
     );
   });
 
@@ -284,7 +384,7 @@ describe('UsuarioManager', () => {
   });
 
   it('registra cuenta de cliente con contraseña cifrada', async () => {
-    const usuario = await manager.registrarCuentaCliente({
+    const verificacion = await manager.registrarCuentaCliente({
       nombres: 'Nuevo',
       apellidos: 'Cliente',
       email: 'nuevo.cliente@gamarrintintin.com',
@@ -295,16 +395,23 @@ describe('UsuarioManager', () => {
       direccion: 'Lima',
     });
 
-    const sesion = await manager.iniciarSesion({
-      email: 'nuevo.cliente@gamarrintintin.com',
-      contrasena: 'Cliente456',
-    });
+    const codigo = notificaciones.codigos.get(
+      'nuevo.cliente@gamarrintintin.com',
+    );
 
-    expect(usuario.idUsuario).toBe(3);
-    expect(usuario.rol).toBe('CLIENTE');
-    expect(usuario.estado).toBe('ACTIVO');
-    expect(usuario.contrasenaHash).not.toBe('Cliente456');
-    expect(sesion.usuario.email).toBe('nuevo.cliente@gamarrintintin.com');
+    expect(verificacion.email).toBe('nuevo.cliente@gamarrintintin.com');
+    expect(codigo).toHaveLength(6);
+
+    const sesionRegistro = await manager.confirmarRegistroCliente(
+      'nuevo.cliente@gamarrintintin.com',
+      codigo!,
+    );
+
+    expect(sesionRegistro.accessToken).toBeTruthy();
+    expect(sesionRegistro.refreshToken).toBeTruthy();
+    expect(sesionRegistro.usuario.idUsuario).toBe(3);
+    expect(sesionRegistro.usuario.rol).toBe('CLIENTE');
+    expect(sesionRegistro.usuario.email).toBe('nuevo.cliente@gamarrintintin.com');
   });
 
   it('rechaza registro con email inválido', async () => {

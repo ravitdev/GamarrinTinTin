@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { AuthService } from '../services/auth.service';
+import { AuthService, type RegistroPendienteResponse } from '../services/auth.service';
 import type { Usuario, AuthResponse, RolUsuario, RegistroData, AuthCredentials } from '@/lib/types';
 
 // ---------------------------------------------------------------------------
@@ -55,7 +55,8 @@ interface UseAuthReturn {
   user:        Usuario | null;
   rol:         RolUsuario | null;
   login:       (credentials: AuthCredentials) => Promise<void>;
-  register:    (data: RegistroData) => Promise<void>;
+  register:    (data: RegistroData) => Promise<RegistroPendienteResponse>;
+  confirmRegistration: (email: string, codigo: string) => Promise<void>;
   logout:      () => Promise<void>;
 }
 
@@ -127,7 +128,7 @@ export function useAuth(): UseAuthReturn {
         setIsLoading(false);
       }
     },
-    [router]
+    []
   );
 
   // ----- Registro -----
@@ -136,11 +137,31 @@ export function useAuth(): UseAuthReturn {
       setIsLoading(true);
       setError(null);
       try {
-        await AuthService.register(data);
+        return await AuthService.register(data);
         // Registro exitoso → redirigir a login con mensaje
-        router.push('/login?registered=true');
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Error al crear la cuenta');
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [router]
+  );
+
+  // ----- Confirmacion de registro -----
+  const confirmRegistration = useCallback(
+    async (email: string, codigo: string) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await AuthService.confirmRegistration(email, codigo);
+        persistToken(response.access_token);
+        persistUser(response.usuario);
+        setUser(response.usuario);
+        router.push('/catalogo');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Error al confirmar la cuenta');
         throw err;
       } finally {
         setIsLoading(false);
@@ -174,6 +195,7 @@ export function useAuth(): UseAuthReturn {
     rol: user?.rol ?? null,
     login,
     register,
+    confirmRegistration,
     logout,
   };
 }

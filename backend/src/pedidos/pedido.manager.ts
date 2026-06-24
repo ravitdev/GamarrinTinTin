@@ -1,24 +1,23 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import {
-  EstadoPedido,
-  Pedido,
-  PedidoDetalle,
-} from './domain/pedido.entity';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import { NotificacionManager } from '../notificaciones/notificacion.manager';
+import type { IUsuarioRepository } from '../usuarios/iusuario.repository';
+import { EstadoPedido, Pedido, PedidoDetalle } from './domain/pedido.entity';
 import type { CrearPedidoDetalleDto } from './dto/crear-pedido.dto';
 import type {
   IPedidoRepository,
   PedidoGestionRegistro,
 } from './ipedido.repository';
-import { NotificacionesService } from '../notificaciones/notificaciones.service';
 
 @Injectable()
 export class PedidoManager {
-  private readonly logger = new Logger(PedidoManager.name);
-
   constructor(
     @Inject('IPedidoRepository')
     private readonly pedidoRepo: IPedidoRepository,
-    private readonly notificacionesService: NotificacionesService,
+    @Optional()
+    @Inject('IUsuarioRepository')
+    private readonly usuarioRepository?: IUsuarioRepository,
+    @Optional()
+    private readonly notificacionManager?: NotificacionManager,
   ) {}
 
   async crearPedido(
@@ -71,7 +70,19 @@ export class PedidoManager {
       detalles,
     );
 
-    return this.pedidoRepo.guardar(pedido);
+    const guardado = await this.pedidoRepo.guardar(pedido);
+    const cliente = await this.usuarioRepository?.buscarPorId(idCliente);
+
+    if (cliente) {
+      await this.notificacionManager?.enviarPedidoRegistrado(
+        cliente.email,
+        guardado.idPedido,
+        guardado.total,
+        guardado,
+      );
+    }
+
+    return guardado;
   }
 
   async procesarPagoPedido(
@@ -108,11 +119,46 @@ export class PedidoManager {
     );
 
     if (!pagoExitoso) {
+      const cliente = await this.usuarioRepository?.buscarPorId(
+        pedido.idCliente,
+      );
+      if (cliente) {
+        await this.notificacionManager?.enviarPagoRechazado(
+          cliente.email,
+          pedido.idPedido,
+          pedido,
+        );
+      }
       return false;
     }
 
     pedido.estado = 'CONFIRMADO';
     await this.pedidoRepo.guardar(pedido);
+    const cliente = await this.usuarioRepository?.buscarPorId(pedido.idCliente);
+    if (cliente) {
+      await this.notificacionManager?.enviarEstadoPedido(
+        cliente.email,
+        pedido.idPedido,
+        pedido.estado,
+        pedido,
+      );
+
+      const cotizacionesPagadas = pedido.detalles
+        .map((detalle) => detalle.idCotizacion)
+        .filter(
+          (idCotizacion): idCotizacion is number => idCotizacion !== null,
+        );
+
+      await Promise.all(
+        cotizacionesPagadas.map(async (idCotizacion) => {
+          await this.notificacionManager?.enviarEstadoCotizacion(
+            cliente.email,
+            idCotizacion,
+            'PAGADO',
+          );
+        }),
+      );
+    }
     return true;
   }
 
@@ -135,6 +181,80 @@ export class PedidoManager {
     }
 
     return this.pedidoRepo.listarPorCliente(idCliente);
+  }
+
+  async listarTodos(): Promise<
+    Array<
+      Pedido & {
+        cliente?: {
+          nombres: string;
+          apellidos: string;
+          email: string;
+          telefono: string;
+          tipoDocumento: string;
+          numeroDocumento: string;
+          direccion: string | null;
+        };
+      }
+    >
+  > {
+    if (!this.pedidoRepo.listarTodos) {
+      throw new Error('La consulta de pedidos no está disponible.');
+    }
+    const pedidos = await this.pedidoRepo.listarTodos();
+
+    return Promise.all(
+      pedidos.map(async (pedido) => {
+        const cliente = await this.usuarioRepository?.buscarPorId(
+          pedido.idCliente,
+        );
+        return Object.assign(pedido, {
+          cliente: cliente
+            ? {
+                nombres: cliente.nombres,
+                apellidos: cliente.apellidos,
+                email: cliente.email,
+                telefono: cliente.telefono,
+                tipoDocumento: cliente.tipoDocumento,
+                numeroDocumento: cliente.numeroDocumento,
+                direccion: cliente.direccion,
+              }
+            : undefined,
+        });
+      }),
+    );
+  }
+
+  async actualizarEstadoPedido(
+    idPedido: number,
+    nuevoEstado: EstadoPedido,
+  ): Promise<Pedido> {
+    if (!this.esEnteroPositivo(idPedido)) {
+      throw new Error('El pedido no es válido.');
+    }
+
+    const pedido = await this.pedidoRepo.buscarPorId(idPedido);
+    if (!pedido) {
+      throw new Error('Pedido no encontrado.');
+    }
+
+    this.validarTransicionEstado(pedido.estado, nuevoEstado);
+    pedido.estado = nuevoEstado;
+    const actualizado = await this.pedidoRepo.guardar(pedido);
+    const cliente = await this.usuarioRepository?.buscarPorId(
+      actualizado.idCliente,
+    );
+
+    if (cliente) {
+      await this.notificacionManager?.enviarEstadoPedido(
+        cliente.email,
+        actualizado.idPedido,
+        actualizado.estado,
+        actualizado,
+      );
+    }
+
+    return actualizado;
   }
 
   async consultarDetallePedidoPropio(
@@ -200,40 +320,21 @@ export class PedidoManager {
       throw new Error('El pedido no se encuentra disponible.');
     }
 
+    this.validarTransicionEstado(pedido.estado, nuevoEstado);
+
     const actualizado = await this.pedidoRepo.actualizarEstado(
       idPedido,
       nuevoEstado,
     );
 
-    await this.notificarEstadoPedidoActualizado(actualizado);
+    await this.notificacionManager?.enviarEstadoPedido(
+      actualizado.cliente.email,
+      actualizado.idPedido,
+      actualizado.estado,
+      actualizado,
+    );
 
     return actualizado;
-  }
-
-  private async notificarEstadoPedidoActualizado(
-    pedido: PedidoGestionRegistro,
-  ): Promise<void> {
-    try {
-      await this.notificacionesService.enviarEstadoPedidoActualizado({
-        email: pedido.cliente.email,
-        nombres: pedido.cliente.nombres,
-        codigoPedido: this.generarCodigoPedido(pedido.idPedido),
-        estado: pedido.estado,
-      });
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Error desconocido';
-
-      this.logger.warn(
-        `No se pudo enviar correo de actualización de pedido ${this.generarCodigoPedido(
-          pedido.idPedido,
-        )}: ${message}`,
-      );
-    }
-  }
-
-  private generarCodigoPedido(idPedido: number): string {
-    return `PED-${String(idPedido).padStart(6, '0')}`;
   }
 
   private crearDetalle(item: CrearPedidoDetalleDto): PedidoDetalle {
@@ -286,6 +387,26 @@ export class PedidoManager {
   private simularPago(tokenTarjeta: string): boolean {
     const tokenNormalizado = tokenTarjeta?.trim().toLowerCase();
     return Boolean(tokenNormalizado && tokenNormalizado !== 'rechazado');
+  }
+
+  private validarTransicionEstado(
+    estadoActual: EstadoPedido,
+    nuevoEstado: EstadoPedido,
+  ): void {
+    const transiciones: Record<EstadoPedido, EstadoPedido[]> = {
+      REGISTRADO: ['CANCELADO'],
+      CONFIRMADO: ['PROCESANDO', 'CANCELADO'],
+      PROCESANDO: ['ENVIADO', 'CANCELADO'],
+      ENVIADO: ['ENTREGADO'],
+      ENTREGADO: [],
+      CANCELADO: [],
+    };
+
+    if (!transiciones[estadoActual].includes(nuevoEstado)) {
+      throw new Error(
+        `No se puede cambiar el pedido de ${estadoActual} a ${nuevoEstado}.`,
+      );
+    }
   }
 
   private esEnteroPositivo(valor: number): boolean {
