@@ -64,10 +64,29 @@ export class AuthService {
     return ApiClient.post<RegistroPendienteResponse>('/usuarios/clientes', payload, { auth: false });
   }
 
-  static async confirmRegistration(email: string, codigo: string): Promise<void> {
-    await ApiClient.post<void>(
+  static async confirmRegistration(email: string, codigo: string): Promise<AuthResponse> {
+    const raw = await ApiClient.post<any>(
       '/usuarios/clientes/confirmar',
       { email, codigo },
+      { auth: false },
+    );
+
+    if (typeof window !== 'undefined' && raw.refreshToken) {
+      window.localStorage.setItem('gtt_refresh_token', raw.refreshToken);
+    }
+
+    return {
+      access_token: raw.accessToken,
+      usuario: raw.usuario,
+    };
+  }
+
+  static async resendRegistrationCode(
+    email: string,
+  ): Promise<RegistroPendienteResponse> {
+    return ApiClient.post<RegistroPendienteResponse>(
+      '/usuarios/clientes/reenviar-codigo',
+      { email },
       { auth: false },
     );
   }

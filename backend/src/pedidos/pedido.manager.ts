@@ -78,6 +78,7 @@ export class PedidoManager {
         cliente.email,
         guardado.idPedido,
         guardado.total,
+        guardado,
       );
     }
 
@@ -125,6 +126,7 @@ export class PedidoManager {
         await this.notificacionManager?.enviarPagoRechazado(
           cliente.email,
           pedido.idPedido,
+          pedido,
         );
       }
       return false;
@@ -138,6 +140,7 @@ export class PedidoManager {
         cliente.email,
         pedido.idPedido,
         pedido.estado,
+        pedido,
       );
 
       const cotizacionesPagadas = pedido.detalles
@@ -247,6 +250,7 @@ export class PedidoManager {
         cliente.email,
         actualizado.idPedido,
         actualizado.estado,
+        actualizado,
       );
     }
 
@@ -327,6 +331,7 @@ export class PedidoManager {
       actualizado.cliente.email,
       actualizado.idPedido,
       actualizado.estado,
+      actualizado,
     );
 
     return actualizado;

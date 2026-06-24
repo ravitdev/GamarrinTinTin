@@ -115,7 +115,7 @@ export class UsuarioManager {
   async confirmarRegistroCliente(
     email: string,
     codigo: string,
-  ): Promise<Usuario> {
+  ): Promise<SesionDto> {
     const emailNormalizado = this.normalizarTexto(email).toLowerCase();
     const codigoNormalizado = this.normalizarTexto(codigo).toUpperCase();
 
@@ -190,7 +190,54 @@ export class UsuarioManager {
       usuario.nombres,
     );
 
-    return usuario;
+    return this.generarSesion(usuario);
+  }
+
+  async reenviarCodigoRegistroCliente(
+    email: string,
+  ): Promise<{ email: string; fechaExpiracion: Date }> {
+    const emailNormalizado = this.normalizarTexto(email).toLowerCase();
+    this.validarEmail(emailNormalizado);
+
+    const pendiente =
+      await this.usuarioRepository.buscarRegistroPendientePorEmail(
+        emailNormalizado,
+      );
+
+    if (
+      !pendiente ||
+      !['PENDIENTE', 'EXPIRADO'].includes(pendiente.estado ?? 'PENDIENTE')
+    ) {
+      throw new Error('No existe un registro pendiente para este correo.');
+    }
+
+    if (await this.usuarioRepository.existePorEmail(pendiente.email)) {
+      throw new Error('El email ya está en uso.');
+    }
+
+    const codigo = this.generarCodigoVerificacion();
+    const tokenAnulacion = this.generarTokenSeguro();
+    const fechaExpiracion = new Date(Date.now() + 5 * 60 * 1000);
+
+    const actualizado =
+      await this.usuarioRepository.actualizarCodigoRegistroPendiente(
+        pendiente.idRegistro!,
+        this.contrasenaService.generarHash(codigo),
+        this.generarHashToken(tokenAnulacion),
+        fechaExpiracion,
+      );
+
+    await this.notificacionManager?.enviarCodigoVerificacionRegistro(
+      actualizado.email,
+      actualizado.nombres,
+      codigo,
+      tokenAnulacion,
+    );
+
+    return {
+      email: actualizado.email,
+      fechaExpiracion: actualizado.fechaExpiracion,
+    };
   }
 
   async anularRegistroCliente(token: string): Promise<boolean> {

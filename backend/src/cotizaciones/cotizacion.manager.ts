@@ -42,6 +42,7 @@ export class CotizacionManager {
       await this.notificacionManager?.enviarCotizacionCreada(
         cotizacion.cliente.email,
         cotizacion.idCotizacion,
+        cotizacion,
       );
     }
     return CotizacionMapper.aResponseDto(cotizacion);
@@ -98,16 +99,6 @@ export class CotizacionManager {
       throw new Error('Cotización no encontrada.');
     }
 
-    if (cotizacion.cliente?.email) {
-      await this.notificacionManager?.enviarEstadoCotizacion(
-        cotizacion.cliente.email,
-        cotizacion.idCotizacion,
-        cotizacion.estado,
-        cotizacion.precioCotizado,
-        cotizacion.fechaExpiracion,
-      );
-    }
-
     return CotizacionMapper.aResponseDto(cotizacion);
   }
 
@@ -150,6 +141,17 @@ export class CotizacionManager {
       throw new Error('Solo puede responderse una cotización pendiente.');
     }
 
+    if (cotizacion.cliente?.email) {
+      await this.notificacionManager?.enviarEstadoCotizacion(
+        cotizacion.cliente.email,
+        cotizacion.idCotizacion,
+        cotizacion.estado,
+        cotizacion.precioCotizado,
+        cotizacion.fechaExpiracion,
+        cotizacion,
+      );
+    }
+
     return CotizacionMapper.aResponseDto(cotizacion);
   }
 
@@ -173,6 +175,36 @@ export class CotizacionManager {
     return CotizacionMapper.aResponseDto(cotizacion);
   }
 
+  async cancelarCotizacionPropia(
+    idCliente: number,
+    idCotizacion: number,
+  ): Promise<CotizacionResponseDto> {
+    this.validarId(idCliente, 'El cliente no es válido.');
+    this.validarId(idCotizacion, 'La cotización no es válida.');
+
+    const cotizacion = await this.cotizacionRepository.cancelarPropia(
+      idCotizacion,
+      idCliente,
+    );
+
+    if (!cotizacion) {
+      throw new Error('Cotización no encontrada.');
+    }
+
+    if (cotizacion.cliente?.email) {
+      await this.notificacionManager?.enviarEstadoCotizacion(
+        cotizacion.cliente.email,
+        cotizacion.idCotizacion,
+        cotizacion.estado,
+        cotizacion.precioCotizado,
+        cotizacion.fechaExpiracion,
+        cotizacion,
+      );
+    }
+
+    return CotizacionMapper.aResponseDto(cotizacion);
+  }
+
   async cancelarVencidas(): Promise<number> {
     const cotizaciones = await this.cotizacionRepository.cancelarVencidas(
       new Date(),
@@ -185,6 +217,9 @@ export class CotizacionManager {
             cotizacion.cliente.email,
             cotizacion.idCotizacion,
             'EXPIRADO',
+            cotizacion.precioCotizado,
+            cotizacion.fechaExpiracion,
+            cotizacion,
           );
         }
       }),

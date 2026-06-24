@@ -197,6 +197,46 @@ export class CotizacionRepository implements ICotizacionRepository {
     });
   }
 
+  async cancelarPropia(
+    idCotizacion: number,
+    idCliente: number,
+  ): Promise<Cotizacion | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const registro = await tx.cotizacion.findFirst({
+        where: {
+          idCotizacion,
+          idCliente,
+        },
+        include: relacionesCotizacion,
+      });
+
+      if (!registro) {
+        return null;
+      }
+
+      if (!['PENDIENTE', 'COTIZADO'].includes(registro.estado)) {
+        throw new Error(
+          'Solo se pueden cancelar cotizaciones pendientes o cotizadas.',
+        );
+      }
+
+      await tx.itemCarrito.deleteMany({
+        where: { idCotizacion },
+      });
+
+      await tx.cotizacion.update({
+        where: { idCotizacion },
+        data: {
+          estado: 'RECHAZADO',
+        },
+      });
+
+      const cotizacion = CotizacionMapper.aEntidad(registro);
+      cotizacion.estado = 'RECHAZADO';
+      return cotizacion;
+    });
+  }
+
   async cancelarVencidas(fechaActual: Date): Promise<Cotizacion[]> {
     return this.prisma.$transaction(async (tx) => {
       const vencidas = await tx.cotizacion.findMany({

@@ -170,6 +170,25 @@ export class UsuarioRepository implements IUsuarioRepository {
     return registro ? this.aRegistroPendiente(registro) : null;
   }
 
+  async actualizarCodigoRegistroPendiente(
+    idRegistro: number,
+    codigoHash: string,
+    tokenAnulacionHash: string,
+    fechaExpiracion: Date,
+  ): Promise<RegistroPendienteUsuarioData> {
+    const registro = await this.prisma.registroPendienteUsuario.update({
+      where: { idRegistro },
+      data: {
+        codigoHash,
+        tokenAnulacionHash,
+        fechaExpiracion,
+        estado: 'PENDIENTE',
+      },
+    });
+
+    return this.aRegistroPendiente(registro);
+  }
+
   async actualizarEstadoRegistroPendiente(
     idRegistro: number,
     estado: 'CONFIRMADO' | 'ANULADO' | 'EXPIRADO',

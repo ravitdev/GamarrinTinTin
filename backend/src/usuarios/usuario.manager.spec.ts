@@ -190,6 +190,27 @@ class UsuarioRepositoryFake implements IUsuarioRepository {
     );
   }
 
+  async actualizarCodigoRegistroPendiente(
+    idRegistro: number,
+    codigoHash: string,
+    tokenAnulacionHash: string,
+    fechaExpiracion: Date,
+  ): Promise<RegistroPendienteUsuarioData> {
+    const registro = this.registrosPendientes.find(
+      (item) => item.idRegistro === idRegistro,
+    );
+
+    if (!registro) {
+      throw new Error('Registro pendiente no encontrado.');
+    }
+
+    registro.codigoHash = codigoHash;
+    registro.tokenAnulacionHash = tokenAnulacionHash;
+    registro.fechaExpiracion = fechaExpiracion;
+    registro.estado = 'PENDIENTE';
+    return registro;
+  }
+
   async actualizarEstadoRegistroPendiente(
     idRegistro: number,
     estado: 'CONFIRMADO' | 'ANULADO' | 'EXPIRADO',
@@ -381,21 +402,16 @@ describe('UsuarioManager', () => {
     expect(verificacion.email).toBe('nuevo.cliente@gamarrintintin.com');
     expect(codigo).toHaveLength(6);
 
-    const usuario = await manager.confirmarRegistroCliente(
+    const sesionRegistro = await manager.confirmarRegistroCliente(
       'nuevo.cliente@gamarrintintin.com',
       codigo!,
     );
 
-    const sesion = await manager.iniciarSesion({
-      email: 'nuevo.cliente@gamarrintintin.com',
-      contrasena: 'Cliente456',
-    });
-
-    expect(usuario.idUsuario).toBe(3);
-    expect(usuario.rol).toBe('CLIENTE');
-    expect(usuario.estado).toBe('ACTIVO');
-    expect(usuario.contrasenaHash).not.toBe('Cliente456');
-    expect(sesion.usuario.email).toBe('nuevo.cliente@gamarrintintin.com');
+    expect(sesionRegistro.accessToken).toBeTruthy();
+    expect(sesionRegistro.refreshToken).toBeTruthy();
+    expect(sesionRegistro.usuario.idUsuario).toBe(3);
+    expect(sesionRegistro.usuario.rol).toBe('CLIENTE');
+    expect(sesionRegistro.usuario.email).toBe('nuevo.cliente@gamarrintintin.com');
   });
 
   it('rechaza registro con email inválido', async () => {

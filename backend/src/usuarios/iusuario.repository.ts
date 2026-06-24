@@ -40,6 +40,12 @@ export interface IUsuarioRepository {
   buscarRegistroPendientePorTokenAnulacion(
     tokenAnulacionHash: string,
   ): Promise<RegistroPendienteUsuarioData | null>;
+  actualizarCodigoRegistroPendiente(
+    idRegistro: number,
+    codigoHash: string,
+    tokenAnulacionHash: string,
+    fechaExpiracion: Date,
+  ): Promise<RegistroPendienteUsuarioData>;
   actualizarEstadoRegistroPendiente(
     idRegistro: number,
     estado: 'CONFIRMADO' | 'ANULADO' | 'EXPIRADO',

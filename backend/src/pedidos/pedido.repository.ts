@@ -77,7 +77,21 @@ export class PedidoRepository implements IPedidoRepository {
       pedido.detalles.map(async (detalle) => {
         const variante = await this.prisma.productoVariante.findUnique({
           where: { idProductoVariante: detalle.idProductoVariante },
-          include: { producto: true },
+          include: {
+            producto: {
+              include: {
+                descuentosVolumen: {
+                  where: {
+                    esActivo: true,
+                    fechaEliminacion: null,
+                  },
+                  orderBy: {
+                    cantidadMinima: 'desc',
+                  },
+                },
+              },
+            },
+          },
         });
 
         if (!variante || !variante.esActivo || !variante.producto.esActivo) {
@@ -123,6 +137,7 @@ export class PedidoRepository implements IPedidoRepository {
         const subtotal = precioUnitario * detalle.cantidad;
 
         return {
+          idProducto: variante.idProducto,
           idProductoVariante: detalle.idProductoVariante,
           idCotizacion: detalle.idCotizacion,
           cantidad: detalle.cantidad,
@@ -131,6 +146,13 @@ export class PedidoRepository implements IPedidoRepository {
           nombreProductoSnapshot,
           colorSnapshot,
           tallaSnapshot,
+          descuentosVolumen: variante.producto.descuentosVolumen.map(
+            (descuento) => ({
+              cantidadMinima: descuento.cantidadMinima,
+              porcentajeDescuento:
+                descuento.porcentajeDescuento.toNumber(),
+            }),
+          ),
         };
       }),
     );
@@ -140,8 +162,40 @@ export class PedidoRepository implements IPedidoRepository {
       0,
     );
 
-    const descuentoTotal = pedido.descuentoTotal;
+    const cantidadesPorProducto = detallesPreparados.reduce<
+      Record<number, number>
+    >((cantidades, detalle) => {
+      if (detalle.idCotizacion !== null) {
+        return cantidades;
+      }
+
+      cantidades[detalle.idProducto] =
+        (cantidades[detalle.idProducto] ?? 0) + detalle.cantidad;
+      return cantidades;
+    }, {});
+
+    const descuentoTotal = this.redondearMoneda(
+      detallesPreparados.reduce((acumulado, detalle) => {
+        if (detalle.idCotizacion !== null) {
+          return acumulado;
+        }
+
+        const cantidadProducto = cantidadesPorProducto[detalle.idProducto] ?? 0;
+        const descuentoAplicable = detalle.descuentosVolumen.find(
+          (descuento) => cantidadProducto >= descuento.cantidadMinima,
+        );
+        const porcentajeDescuento =
+          descuentoAplicable?.porcentajeDescuento ?? 0;
+
+        return acumulado + detalle.subtotal * (porcentajeDescuento / 100);
+      }, 0),
+    );
     const total = subtotal - descuentoTotal;
+
+    const detallesParaCrear = detallesPreparados.map(
+      ({ idProducto: _idProducto, descuentosVolumen: _descuentos, ...detalle }) =>
+        detalle,
+    );
 
     const registro = await this.prisma.pedido.create({
       data: {
@@ -153,7 +207,7 @@ export class PedidoRepository implements IPedidoRepository {
         tipoEntrega: pedido.tipoEntrega,
         direccionSnapshot: pedido.direccionSnapshot,
         detalles: {
-          create: detallesPreparados,
+          create: detallesParaCrear,
         },
       },
       include: { detalles: true },
@@ -335,5 +389,9 @@ export class PedidoRepository implements IPedidoRepository {
 
   private aNumero(valor: number | { toNumber(): number }): number {
     return typeof valor === 'number' ? valor : valor.toNumber();
+  }
+
+  private redondearMoneda(valor: number): number {
+    return Math.round((valor + Number.EPSILON) * 100) / 100;
   }
 }

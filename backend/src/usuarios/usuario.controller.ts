@@ -24,6 +24,7 @@ import type { SolicitarCambioDocumentoDto } from './dto/solicitud-cambio-documen
 import type {
   AnularRegistroClienteDto,
   ConfirmarRegistroClienteDto,
+  ReenviarCodigoRegistroClienteDto,
 } from './dto/verificar-registro.dto';
 import type { RolUsuario } from './domain/usuario.entity';
 import { Roles, UsuarioActual } from './seguridad/auth.decorators';
@@ -56,7 +57,7 @@ export class UsuarioController {
   @Post('clientes/confirmar')
   async confirmarRegistroCliente(@Body() body: ConfirmarRegistroClienteDto) {
     try {
-      const usuario = await this.usuarioManager.confirmarRegistroCliente(
+      const sesion = await this.usuarioManager.confirmarRegistroCliente(
         body.email,
         body.codigo,
       );
@@ -64,7 +65,25 @@ export class UsuarioController {
       return {
         success: true,
         message: 'Cuenta de cliente registrada correctamente.',
-        data: UsuarioMapper.aSesionDto(usuario),
+        data: sesion,
+      };
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Post('clientes/reenviar-codigo')
+  async reenviarCodigoRegistroCliente(
+    @Body() body: ReenviarCodigoRegistroClienteDto,
+  ) {
+    try {
+      const verificacion =
+        await this.usuarioManager.reenviarCodigoRegistroCliente(body.email);
+      return {
+        success: true,
+        message:
+          'Se envió un nuevo código de verificación al correo ingresado.',
+        data: verificacion,
       };
     } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.BAD_REQUEST);

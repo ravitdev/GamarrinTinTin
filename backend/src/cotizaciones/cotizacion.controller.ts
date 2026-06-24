@@ -79,6 +79,22 @@ export class CotizacionController {
     );
   }
 
+  @Patch('propias/:idCotizacion/cancelar')
+  @Roles('CLIENTE')
+  async cancelarPropia(
+    @UsuarioActual() usuario: UsuarioAutenticado,
+    @Param('idCotizacion') idCotizacion: string,
+  ) {
+    return this.ejecutar(
+      () =>
+        this.cotizacionManager.cancelarCotizacionPropia(
+          usuario.idUsuario,
+          Number(idCotizacion),
+        ),
+      'Cotización cancelada correctamente.',
+    );
+  }
+
   @Get('solicitudes')
   @Roles('VENDEDOR', 'ADMINISTRADOR')
   async listarSolicitudes() {
@@ -169,7 +185,7 @@ export class CotizacionController {
         error instanceof Error
           ? error.message
           : 'No se pudo completar la operación.';
-      const noEncontrado = mensaje === 'Cotización no encontrada.';
+      const noEncontrado = mensaje.toLowerCase().includes('no encontrada');
       throw new HttpException(
         mensaje,
         noEncontrado ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST,

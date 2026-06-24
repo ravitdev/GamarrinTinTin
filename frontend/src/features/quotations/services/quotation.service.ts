@@ -184,4 +184,14 @@ export class QuotationService {
     );
     return mapBackendQuotation(cotizacion);
   }
+
+  static async cancelMyQuotation(
+    id: string | number,
+  ): Promise<Quotation> {
+    const cotizacion = await ApiClient.patch<BackendQuotation>(
+      `/cotizaciones/propias/${id}/cancelar`,
+      {},
+    );
+    return mapBackendQuotation(cotizacion);
+  }
 }

@@ -16,5 +16,9 @@ export interface ICotizacionRepository {
     idCotizacion: number,
     idCliente: number,
   ): Promise<Cotizacion | null>;
+  cancelarPropia(
+    idCotizacion: number,
+    idCliente: number,
+  ): Promise<Cotizacion | null>;
   cancelarVencidas(fechaActual: Date): Promise<Cotizacion[]>;
 }

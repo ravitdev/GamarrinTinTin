@@ -2,6 +2,7 @@ export interface MensajeCorreo {
   destinatario: string;
   asunto: string;
   html: string;
+  texto?: string;
 }
 
 export interface ICorreoAdapter {

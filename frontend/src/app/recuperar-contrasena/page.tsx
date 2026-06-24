@@ -8,28 +8,38 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import Link from 'next/link';
-import { Lock, Mail, ArrowLeft, KeyRound } from 'lucide-react';
+import { Mail, ArrowLeft, KeyRound } from 'lucide-react';
 import { AuthService } from '@/features/auth/services/auth.service';
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function RecuperarContrasenaPage() {
   const [email, setEmail] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isSent, setIsSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) {
-      toast({
-        title: 'Correo requerido',
-        description: 'Por favor, ingresa tu correo electrónico.',
-        variant: 'destructive',
-      });
+    const emailNormalizado = email.trim();
+    const errors: Record<string, string> = {};
+
+    if (!emailNormalizado) {
+      errors.email = 'El correo electrónico es obligatorio.';
+    } else if (!EMAIL_REGEX.test(emailNormalizado)) {
+      errors.email = 'Ingresa un correo electrónico válido.';
+    }
+
+    setFieldErrors(errors);
+
+    if (Object.keys(errors).length > 0) {
       return;
     }
 
+
     setIsLoading(true);
     try {
-      await AuthService.requestPasswordReset(email);
+      await AuthService.requestPasswordReset(emailNormalizado);
       setIsLoading(false);
       setIsSent(true);
       toast({
@@ -79,12 +89,23 @@ export default function RecuperarContrasenaPage() {
                       id="email"
                       type="email"
                       placeholder="ejemplo@correo.com"
-                      className="pl-10"
+                      className={`pl-10 ${fieldErrors.email ? 'border-destructive' : ''}`}
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (fieldErrors.email) {
+                          setFieldErrors((current) => ({
+                            ...current,
+                            email: '',
+                          }));
+                        }
+                      }}
                       disabled={isLoading}
                     />
                   </div>
+                  {fieldErrors.email && (
+                    <p className="text-xs text-destructive">{fieldErrors.email}</p>
+                  )}
                 </div>
 
                 <Button

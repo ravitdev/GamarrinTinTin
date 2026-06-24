@@ -11,10 +11,13 @@ import { Footer } from '@/components/layout/footer';
 import { AuthService } from '@/features/auth/services/auth.service';
 import { toast } from '@/hooks/use-toast';
 
+const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
+
 export default function RestablecerContrasenaPage() {
   const [token, setToken] = useState('');
   const [contrasena, setContrasena] = useState('');
   const [confirmacion, setConfirmacion] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [procesando, setProcesando] = useState(false);
   const [completado, setCompletado] = useState(false);
 
@@ -34,27 +37,27 @@ export default function RestablecerContrasenaPage() {
       return;
     }
 
-    if (
-      contrasena.length < 8 ||
-      !/[A-Za-z]/.test(contrasena) ||
-      !/\d/.test(contrasena)
-    ) {
-      toast({
-        title: 'Contraseña no válida',
-        description: 'Debe tener al menos 8 caracteres, letras y números.',
-        variant: 'destructive',
-      });
+    const errors: Record<string, string> = {};
+
+    if (!contrasena.trim()) {
+      errors.contrasena = 'La nueva contraseña es obligatoria.';
+    } else if (!PASSWORD_REGEX.test(contrasena)) {
+      errors.contrasena =
+        'La contraseña debe tener al menos 8 caracteres e incluir letras y números.';
+    }
+
+    if (!confirmacion.trim()) {
+      errors.confirmacion = 'Debes confirmar la nueva contraseña.';
+    } else if (contrasena !== confirmacion) {
+      errors.confirmacion = 'Las contraseñas no coinciden.';
+    }
+
+    setFieldErrors(errors);
+
+    if (Object.keys(errors).length > 0) {
       return;
     }
 
-    if (contrasena !== confirmacion) {
-      toast({
-        title: 'Las contraseñas no coinciden',
-        description: 'Vuelve a ingresar la confirmación.',
-        variant: 'destructive',
-      });
-      return;
-    }
 
     setProcesando(true);
     try {
@@ -107,9 +110,21 @@ export default function RestablecerContrasenaPage() {
                   id="contrasena"
                   type="password"
                   value={contrasena}
-                  onChange={(event) => setContrasena(event.target.value)}
+                  onChange={(event) => {
+                    setContrasena(event.target.value);
+                    if (fieldErrors.contrasena) {
+                      setFieldErrors((current) => ({
+                        ...current,
+                        contrasena: '',
+                      }));
+                    }
+                  }}
+                  className={fieldErrors.contrasena ? 'border-destructive' : ''}
                   required
                 />
+                {fieldErrors.contrasena && (
+                  <p className="text-xs text-destructive">{fieldErrors.contrasena}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirmacion">Confirmar contraseña</Label>
@@ -117,9 +132,21 @@ export default function RestablecerContrasenaPage() {
                   id="confirmacion"
                   type="password"
                   value={confirmacion}
-                  onChange={(event) => setConfirmacion(event.target.value)}
+                  onChange={(event) => {
+                    setConfirmacion(event.target.value);
+                    if (fieldErrors.confirmacion) {
+                      setFieldErrors((current) => ({
+                        ...current,
+                        confirmacion: '',
+                      }));
+                    }
+                  }}
+                  className={fieldErrors.confirmacion ? 'border-destructive' : ''}
                   required
                 />
+                {fieldErrors.confirmacion && (
+                  <p className="text-xs text-destructive">{fieldErrors.confirmacion}</p>
+                )}
               </div>
               <Button type="submit" className="w-full" disabled={procesando}>
                 {procesando ? 'Actualizando...' : 'Actualizar contraseña'}

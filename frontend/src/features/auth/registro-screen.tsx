@@ -1,8 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Mail, Lock, User, Phone, MapPin, FileText, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -78,15 +77,15 @@ function validateForm(data: FormData): Record<string, string> {
   }
 
   if (!data.password) {
-    e.password = 'La contrasena es obligatoria';
+    e.password = 'La contraseña es obligatoria';
   } else if (!PASSWORD_REGEX.test(data.password)) {
     e.password = 'Minimo 8 caracteres, incluyendo letras y numeros';
   }
 
   if (!data.confirmPassword) {
-    e.confirmPassword = 'Debes confirmar la contrasena';
+    e.confirmPassword = 'Debes confirmar la contraseña';
   } else if (data.password !== data.confirmPassword) {
-    e.confirmPassword = 'Las contrasenas no coinciden';
+    e.confirmPassword = 'Las contraseñas no coinciden';
   }
 
   return e;
@@ -96,18 +95,23 @@ function validateForm(data: FormData): Record<string, string> {
 // Componente
 // ---------------------------------------------------------------------------
 export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
-  const router = useRouter();
-  const { register, isLoading } = useAuth();
+  const { confirmRegistration } = useAuth();
   const { toast }               = useToast();
 
   const [showPassword, setShowPassword] = useState(false);
   const [acceptTerms, setAcceptTerms]   = useState(false);
   const [fieldErrors, setFieldErrors]   = useState<Record<string, string>>({});
+  const [isRegistering, setIsRegistering] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [verificationExpiresAt, setVerificationExpiresAt] =
     useState<string | Date | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [isResendingCode, setIsResendingCode] = useState(false);
+  const [verificationError, setVerificationError] = useState('');
+  const [secondsRemaining, setSecondsRemaining] = useState(0);
+  const registrationAttemptRef = useRef(0);
+  const ignoreNextSubmitUntilEditRef = useRef(false);
 
   const [formData, setFormData] = useState<FormData>({
     nombres:         '',
@@ -121,8 +125,30 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
     confirmPassword: '',
   });
 
+  useEffect(() => {
+    if (!verificationExpiresAt) {
+      setSecondsRemaining(0);
+      return;
+    }
+
+    const updateRemaining = () => {
+      const expirationTime = new Date(verificationExpiresAt).getTime();
+      const remaining = Math.max(
+        0,
+        Math.ceil((expirationTime - Date.now()) / 1000),
+      );
+      setSecondsRemaining(remaining);
+    };
+
+    updateRemaining();
+    const intervalId = window.setInterval(updateRemaining, 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, [verificationExpiresAt]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
+    ignoreNextSubmitUntilEditRef.current = false;
     setFormData((prev) => ({ ...prev, [id]: value }));
     // Limpiar error del campo al editar
     if (fieldErrors[id]) setFieldErrors((prev) => ({ ...prev, [id]: '' }));
@@ -130,6 +156,10 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (ignoreNextSubmitUntilEditRef.current) {
+      return;
+    }
 
     if (!acceptTerms) {
       toast({
@@ -152,7 +182,11 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
     }
 
     try {
-      const response = await register({
+      const attemptId = registrationAttemptRef.current + 1;
+      registrationAttemptRef.current = attemptId;
+      setIsRegistering(true);
+
+      const response = await AuthService.register({
         nombres:         formData.nombres,
         apellidos:       formData.apellidos,
         tipoDocumento:   formData.tipoDocumento,
@@ -163,12 +197,19 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
         confirmPassword: formData.confirmPassword,
         direccion:       formData.direccion,
       });
+
+      if (registrationAttemptRef.current !== attemptId) {
+        return;
+      }
+
       setVerificationEmail(response.email);
       setVerificationExpiresAt(response.fechaExpiracion);
+      setVerificationError('');
+      setVerificationCode('');
       toast({
         title: 'Revisa tu correo',
         description:
-          'Te enviamos un codigo de verificacion. Estara disponible por 5 minutos.',
+          'Te enviamos un código de verificación. Estará disponible por 5 minutos.',
       });
     } catch (err) {
       const message =
@@ -201,15 +242,26 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
         description: message,
         variant: 'destructive',
       });
+    } finally {
+      setIsRegistering(false);
     }
   };
 
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (secondsRemaining <= 0) {
+      setVerificationError(
+        'El código expiró. Puedes reenviar otro código para continuar.',
+      );
+      return;
+    }
+
     setIsVerifying(true);
+    setVerificationError('');
 
     try {
-      await AuthService.confirmRegistration(
+      await confirmRegistration(
         verificationEmail,
         verificationCode.trim().toUpperCase(),
       );
@@ -217,25 +269,74 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
       toast({
         title: 'Cuenta creada correctamente',
         description:
-          'Tu correo fue verificado. Ahora puedes iniciar sesion.',
+          'Tu correo fue verificado. Iniciando sesion.',
       });
 
       onSuccess?.();
-      router.push('/login?registered=true');
     } catch (err) {
       const message =
         err instanceof Error
           ? err.message
-          : 'No se pudo verificar el codigo.';
+          : 'No se pudo verificar el código.';
 
+      setVerificationError(message);
       toast({
-        title: 'Codigo no valido',
+        title: 'Código no válido',
         description: message,
         variant: 'destructive',
       });
     } finally {
       setIsVerifying(false);
     }
+  };
+
+  const handleResendCode = async () => {
+    setIsResendingCode(true);
+    setVerificationError('');
+
+    try {
+      const response = await AuthService.resendRegistrationCode(
+        verificationEmail,
+      );
+      setVerificationEmail(response.email);
+      setVerificationExpiresAt(response.fechaExpiracion);
+      setVerificationCode('');
+      toast({
+        title: 'Código reenviado',
+        description:
+          'Se envio un nuevo código de verificación. Tiene una duracion de 5 minutos.',
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'No se pudo reenviar el código.';
+      setVerificationError(message);
+      toast({
+        title: 'No se pudo reenviar el código',
+        description: message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsResendingCode(false);
+    }
+  };
+
+  const resetVerificationState = (
+    event?: React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    event?.preventDefault();
+    event?.stopPropagation();
+    ignoreNextSubmitUntilEditRef.current = true;
+    registrationAttemptRef.current += 1;
+    setIsRegistering(false);
+    setVerificationEmail('');
+    setVerificationCode('');
+    setVerificationExpiresAt(null);
+    setVerificationError('');
+    setSecondsRemaining(0);
+    setIsVerifying(false);
+    setIsResendingCode(false);
   };
 
   /** Helper: shortcut para limpiar error al editar un campo específico */
@@ -246,12 +347,12 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
   const docLabel       = formData.tipoDocumento === TipoDocumento.DNI ? 'Numero de DNI' : 'Numero de RUC';
 
   if (verificationEmail) {
-    const expirationText = verificationExpiresAt
-      ? new Date(verificationExpiresAt).toLocaleTimeString('es-PE', {
-          hour: '2-digit',
-          minute: '2-digit',
-        })
-      : null;
+    const minutes = Math.floor(secondsRemaining / 60)
+      .toString()
+      .padStart(2, '0');
+    const seconds = (secondsRemaining % 60).toString().padStart(2, '0');
+    const countdownText = `${minutes}:${seconds}`;
+    const isCodeExpired = secondsRemaining <= 0;
 
     return (
       <div className="w-full max-w-md">
@@ -264,12 +365,15 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
               Verifica tu correo
             </h1>
             <p className="mt-2 text-muted-foreground">
-              Enviamos un codigo de 6 caracteres a{' '}
+              Enviamos un código de 6 caracteres a{' '}
               <strong className="text-foreground">{verificationEmail}</strong>.
             </p>
-            {expirationText && (
+            {verificationExpiresAt && (
               <p className="mt-2 text-sm text-muted-foreground">
-                El codigo vence aproximadamente a las {expirationText}.
+                El código vence en{' '}
+                <strong className={isCodeExpired ? 'text-destructive' : 'text-foreground'}>
+                  {countdownText}
+                </strong>
               </p>
             )}
           </div>
@@ -277,7 +381,7 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
           <form onSubmit={handleVerifyCode} className="space-y-5">
             <div>
               <Label htmlFor="verificationCode">
-                Codigo de verificacion <span className="text-destructive">*</span>
+                Código de verificación <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="verificationCode"
@@ -288,29 +392,50 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
                 placeholder="ABC123"
                 maxLength={6}
                 className="mt-1 text-center text-xl tracking-[0.4em]"
-                disabled={isVerifying}
+                disabled={isVerifying || isCodeExpired}
               />
+              {verificationError && (
+                <p className="mt-2 text-sm text-destructive">
+                  {verificationError}
+                </p>
+              )}
             </div>
 
             <Button
               type="submit"
               className="w-full gap-2 bg-accent text-accent-foreground hover:bg-accent/90"
-              disabled={isVerifying || verificationCode.trim().length !== 6}
+              disabled={
+                isVerifying ||
+                isCodeExpired ||
+                verificationCode.trim().length !== 6
+              }
             >
               {isVerifying ? 'Verificando...' : 'Confirmar registro'}
               <ArrowRight className="h-4 w-4" />
+            </Button>
+
+            {isCodeExpired && !verificationError && (
+              <p className="text-center text-sm text-destructive">
+                El código expiró. Puedes reenviar otro código para continuar.
+              </p>
+            )}
+
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={isVerifying || isResendingCode}
+              onClick={handleResendCode}
+            >
+              {isResendingCode ? 'Reenviando código...' : 'Reenviar código'}
             </Button>
 
             <Button
               type="button"
               variant="ghost"
               className="w-full"
-              disabled={isVerifying}
-              onClick={() => {
-                setVerificationEmail('');
-                setVerificationCode('');
-                setVerificationExpiresAt(null);
-              }}
+              disabled={isVerifying || isResendingCode}
+              onClick={resetVerificationState}
             >
               Corregir datos de registro
             </Button>
@@ -355,7 +480,7 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
                   placeholder="Juan Carlos"
                   value={formData.nombres}
                   onChange={handleChange}
-                  disabled={isLoading}
+                  disabled={isRegistering}
                   className={fieldErrors.nombres ? 'border-destructive' : ''}
                 />
                 {fieldErrors.nombres && (
@@ -371,7 +496,7 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
                   placeholder="Rodriguez Mendoza"
                   value={formData.apellidos}
                   onChange={handleChange}
-                  disabled={isLoading}
+                  disabled={isRegistering}
                   className={fieldErrors.apellidos ? 'border-destructive' : ''}
                 />
                 {fieldErrors.apellidos && (
@@ -388,6 +513,7 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
               <RadioGroup
                 value={formData.tipoDocumento}
                 onValueChange={(v) => {
+                  ignoreNextSubmitUntilEditRef.current = false;
                   setFormData((prev) => ({
                     ...prev,
                     tipoDocumento:   v as TipoDocumento,
@@ -428,7 +554,7 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
                     className={cn('pl-10', fieldErrors.numeroDocumento && 'border-destructive')}
                     value={formData.numeroDocumento}
                     onChange={handleChange}
-                    disabled={isLoading}
+                    disabled={isRegistering}
                   />
                 </div>
                 {fieldErrors.numeroDocumento && (
@@ -449,7 +575,7 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
                     className={cn('pl-10', fieldErrors.celular && 'border-destructive')}
                     value={formData.celular}
                     onChange={handleChange}
-                    disabled={isLoading}
+                    disabled={isRegistering}
                   />
                 </div>
                 {fieldErrors.celular && (
@@ -463,12 +589,12 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
           <div className="space-y-4 border-t border-border pt-6">
             <h3 className="font-medium text-foreground flex items-center gap-2">
               <Mail className="h-4 w-4 text-accent" />
-              Informacion de Contacto
+              Información de Contacto
             </h3>
 
             <div>
               <Label htmlFor="email">
-                Correo Electronico <span className="text-destructive">*</span>
+                Correo Electrónico <span className="text-destructive">*</span>
               </Label>
               <div className="relative mt-1">
                 <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -480,7 +606,7 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
                   value={formData.email}
                   onChange={handleChange}
                   autoComplete="email"
-                  disabled={isLoading}
+                  disabled={isRegistering}
                 />
               </div>
               {fieldErrors.email && (
@@ -500,7 +626,7 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
                   className={cn('pl-10', fieldErrors.direccion && 'border-destructive')}
                   value={formData.direccion}
                   onChange={handleChange}
-                  disabled={isLoading}
+                  disabled={isRegistering}
                 />
               </div>
               {fieldErrors.direccion && (
@@ -518,7 +644,7 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
 
             <div>
               <Label htmlFor="password">
-                Contrasena <span className="text-destructive">*</span>
+                Contraseña <span className="text-destructive">*</span>
               </Label>
               <div className="relative mt-1">
                 <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -530,7 +656,7 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
                   value={formData.password}
                   onChange={handleChange}
                   autoComplete="new-password"
-                  disabled={isLoading}
+                  disabled={isRegistering}
                 />
                 <button
                   type="button"
@@ -538,7 +664,7 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  <span className="sr-only">{showPassword ? 'Ocultar' : 'Mostrar'} contrasena</span>
+                  <span className="sr-only">{showPassword ? 'Ocultar' : 'Mostrar'} contraseña</span>
                 </button>
               </div>
               {fieldErrors.password && (
@@ -548,19 +674,19 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
 
             <div>
               <Label htmlFor="confirmPassword">
-                Confirmar Contrasena <span className="text-destructive">*</span>
+                Confirmar Contraseña <span className="text-destructive">*</span>
               </Label>
               <div className="relative mt-1">
                 <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="confirmPassword"
                   type="password"
-                  placeholder="Repite tu contrasena"
+                  placeholder="Repite tu contraseña"
                   className={cn('pl-10', fieldErrors.confirmPassword && 'border-destructive')}
                   value={formData.confirmPassword}
                   onChange={handleChange}
                   autoComplete="new-password"
-                  disabled={isLoading}
+                  disabled={isRegistering}
                 />
               </div>
               {fieldErrors.confirmPassword && (
@@ -576,16 +702,16 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
                 checked={acceptTerms}
                 onCheckedChange={(v) => setAcceptTerms(v as boolean)}
                 className="mt-0.5"
-                disabled={isLoading}
+                disabled={isRegistering}
               />
               <span className="text-sm text-muted-foreground">
                 Acepto los{' '}
                 <Link href="/terminos" className="text-accent hover:underline">
-                  Terminos y Condiciones
+                  Términos y Condiciones
                 </Link>
                 {' '}y la{' '}
                 <Link href="/privacidad" className="text-accent hover:underline">
-                  Politica de Privacidad
+                  Política de Privacidad
                 </Link>
                 {' '}de GamarrinTinTin
               </span>
@@ -595,9 +721,9 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
           <Button
             type="submit"
             className="w-full gap-2 bg-accent text-accent-foreground hover:bg-accent/90"
-            disabled={isLoading}
+            disabled={isRegistering}
           >
-            {isLoading ? 'Creando cuenta...' : 'Crear Cuenta'}
+            {isRegistering ? 'Creando cuenta...' : 'Crear Cuenta'}
             <ArrowRight className="h-4 w-4" />
           </Button>
         </form>
@@ -606,7 +732,7 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
         <p className="mt-6 text-center text-sm text-muted-foreground">
           Ya tienes una cuenta?{' '}
           <Link href="/login" className="text-accent font-medium hover:underline">
-            Inicia sesion aqui
+            Inicia sesión aqui
           </Link>
         </p>
       </div>
