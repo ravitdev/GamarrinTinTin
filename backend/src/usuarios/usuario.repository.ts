@@ -327,6 +327,87 @@ export class UsuarioRepository implements IUsuarioRepository {
     return registro ? this.aSolicitudDesactivacion(registro) : null;
   }
 
+    async crearPasswordResetToken(
+    idUsuario: number,
+    tokenHash: string,
+    fechaExpiracion: Date,
+  ): Promise<boolean> {
+    await this.prisma.passwordResetToken.create({
+      data: {
+        idUsuario,
+        tokenHash,
+        fechaExpiracion,
+      },
+    });
+
+    return true;
+  }
+
+  async buscarPasswordResetTokenValido(
+    tokenHash: string,
+  ): Promise<{
+    idPasswordResetToken: number;
+    idUsuario: number;
+    tokenHash: string;
+    fechaExpiracion: Date;
+    usadoEn: Date | null;
+  } | null> {
+    const registro = await this.prisma.passwordResetToken.findFirst({
+      where: {
+        tokenHash,
+        usadoEn: null,
+        fechaExpiracion: {
+          gt: new Date(),
+        },
+      },
+      orderBy: {
+        fechaCreacion: 'desc',
+      },
+    });
+
+    if (!registro) {
+      return null;
+    }
+
+    return {
+      idPasswordResetToken: registro.idPasswordResetToken,
+      idUsuario: registro.idUsuario,
+      tokenHash: registro.tokenHash,
+      fechaExpiracion: registro.fechaExpiracion,
+      usadoEn: registro.usadoEn,
+    };
+  }
+
+  async marcarPasswordResetTokenUsado(
+    idPasswordResetToken: number,
+  ): Promise<boolean> {
+    const resultado = await this.prisma.passwordResetToken.updateMany({
+      where: {
+        idPasswordResetToken,
+        usadoEn: null,
+      },
+      data: {
+        usadoEn: new Date(),
+      },
+    });
+
+    return resultado.count > 0;
+  }
+
+  async invalidarPasswordResetTokensActivos(idUsuario: number): Promise<boolean> {
+    await this.prisma.passwordResetToken.updateMany({
+      where: {
+        idUsuario,
+        usadoEn: null,
+      },
+      data: {
+        usadoEn: new Date(),
+      },
+    });
+
+    return true;
+  }
+
   private aSolicitudCambioDocumento(registro: {
     idSolicitud: number;
     idUsuario: number;

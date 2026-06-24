@@ -13,6 +13,12 @@ import type { IUsuarioRepository } from './iusuario.repository';
 import { ContrasenaService } from './seguridad/contrasena.service';
 import { JwtService } from './seguridad/jwt.service';
 import { UsuarioMapper } from './usuario.mapper';
+import { randomBytes, createHash } from 'crypto';
+import type {
+  RestablecerContrasenaDto,
+  SolicitarRecuperacionContrasenaDto,
+} from './dto/recuperar-contrasena.dto';
+import { NotificacionesService } from '../notificaciones/notificaciones.service';
 
 @Injectable()
 export class UsuarioManager {
@@ -21,6 +27,7 @@ export class UsuarioManager {
     private readonly usuarioRepository: IUsuarioRepository,
     private readonly contrasenaService: ContrasenaService,
     private readonly jwtService: JwtService,
+    private readonly notificacionesService: NotificacionesService,
   ) {}
 
   async iniciarSesion(credenciales: IniciarSesionDto): Promise<SesionDto> {
@@ -520,6 +527,102 @@ export class UsuarioManager {
 
   async listarUsuarios(): Promise<Usuario[]> {
     return this.usuarioRepository.listarUsuarios();
+  }
+
+  async solicitarRecuperacionContrasena(
+    datos: SolicitarRecuperacionContrasenaDto,
+  ): Promise<void> {
+    const email = this.normalizarTexto(datos.email).toLowerCase();
+
+    if (!email) {
+      throw new Error('Debe ingresar un correo electrónico.');
+    }
+
+    this.validarEmail(email);
+
+    const usuario = await this.usuarioRepository.buscarPorEmail(email);
+
+    if (!usuario || !usuario.estaActivo()) {
+      return;
+    }
+
+    const token = this.generarTokenRecuperacion();
+    const tokenHash = this.generarHashToken(token);
+    const fechaExpiracion = new Date(Date.now() + 30 * 60 * 1000);
+
+    await this.usuarioRepository.invalidarPasswordResetTokensActivos(
+      usuario.idUsuario,
+    );
+
+    await this.usuarioRepository.crearPasswordResetToken(
+      usuario.idUsuario,
+      tokenHash,
+      fechaExpiracion,
+    );
+
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3001';
+    const resetUrl = `${frontendUrl}/recuperar-contrasena?token=${encodeURIComponent(token)}`;
+
+    await this.notificacionesService.enviarRecuperacionContrasena({
+      email: usuario.email,
+      nombres: usuario.nombres,
+      resetUrl,
+    });
+  }
+
+  async restablecerContrasena(
+    datos: RestablecerContrasenaDto,
+  ): Promise<boolean> {
+    const token = this.normalizarTexto(datos.token);
+    const contrasenaNueva = datos.contrasenaNueva;
+
+    if (!token) {
+      throw new Error('Token de recuperación requerido.');
+    }
+
+    this.validarContrasena(contrasenaNueva);
+
+    const tokenHash = this.generarHashToken(token);
+    const resetToken =
+      await this.usuarioRepository.buscarPasswordResetTokenValido(tokenHash);
+
+    if (!resetToken) {
+      throw new Error('El enlace de recuperación no es válido o ha expirado.');
+    }
+
+    const usuario = await this.usuarioRepository.buscarPorId(resetToken.idUsuario);
+    if (!usuario || !usuario.estaActivo()) {
+      throw new Error('El enlace de recuperación no es válido o ha expirado.');
+    }
+
+    const actualizado = await this.modificarDatosUsuario(
+      usuario.idUsuario,
+      {
+        contrasenaHash: this.contrasenaService.generarHash(contrasenaNueva),
+      },
+      usuario.rol,
+      false,
+    );
+
+    if (!actualizado) {
+      throw new Error('No fue posible restablecer la contraseña.');
+    }
+
+    await this.usuarioRepository.marcarPasswordResetTokenUsado(
+      resetToken.idPasswordResetToken,
+    );
+
+    await this.usuarioRepository.revocarRefreshToken(usuario.idUsuario);
+
+    return true;
+  }
+
+  private generarTokenRecuperacion(): string {
+    return randomBytes(32).toString('hex');
+  }
+
+  private generarHashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
   }
 
   private async registrarUsuario(

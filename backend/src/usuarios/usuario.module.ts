@@ -6,8 +6,10 @@ import { RolesGuard } from './seguridad/roles.guard';
 import { UsuarioController } from './usuario.controller';
 import { UsuarioManager } from './usuario.manager';
 import { UsuarioRepository } from './usuario.repository';
+import { NotificacionesModule } from '../notificaciones/notificaciones.module';
 
 @Module({
+  imports: [NotificacionesModule],
   controllers: [UsuarioController],
   providers: [
     ContrasenaService,

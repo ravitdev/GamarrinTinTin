@@ -24,6 +24,10 @@ import { RolesGuard } from './seguridad/roles.guard';
 import type { UsuarioAutenticado } from './seguridad/usuario-autenticado.interface';
 import { UsuarioManager } from './usuario.manager';
 import { UsuarioMapper } from './usuario.mapper';
+import type {
+  RestablecerContrasenaDto,
+  SolicitarRecuperacionContrasenaDto,
+} from './dto/recuperar-contrasena.dto';
 
 @Controller('usuarios')
 export class UsuarioController {
@@ -37,6 +41,35 @@ export class UsuarioController {
         success: true,
         message: 'Cuenta de cliente registrada correctamente.',
         data: UsuarioMapper.aSesionDto(usuario),
+      };
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Post('recuperar-contrasena')
+  async solicitarRecuperacionContrasena(
+    @Body() body: SolicitarRecuperacionContrasenaDto,
+  ) {
+    try {
+      await this.usuarioManager.solicitarRecuperacionContrasena(body);
+      return {
+        success: true,
+        message:
+          'Si el correo está registrado, recibirás instrucciones para recuperar tu contraseña.',
+      };
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Post('restablecer-contrasena')
+  async restablecerContrasena(@Body() body: RestablecerContrasenaDto) {
+    try {
+      await this.usuarioManager.restablecerContrasena(body);
+      return {
+        success: true,
+        message: 'Contraseña restablecida correctamente.',
       };
     } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.BAD_REQUEST);

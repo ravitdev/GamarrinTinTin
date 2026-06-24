@@ -5,6 +5,14 @@ import {
   SolicitudDesactivacion,
 } from './domain/solicitud.entity';
 
+export interface PasswordResetTokenRegistro {
+  idPasswordResetToken: number;
+  idUsuario: number;
+  tokenHash: string;
+  fechaExpiracion: Date;
+  usadoEn: Date | null;
+}
+
 export interface IUsuarioRepository {
   guardar(usuario: Usuario): Promise<Usuario>;
   actualizar(usuario: Usuario): Promise<boolean>;
@@ -55,4 +63,18 @@ export interface IUsuarioRepository {
     estado: 'PROCESADA' | 'RECHAZADA',
     idAdmin: number,
   ): Promise<SolicitudDesactivacion | null>;
+
+  crearPasswordResetToken(
+    idUsuario: number,
+    tokenHash: string,
+    fechaExpiracion: Date,
+  ): Promise<boolean>;
+
+  buscarPasswordResetTokenValido(
+    tokenHash: string,
+  ): Promise<PasswordResetTokenRegistro | null>;
+
+  marcarPasswordResetTokenUsado(idPasswordResetToken: number): Promise<boolean>;
+
+  invalidarPasswordResetTokensActivos(idUsuario: number): Promise<boolean>;
 }

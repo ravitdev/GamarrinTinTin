@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   EstadoCotizacion,
   LadoProducto,
@@ -10,6 +10,7 @@ import {
 } from './cotizacion.repository';
 import { SolicitarCotizacionDto } from './dto/solicitar-cotizacion.dto';
 import { ResponderCotizacionDto } from './dto/responder-cotizacion.dto';
+import { NotificacionesService } from '../notificaciones/notificaciones.service';
 
 interface UsuarioAutenticado {
   idUsuario: number;
@@ -58,7 +59,12 @@ export interface CotizacionResponseDto {
 
 @Injectable()
 export class CotizacionManager {
-  constructor(private readonly cotizacionRepository: CotizacionRepository) {}
+  private readonly logger = new Logger(CotizacionManager.name);
+
+  constructor(
+    private readonly cotizacionRepository: CotizacionRepository,
+    private readonly notificacionesService: NotificacionesService,
+  ) {}
 
   async solicitar(
     usuario: UsuarioAutenticado,
@@ -207,7 +213,32 @@ export class CotizacionManager {
       fechaExpiracion,
     });
 
+    await this.notificarCotizacionRespondida(actualizada, dto.precioPropuesto);
+
     return this.aResponseDto(actualizada);
+  }
+
+  private async notificarCotizacionRespondida(
+    cotizacion: CotizacionConDetalle,
+    precioCotizado: number,
+  ): Promise<void> {
+    try {
+      await this.notificacionesService.enviarCotizacionRespondida({
+        email: cotizacion.cliente.email,
+        nombres: cotizacion.cliente.nombres,
+        codigoCotizacion: this.generarCodigo(cotizacion.idCotizacion),
+        precioCotizado,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Error desconocido';
+
+      this.logger.warn(
+        `No se pudo enviar correo de cotización respondida ${this.generarCodigo(
+          cotizacion.idCotizacion,
+        )}: ${message}`,
+      );
+    }
   }
 
   private validarSolicitud(dto: SolicitarCotizacionDto): void {
