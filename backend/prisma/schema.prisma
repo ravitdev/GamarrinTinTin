@@ -42,6 +42,15 @@ enum EstadoSolicitud {
   @@map("estado_solicitud")
 }
 
+enum EstadoRegistroPendiente {
+  PENDIENTE
+  CONFIRMADO
+  ANULADO
+  EXPIRADO
+
+  @@map("estado_registro_pendiente")
+}
+
 enum LadoProducto {
   FRONT
   BACK
@@ -144,6 +153,29 @@ model Usuario {
 
   @@index([rol, estado])
   @@map("usuarios")
+}
+
+model RegistroPendienteUsuario {
+  idRegistro             Int                     @id @default(autoincrement()) @map("id_registro")
+  nombres                String
+  apellidos              String
+  email                  String                  @unique
+  contrasenaHash         String                  @map("contrasena_hash")
+  telefono               String
+  tipoDocumento          TipoDocumento           @map("tipo_documento")
+  numeroDocumento        String                  @map("numero_documento")
+  direccion              String?
+  rol                    RolUsuario              @default(CLIENTE)
+  codigoHash             String                  @map("codigo_hash")
+  tokenAnulacionHash     String                  @unique @map("token_anulacion_hash")
+  estado                 EstadoRegistroPendiente @default(PENDIENTE)
+  fechaExpiracion        DateTime                @map("fecha_expiracion")
+  fechaCreacion          DateTime                @default(now()) @map("fecha_creacion")
+  fechaActualizacion     DateTime                @updatedAt @map("fecha_actualizacion")
+
+  @@index([email, estado])
+  @@index([numeroDocumento, estado])
+  @@map("registros_pendientes_usuario")
 }
 
 model SolicitudCambioDocumento {

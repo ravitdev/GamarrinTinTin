@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { AuthService } from '../services/auth.service';
+import { AuthService, type RegistroPendienteResponse } from '../services/auth.service';
 import type { Usuario, AuthResponse, RolUsuario, RegistroData, AuthCredentials } from '@/lib/types';
 
 // ---------------------------------------------------------------------------
@@ -55,7 +55,7 @@ interface UseAuthReturn {
   user:        Usuario | null;
   rol:         RolUsuario | null;
   login:       (credentials: AuthCredentials) => Promise<void>;
-  register:    (data: RegistroData) => Promise<void>;
+  register:    (data: RegistroData) => Promise<RegistroPendienteResponse>;
   logout:      () => Promise<void>;
 }
 
@@ -127,7 +127,7 @@ export function useAuth(): UseAuthReturn {
         setIsLoading(false);
       }
     },
-    [router]
+    []
   );
 
   // ----- Registro -----
@@ -136,9 +136,8 @@ export function useAuth(): UseAuthReturn {
       setIsLoading(true);
       setError(null);
       try {
-        await AuthService.register(data);
+        return await AuthService.register(data);
         // Registro exitoso → redirigir a login con mensaje
-        router.push('/login?registered=true');
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Error al crear la cuenta');
         throw err;

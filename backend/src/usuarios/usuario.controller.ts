@@ -21,6 +21,10 @@ import type {
 import type { RegistrarClienteDto } from './dto/registrar-cliente.dto';
 import type { RegistrarVendedorDto } from './dto/registrar-vendedor.dto';
 import type { SolicitarCambioDocumentoDto } from './dto/solicitud-cambio-documento.dto';
+import type {
+  AnularRegistroClienteDto,
+  ConfirmarRegistroClienteDto,
+} from './dto/verificar-registro.dto';
 import type { RolUsuario } from './domain/usuario.entity';
 import { Roles, UsuarioActual } from './seguridad/auth.decorators';
 import { JwtAuthGuard } from './seguridad/jwt-auth.guard';
@@ -36,11 +40,45 @@ export class UsuarioController {
   @Post('clientes')
   async registrarCliente(@Body() body: RegistrarClienteDto) {
     try {
-      const usuario = await this.usuarioManager.registrarCuentaCliente(body);
+      const verificacion =
+        await this.usuarioManager.registrarCuentaCliente(body);
+      return {
+        success: true,
+        message:
+          'Te enviamos un codigo de verificacion al correo ingresado.',
+        data: verificacion,
+      };
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Post('clientes/confirmar')
+  async confirmarRegistroCliente(@Body() body: ConfirmarRegistroClienteDto) {
+    try {
+      const usuario = await this.usuarioManager.confirmarRegistroCliente(
+        body.email,
+        body.codigo,
+      );
+
       return {
         success: true,
         message: 'Cuenta de cliente registrada correctamente.',
         data: UsuarioMapper.aSesionDto(usuario),
+      };
+    } catch (error: any) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Post('clientes/anular')
+  async anularRegistroCliente(@Body() body: AnularRegistroClienteDto) {
+    try {
+      await this.usuarioManager.anularRegistroCliente(body.token);
+
+      return {
+        success: true,
+        message: 'El intento de registro fue anulado correctamente.',
       };
     } catch (error: any) {
       throw new HttpException(error.message, HttpStatus.BAD_REQUEST);

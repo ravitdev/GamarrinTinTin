@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { NotificacionModule } from '../notificaciones/notificacion.module';
 import { ContrasenaService } from './seguridad/contrasena.service';
 import { JwtAuthGuard } from './seguridad/jwt-auth.guard';
 import { JwtService } from './seguridad/jwt.service';
@@ -8,6 +9,7 @@ import { UsuarioManager } from './usuario.manager';
 import { UsuarioRepository } from './usuario.repository';
 
 @Module({
+  imports: [NotificacionModule],
   controllers: [UsuarioController],
   providers: [
     ContrasenaService,

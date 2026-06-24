@@ -76,14 +76,14 @@ function applyLocalFilters(data: Producto[], query: CatalogoQuery): Producto[] {
     filtered = filtered.filter((p) =>
       query.categorias!.some((catNameOrId) => {
         const catName =
-          p.categoriaObjeto?.nombre ||
+          (p as any).categoriaObjeto?.nombre ||
           (typeof p.categoria === 'string' ? p.categoria : p.categoria?.nombre) ||
           '';
 
         return (
           catName.toLowerCase().includes(catNameOrId.toLowerCase()) ||
           catNameOrId.toLowerCase().includes(catName.toLowerCase()) ||
-          String(p.categoriaObjeto?.idCategoria) === catNameOrId
+          String(p.categoria?.idCategoria) === catNameOrId
         );
       }),
     );

@@ -5,6 +5,23 @@ import {
   SolicitudDesactivacion,
 } from './domain/solicitud.entity';
 
+export interface RegistroPendienteUsuarioData {
+  idRegistro?: number;
+  nombres: string;
+  apellidos: string;
+  email: string;
+  contrasenaHash: string;
+  telefono: string;
+  tipoDocumento: 'DNI' | 'RUC';
+  numeroDocumento: string;
+  direccion: string | null;
+  rol: RolUsuario;
+  codigoHash: string;
+  tokenAnulacionHash: string;
+  estado?: 'PENDIENTE' | 'CONFIRMADO' | 'ANULADO' | 'EXPIRADO';
+  fechaExpiracion: Date;
+}
+
 export interface IUsuarioRepository {
   guardar(usuario: Usuario): Promise<Usuario>;
   actualizar(usuario: Usuario): Promise<boolean>;
@@ -14,6 +31,19 @@ export interface IUsuarioRepository {
   buscarPorEmail(email: string): Promise<Usuario | null>;
   existePorEmail(email: string): Promise<boolean>;
   existePorDocumento(numeroDocumento: string): Promise<boolean>;
+  guardarRegistroPendiente(
+    registro: RegistroPendienteUsuarioData,
+  ): Promise<RegistroPendienteUsuarioData>;
+  buscarRegistroPendientePorEmail(
+    email: string,
+  ): Promise<RegistroPendienteUsuarioData | null>;
+  buscarRegistroPendientePorTokenAnulacion(
+    tokenAnulacionHash: string,
+  ): Promise<RegistroPendienteUsuarioData | null>;
+  actualizarEstadoRegistroPendiente(
+    idRegistro: number,
+    estado: 'CONFIRMADO' | 'ANULADO' | 'EXPIRADO',
+  ): Promise<boolean>;
   listarUsuarios(): Promise<Usuario[]>;
   listarPorRol(rol: RolUsuario): Promise<Usuario[]>;
   contarPedidosEnProceso(idCliente: number): Promise<number>;

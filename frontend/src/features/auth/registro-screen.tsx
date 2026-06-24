@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Mail, Lock, User, Phone, MapPin, FileText, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useAuth } from './hooks/use-auth';
+import { AuthService } from './services/auth.service';
 import { useToast } from '@/hooks/use-toast';
 import { TipoDocumento } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -94,12 +96,18 @@ function validateForm(data: FormData): Record<string, string> {
 // Componente
 // ---------------------------------------------------------------------------
 export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
+  const router = useRouter();
   const { register, isLoading } = useAuth();
   const { toast }               = useToast();
 
   const [showPassword, setShowPassword] = useState(false);
   const [acceptTerms, setAcceptTerms]   = useState(false);
   const [fieldErrors, setFieldErrors]   = useState<Record<string, string>>({});
+  const [verificationEmail, setVerificationEmail] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [verificationExpiresAt, setVerificationExpiresAt] =
+    useState<string | Date | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const [formData, setFormData] = useState<FormData>({
     nombres:         '',
@@ -144,7 +152,7 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
     }
 
     try {
-      await register({
+      const response = await register({
         nombres:         formData.nombres,
         apellidos:       formData.apellidos,
         tipoDocumento:   formData.tipoDocumento,
@@ -155,7 +163,13 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
         confirmPassword: formData.confirmPassword,
         direccion:       formData.direccion,
       });
-      onSuccess?.();
+      setVerificationEmail(response.email);
+      setVerificationExpiresAt(response.fechaExpiracion);
+      toast({
+        title: 'Revisa tu correo',
+        description:
+          'Te enviamos un codigo de verificacion. Estara disponible por 5 minutos.',
+      });
     } catch (err) {
       const message =
         err instanceof Error
@@ -190,12 +204,121 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
     }
   };
 
+  const handleVerifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsVerifying(true);
+
+    try {
+      await AuthService.confirmRegistration(
+        verificationEmail,
+        verificationCode.trim().toUpperCase(),
+      );
+
+      toast({
+        title: 'Cuenta creada correctamente',
+        description:
+          'Tu correo fue verificado. Ahora puedes iniciar sesion.',
+      });
+
+      onSuccess?.();
+      router.push('/login?registered=true');
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'No se pudo verificar el codigo.';
+
+      toast({
+        title: 'Codigo no valido',
+        description: message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
   /** Helper: shortcut para limpiar error al editar un campo específico */
   const clearErr = (key: string) =>
     fieldErrors[key] ? setFieldErrors((p) => ({ ...p, [key]: '' })) : undefined;
 
   const docPlaceholder = formData.tipoDocumento === TipoDocumento.DNI ? '12345678' : '20123456781';
   const docLabel       = formData.tipoDocumento === TipoDocumento.DNI ? 'Numero de DNI' : 'Numero de RUC';
+
+  if (verificationEmail) {
+    const expirationText = verificationExpiresAt
+      ? new Date(verificationExpiresAt).toLocaleTimeString('es-PE', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : null;
+
+    return (
+      <div className="w-full max-w-md">
+        <div className="rounded-2xl border border-border bg-card p-8 shadow-lg">
+          <div className="text-center mb-8">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-primary mb-4">
+              <Mail className="h-7 w-7 text-primary-foreground" />
+            </div>
+            <h1 className="font-serif text-2xl font-semibold text-foreground">
+              Verifica tu correo
+            </h1>
+            <p className="mt-2 text-muted-foreground">
+              Enviamos un codigo de 6 caracteres a{' '}
+              <strong className="text-foreground">{verificationEmail}</strong>.
+            </p>
+            {expirationText && (
+              <p className="mt-2 text-sm text-muted-foreground">
+                El codigo vence aproximadamente a las {expirationText}.
+              </p>
+            )}
+          </div>
+
+          <form onSubmit={handleVerifyCode} className="space-y-5">
+            <div>
+              <Label htmlFor="verificationCode">
+                Codigo de verificacion <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="verificationCode"
+                value={verificationCode}
+                onChange={(e) =>
+                  setVerificationCode(e.target.value.toUpperCase().slice(0, 6))
+                }
+                placeholder="ABC123"
+                maxLength={6}
+                className="mt-1 text-center text-xl tracking-[0.4em]"
+                disabled={isVerifying}
+              />
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full gap-2 bg-accent text-accent-foreground hover:bg-accent/90"
+              disabled={isVerifying || verificationCode.trim().length !== 6}
+            >
+              {isVerifying ? 'Verificando...' : 'Confirmar registro'}
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full"
+              disabled={isVerifying}
+              onClick={() => {
+                setVerificationEmail('');
+                setVerificationCode('');
+                setVerificationExpiresAt(null);
+              }}
+            >
+              Corregir datos de registro
+            </Button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-2xl">

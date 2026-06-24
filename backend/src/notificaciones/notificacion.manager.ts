@@ -5,17 +5,47 @@ import type { ICorreoAdapter, MensajeCorreo } from './icorreo.adapter';
 
 @Injectable()
 export class NotificacionManager {
+  private readonly frontendUrl =
+    process.env.FRONTEND_URL?.replace(/\/$/, '') ?? 'http://localhost:3001';
+
   constructor(
     @Inject('ICorreoAdapter')
     private readonly correoAdapter: ICorreoAdapter,
   ) {}
 
+  enviarCodigoVerificacionRegistro(
+    destinatario: string,
+    nombre: string,
+    codigo: string,
+    tokenAnulacion: string,
+  ): Promise<boolean> {
+    const enlaceAnulacion = `${this.frontendUrl}/registro/anular?token=${encodeURIComponent(tokenAnulacion)}`;
+
+    return this.enviar(
+      destinatario,
+      'Confirma tu correo para crear tu cuenta',
+      `<p>Hola <strong>${this.escapar(nombre)}</strong>,</p>
+       <p>Recibimos una solicitud para crear una cuenta de cliente en GamarrinTinTin con este correo.</p>
+       <p>Ingresa el siguiente codigo en la pantalla de registro para confirmar tu correo:</p>
+       <p style="font-size:28px;letter-spacing:6px;font-weight:bold;margin:24px 0">${this.escapar(codigo)}</p>
+       <p>Este codigo vence en <strong>5 minutos</strong>.</p>
+       <p>Si no solicitaste crear una cuenta, puedes anular el intento desde este enlace:</p>
+       <p><a href="${this.escapar(enlaceAnulacion)}" style="color:#b91c1c">No fui yo, anular este registro</a></p>`,
+    );
+  }
+
   enviarBienvenida(destinatario: string, nombre: string): Promise<boolean> {
+    const enlaceCatalogo = `${this.frontendUrl}/catalogo`;
+
     return this.enviar(
       destinatario,
       'Bienvenido a GamarrinTinTin',
-      `<p>Hola <strong>${this.escapar(nombre)}</strong>,</p>
-       <p>Tu cuenta fue registrada correctamente. Ya puedes consultar productos, solicitar cotizaciones y realizar pedidos.</p>`,
+      `<p>Estimado/a <strong>${this.escapar(nombre)}</strong>,</p>
+       <p>Bienvenido a <strong>GamarrinTinTin</strong>. Tu cuenta fue creada correctamente.</p>
+       <p>Desde tu cuenta podras guardar tu informacion para realizar pedidos, consultar tus pedidos propios y solicitar cotizaciones para prendas personalizadas o pedidos especiales.</p>
+       <p style="margin:28px 0">
+         <a href="${this.escapar(enlaceCatalogo)}" style="display:inline-block;padding:12px 18px;background:#111827;color:#ffffff;text-decoration:none;border-radius:6px">Ver catalogo de productos</a>
+       </p>`,
     );
   }
 
@@ -138,6 +168,8 @@ export class NotificacionManager {
             <div style="background:#ffffff;border:1px solid #e4e4e7;border-radius:8px;padding:28px">
               <h1 style="font-size:22px;margin:0 0 20px">GamarrinTinTin</h1>
               ${contenido}
+              <hr style="border:none;border-top:1px solid #e4e4e7;margin:28px 0 16px" />
+              <p style="font-size:12px;color:#71717a;margin:0">Este correo fue enviado automaticamente. Por favor, no respondas a este mensaje.</p>
             </div>
           </div>
         </body>

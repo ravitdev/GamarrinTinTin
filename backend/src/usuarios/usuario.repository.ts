@@ -8,6 +8,7 @@ import {
   EstadoSolicitud,
 } from './domain/solicitud.entity';
 import { IUsuarioRepository } from './iusuario.repository';
+import type { RegistroPendienteUsuarioData } from './iusuario.repository';
 import { UsuarioDataMapper } from './usuario-data.mapper';
 
 @Injectable()
@@ -108,6 +109,77 @@ export class UsuarioRepository implements IUsuarioRepository {
     });
 
     return total > 0;
+  }
+
+  async guardarRegistroPendiente(
+    registro: RegistroPendienteUsuarioData,
+  ): Promise<RegistroPendienteUsuarioData> {
+    const guardado = await this.prisma.registroPendienteUsuario.upsert({
+      where: { email: registro.email },
+      update: {
+        nombres: registro.nombres,
+        apellidos: registro.apellidos,
+        contrasenaHash: registro.contrasenaHash,
+        telefono: registro.telefono,
+        tipoDocumento: registro.tipoDocumento,
+        numeroDocumento: registro.numeroDocumento,
+        direccion: registro.direccion,
+        rol: registro.rol,
+        codigoHash: registro.codigoHash,
+        tokenAnulacionHash: registro.tokenAnulacionHash,
+        estado: 'PENDIENTE',
+        fechaExpiracion: registro.fechaExpiracion,
+      },
+      create: {
+        nombres: registro.nombres,
+        apellidos: registro.apellidos,
+        email: registro.email,
+        contrasenaHash: registro.contrasenaHash,
+        telefono: registro.telefono,
+        tipoDocumento: registro.tipoDocumento,
+        numeroDocumento: registro.numeroDocumento,
+        direccion: registro.direccion,
+        rol: registro.rol,
+        codigoHash: registro.codigoHash,
+        tokenAnulacionHash: registro.tokenAnulacionHash,
+        estado: 'PENDIENTE',
+        fechaExpiracion: registro.fechaExpiracion,
+      },
+    });
+
+    return this.aRegistroPendiente(guardado);
+  }
+
+  async buscarRegistroPendientePorEmail(
+    email: string,
+  ): Promise<RegistroPendienteUsuarioData | null> {
+    const registro = await this.prisma.registroPendienteUsuario.findUnique({
+      where: { email: email.trim().toLowerCase() },
+    });
+
+    return registro ? this.aRegistroPendiente(registro) : null;
+  }
+
+  async buscarRegistroPendientePorTokenAnulacion(
+    tokenAnulacionHash: string,
+  ): Promise<RegistroPendienteUsuarioData | null> {
+    const registro = await this.prisma.registroPendienteUsuario.findUnique({
+      where: { tokenAnulacionHash },
+    });
+
+    return registro ? this.aRegistroPendiente(registro) : null;
+  }
+
+  async actualizarEstadoRegistroPendiente(
+    idRegistro: number,
+    estado: 'CONFIRMADO' | 'ANULADO' | 'EXPIRADO',
+  ): Promise<boolean> {
+    const resultado = await this.prisma.registroPendienteUsuario.updateMany({
+      where: { idRegistro },
+      data: { estado },
+    });
+
+    return resultado.count > 0;
   }
 
   async listarUsuarios(): Promise<Usuario[]> {
@@ -434,6 +506,40 @@ export class UsuarioRepository implements IUsuarioRepository {
       registro.fechaResolucion,
       registro.idAdminResolvio,
     );
+  }
+
+  private aRegistroPendiente(registro: {
+    idRegistro: number;
+    nombres: string;
+    apellidos: string;
+    email: string;
+    contrasenaHash: string;
+    telefono: string;
+    tipoDocumento: RegistroPendienteUsuarioData['tipoDocumento'];
+    numeroDocumento: string;
+    direccion: string | null;
+    rol: RolUsuario;
+    codigoHash: string;
+    tokenAnulacionHash: string;
+    estado: RegistroPendienteUsuarioData['estado'];
+    fechaExpiracion: Date;
+  }): RegistroPendienteUsuarioData {
+    return {
+      idRegistro: registro.idRegistro,
+      nombres: registro.nombres,
+      apellidos: registro.apellidos,
+      email: registro.email,
+      contrasenaHash: registro.contrasenaHash,
+      telefono: registro.telefono,
+      tipoDocumento: registro.tipoDocumento,
+      numeroDocumento: registro.numeroDocumento,
+      direccion: registro.direccion,
+      rol: registro.rol,
+      codigoHash: registro.codigoHash,
+      tokenAnulacionHash: registro.tokenAnulacionHash,
+      estado: registro.estado,
+      fechaExpiracion: registro.fechaExpiracion,
+    };
   }
 
   private aSolicitudDesactivacion(registro: {

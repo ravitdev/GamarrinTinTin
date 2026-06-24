@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+﻿import { createHash, randomBytes } from 'node:crypto';
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { NotificacionManager } from '../notificaciones/notificacion.manager';
 import type { ActualizarPerfilDto, CambiarContrasenaDto, UsuarioPerfilDto } from './dto/perfil.dto';
@@ -61,16 +61,159 @@ export class UsuarioManager {
     return this.registrarUsuario(usuario, 'VENDEDOR');
   }
 
-  async registrarCuentaCliente(datos: RegistrarClienteDto): Promise<Usuario> {
+  async registrarCuentaCliente(
+    datos: RegistrarClienteDto,
+  ): Promise<{ email: string; fechaExpiracion: Date }> {
     const usuario = this.crearUsuarioDesdeDatos(datos, 'CLIENTE');
-    const registrado = await this.registrarCliente(usuario);
-    await this.notificacionManager?.enviarBienvenida(
-      registrado.email,
-      registrado.nombres,
+    this.validarDatosRegistro(usuario);
+
+    if (await this.usuarioRepository.existePorEmail(usuario.email)) {
+      throw new Error('El email ya está en uso.');
+    }
+
+    if (
+      await this.usuarioRepository.existePorDocumento(
+        usuario.numeroDocumento,
+      )
+    ) {
+      throw new Error('El numero de documento ya está en uso.');
+    }
+
+    const codigo = this.generarCodigoVerificacion();
+    const tokenAnulacion = this.generarTokenSeguro();
+    const fechaExpiracion = new Date(Date.now() + 5 * 60 * 1000);
+
+    await this.usuarioRepository.guardarRegistroPendiente({
+      nombres: usuario.nombres,
+      apellidos: usuario.apellidos,
+      email: usuario.email,
+      contrasenaHash: usuario.contrasenaHash,
+      telefono: usuario.telefono,
+      tipoDocumento: usuario.tipoDocumento,
+      numeroDocumento: usuario.numeroDocumento,
+      direccion: usuario.direccion,
+      rol: 'CLIENTE',
+      codigoHash: this.contrasenaService.generarHash(codigo),
+      tokenAnulacionHash: this.generarHashToken(tokenAnulacion),
+      estado: 'PENDIENTE',
+      fechaExpiracion,
+    });
+
+    await this.notificacionManager?.enviarCodigoVerificacionRegistro(
+      usuario.email,
+      usuario.nombres,
+      codigo,
+      tokenAnulacion,
     );
-    return registrado;
+
+    return {
+      email: usuario.email,
+      fechaExpiracion,
+    };
   }
 
+  async confirmarRegistroCliente(
+    email: string,
+    codigo: string,
+  ): Promise<Usuario> {
+    const emailNormalizado = this.normalizarTexto(email).toLowerCase();
+    const codigoNormalizado = this.normalizarTexto(codigo).toUpperCase();
+
+    this.validarEmail(emailNormalizado);
+
+    if (!/^[A-Z0-9]{6}$/.test(codigoNormalizado)) {
+      throw new Error('El código de verificación debe tener 6 caracteres.');
+    }
+
+    const pendiente =
+      await this.usuarioRepository.buscarRegistroPendientePorEmail(
+        emailNormalizado,
+      );
+
+    if (!pendiente || pendiente.estado !== 'PENDIENTE') {
+      throw new Error('No existe un registro pendiente para este correo.');
+    }
+
+    if (pendiente.fechaExpiracion < new Date()) {
+      await this.usuarioRepository.actualizarEstadoRegistroPendiente(
+        pendiente.idRegistro!,
+        'EXPIRADO',
+      );
+      throw new Error('El código de verificación ha expirado.');
+    }
+
+    if (
+      !this.contrasenaService.verificar(
+        codigoNormalizado,
+        pendiente.codigoHash,
+      )
+    ) {
+      throw new Error('El código de verificación no es correcto.');
+    }
+
+    if (await this.usuarioRepository.existePorEmail(pendiente.email)) {
+      throw new Error('El email ya está en uso.');
+    }
+
+    if (
+      await this.usuarioRepository.existePorDocumento(
+        pendiente.numeroDocumento,
+      )
+    ) {
+      throw new Error('El numero de documento ya está en uso.');
+    }
+
+    const usuario = await this.usuarioRepository.guardar(
+      new Usuario(
+        0,
+        pendiente.nombres,
+        pendiente.apellidos,
+        pendiente.email,
+        pendiente.contrasenaHash,
+        pendiente.telefono,
+        new Date(),
+        pendiente.tipoDocumento,
+        pendiente.numeroDocumento,
+        pendiente.direccion,
+        'CLIENTE',
+        'ACTIVO',
+      ),
+    );
+
+    await this.usuarioRepository.actualizarEstadoRegistroPendiente(
+      pendiente.idRegistro!,
+      'CONFIRMADO',
+    );
+
+    await this.notificacionManager?.enviarBienvenida(
+      usuario.email,
+      usuario.nombres,
+    );
+
+    return usuario;
+  }
+
+  async anularRegistroCliente(token: string): Promise<boolean> {
+    const tokenNormalizado = this.normalizarTexto(token);
+
+    if (!tokenNormalizado) {
+      throw new Error('El token de anulación es obligatorio.');
+    }
+
+    const pendiente =
+      await this.usuarioRepository.buscarRegistroPendientePorTokenAnulacion(
+        this.generarHashToken(tokenNormalizado),
+      );
+
+    if (!pendiente || pendiente.estado !== 'PENDIENTE') {
+      return true;
+    }
+
+    return this.usuarioRepository.actualizarEstadoRegistroPendiente(
+      pendiente.idRegistro!,
+      'ANULADO',
+    );
+  }
   async registrarUsuarioVendedor(
     datos: RegistrarVendedorDto,
   ): Promise<Usuario> {
@@ -857,6 +1000,21 @@ export class UsuarioManager {
   private normalizarTextoOpcional(valor: string | null | undefined): string | null {
     const texto = valor?.trim() ?? '';
     return texto.length > 0 ? texto : null;
+  }
+
+  private generarCodigoVerificacion(): string {
+    const caracteres = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let codigo = '';
+
+    for (let i = 0; i < 6; i += 1) {
+      codigo += caracteres[randomBytes(1)[0] % caracteres.length];
+    }
+
+    return codigo;
+  }
+
+  private generarTokenSeguro(): string {
+    return randomBytes(32).toString('base64url');
   }
 
   private generarHashToken(token: string): string {
