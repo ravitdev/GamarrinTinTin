@@ -726,7 +726,9 @@ export default function MiCuentaPage() {
                         <p className="font-medium">Cambio de documento</p>
                         <p className="text-sm text-muted-foreground">
                           {profile.solicitudCambioDocumentoPendiente
-                            ? "Tienes una solicitud de cambio de documento pendiente de aprobación."
+                            ? profile?.rol === RolUsuario.VENDEDOR
+                              ? "Su solicitud de cambio de DNI será evaluada por un administrador."
+                              : "Su solicitud de cambio de RUC o DNI será evaluada por un administrador."
                             : profile.rol === RolUsuario.VENDEDOR
                               ? "Para modificar tu DNI debes solicitar el cambio a un administrador."
                               : "Para modificar tu RUC o DNI debes solicitar el cambio a un administrador."}

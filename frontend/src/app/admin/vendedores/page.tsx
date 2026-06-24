@@ -315,7 +315,7 @@ export default function AdminVendedoresPage() {
     if (!newVendor.correo.trim()) {
       errors.correo = "El correo es obligatorio"
     } else if (!EMAIL_REGEX.test(newVendor.correo)) {
-      errors.correo = "Ingresa un correo válido (ej. juan.perez@gmail.com)"
+      errors.correo = "Ingresa un correo válido (ej. usuario@dominio.com)"
     }
 
     // Validación de contraseñas de Registro de Usuario
@@ -692,7 +692,7 @@ export default function AdminVendedoresPage() {
                     type="email"
                     value={newVendor.correo}
                     onChange={(e) => handleInputChange("correo", e.target.value)}
-                    placeholder="juan.perez@gamarrintintin.com"
+                    placeholder="usuario@dominio.com"
                     className={cn("pl-10", fieldErrors.correo && "border-destructive")}
                   />
                 </div>

@@ -603,7 +603,7 @@ export default function ProductDetailPage() {
                   <Link href={`/solicitar-cotizacion?producto=${product.idProducto}`}>
                     <Button size="lg" variant="outline" className="w-full gap-2">
                       <FileText className="h-5 w-5" />
-                      Solicitar Cotizacion
+                      Solicitar Cotización
                     </Button>
                   </Link>
                 )}

@@ -741,7 +741,7 @@ export default function CustomizePage() {
                     }}
                   >
                     <FileText className="h-4 w-4" />
-                    Solicitar Cotizacion
+                    Solicitar Cotización
                   </Button>
                   {designs.length === 0 && (
                     <p className="text-center text-xs text-muted-foreground">

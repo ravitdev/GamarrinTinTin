@@ -253,7 +253,7 @@ export function SolicitarCotizacionScreen() {
 
       <div className="mb-8">
         <h1 className="font-serif text-3xl font-semibold text-foreground">
-          Solicitar Cotización Especial
+          Solicitar Cotización
         </h1>
         <p className="mt-2 text-muted-foreground">
           Completa el formulario para obtener un precio adaptado a tu pedido de volumen o personalización.

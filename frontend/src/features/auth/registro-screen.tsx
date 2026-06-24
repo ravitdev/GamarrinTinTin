@@ -72,7 +72,7 @@ function validateForm(data: FormData): Record<string, string> {
   if (!data.email.trim()) {
     e.email = 'El correo es obligatorio';
   } else if (!EMAIL_REGEX.test(data.email)) {
-    e.email = 'Ingresa un correo valido (ej. juan.perez@gmail.com)';
+    e.email = 'Ingresa un correo valido (ej. usuario@dominio.com)';
   }
 
   if (!data.password) {
@@ -352,7 +352,7 @@ export function RegistroScreen({ onSuccess }: RegistroScreenProps) {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="juan.perez@gmail.com"
+                  placeholder="usuario@dominio.com"
                   className={cn('pl-10', fieldErrors.email && 'border-destructive')}
                   value={formData.email}
                   onChange={handleChange}

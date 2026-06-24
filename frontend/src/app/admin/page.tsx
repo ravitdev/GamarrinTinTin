@@ -60,7 +60,6 @@ const stats = [
 ]
 
 const recentOrders = [
-  { id: "PED-2024-0128", customer: "Maria Garcia", total: 450, items: 3, status: "en_produccion", date: "Hace 2 horas" },
   { id: "PED-2024-0127", customer: "Carlos Lopez", total: 1200, items: 10, status: "pendiente", date: "Hace 4 horas" },
   { id: "PED-2024-0126", customer: "Tech Solutions SAC", total: 3500, items: 50, status: "enviado", date: "Ayer" },
   { id: "PED-2024-0125", customer: "Ana Martinez", total: 180, items: 2, status: "entregado", date: "Ayer" },
