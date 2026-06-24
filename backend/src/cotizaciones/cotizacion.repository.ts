@@ -109,17 +109,45 @@ export class CotizacionRepository {
     });
   }
 
-  async expirarCotizacionesVencidas(fechaActual: Date): Promise<void> {
-    await this.prisma.cotizacion.updateMany({
-      where: {
-        estado: EstadoCotizacion.COTIZADO,
-        fechaExpiracion: {
-          lt: fechaActual,
+  /**
+   * Marca como EXPIRADO las cotizaciones COTIZADO cuyo plazo venció y
+   * devuelve las que cambiaron de estado en esta ejecución (para notificarlas).
+   * La búsqueda y actualización van en una transacción para evitar
+   * notificaciones duplicadas ante ejecuciones concurrentes.
+   */
+  async expirarCotizacionesVencidas(
+    fechaActual: Date,
+  ): Promise<CotizacionConDetalle[]> {
+    return this.prisma.$transaction(async (tx) => {
+      const vencidas = await tx.cotizacion.findMany({
+        where: {
+          estado: EstadoCotizacion.COTIZADO,
+          fechaExpiracion: {
+            lt: fechaActual,
+          },
         },
-      },
-      data: {
+        include: cotizacionInclude,
+      });
+
+      if (vencidas.length === 0) {
+        return [];
+      }
+
+      await tx.cotizacion.updateMany({
+        where: {
+          idCotizacion: {
+            in: vencidas.map((cotizacion) => cotizacion.idCotizacion),
+          },
+        },
+        data: {
+          estado: EstadoCotizacion.EXPIRADO,
+        },
+      });
+
+      return vencidas.map((cotizacion) => ({
+        ...cotizacion,
         estado: EstadoCotizacion.EXPIRADO,
-      },
+      }));
     });
   }
 }

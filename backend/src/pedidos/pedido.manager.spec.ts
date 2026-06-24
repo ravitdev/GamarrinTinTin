@@ -1,6 +1,14 @@
-import { Pedido, PedidoDetalle } from './domain/pedido.entity';
-import { IPedidoRepository } from './ipedido.repository';
+import { EstadoPedido, Pedido, PedidoDetalle } from './domain/pedido.entity';
+import {
+  IPedidoRepository,
+  PedidoGestionRegistro,
+} from './ipedido.repository';
 import { PedidoManager } from './pedido.manager';
+import { NotificacionesService } from '../notificaciones/notificaciones.service';
+
+class NotificacionesServiceFake {
+  async enviarEstadoPedidoActualizado(): Promise<void> {}
+}
 
 class PedidoRepositoryFake implements IPedidoRepository {
   private pedidos: Pedido[] = [];
@@ -98,13 +106,89 @@ class PedidoRepositoryFake implements IPedidoRepository {
   async listarPorCliente(idCliente: number): Promise<Pedido[]> {
     return this.pedidos.filter((pedido) => pedido.idCliente === idCliente);
   }
+
+  async listarParaPersonal(
+    estado?: EstadoPedido,
+  ): Promise<PedidoGestionRegistro[]> {
+    return this.pedidos
+      .filter((pedido) => !estado || pedido.estado === estado)
+      .map((pedido) => this.aGestionRegistro(pedido, pedido.estado));
+  }
+
+  async buscarGestionPorId(
+    idPedido: number,
+  ): Promise<PedidoGestionRegistro | null> {
+    const pedido = this.pedidos.find(
+      (pedidoActual) => pedidoActual.idPedido === idPedido,
+    );
+    return pedido ? this.aGestionRegistro(pedido, pedido.estado) : null;
+  }
+
+  async actualizarEstado(
+    idPedido: number,
+    estado: EstadoPedido,
+  ): Promise<PedidoGestionRegistro> {
+    const pedido = this.pedidos.find(
+      (pedidoActual) => pedidoActual.idPedido === idPedido,
+    );
+
+    if (!pedido) {
+      throw new Error('Pedido no encontrado.');
+    }
+
+    pedido.estado = estado;
+    return this.aGestionRegistro(pedido, estado);
+  }
+
+  private aGestionRegistro(
+    pedido: Pedido,
+    estado: EstadoPedido,
+  ): PedidoGestionRegistro {
+    return {
+      idPedido: pedido.idPedido,
+      idCliente: pedido.idCliente,
+      cliente: {
+        idUsuario: pedido.idCliente,
+        nombres: 'Cliente',
+        apellidos: 'Demo',
+        email: 'cliente@correo.com',
+        telefono: '999999999',
+        tipoDocumento: 'DNI',
+        numeroDocumento: '12345678',
+        direccion: pedido.direccionSnapshot,
+      },
+      fechaCreacion: pedido.fechaCreacion,
+      fechaActualizacion: new Date(),
+      estado,
+      subtotal: pedido.subtotal,
+      descuentoTotal: pedido.descuentoTotal,
+      total: pedido.total,
+      tipoEntrega: pedido.tipoEntrega,
+      direccionSnapshot: pedido.direccionSnapshot,
+      detalles: pedido.detalles.map((detalle) => ({
+        idPedidoDetalle: detalle.idPedidoDetalle,
+        idProductoVariante: detalle.idProductoVariante,
+        idCotizacion: detalle.idCotizacion,
+        cantidad: detalle.cantidad,
+        precioUnitario: detalle.precioUnitario,
+        subtotal: detalle.subtotal,
+        nombreProductoSnapshot: detalle.nombreProductoSnapshot,
+        colorSnapshot: detalle.colorSnapshot,
+        colorHex: '',
+        tallaSnapshot: detalle.tallaSnapshot,
+      })),
+    };
+  }
 }
 
 describe('PedidoManager', () => {
   let manager: PedidoManager;
 
   beforeEach(() => {
-    manager = new PedidoManager(new PedidoRepositoryFake());
+    manager = new PedidoManager(
+      new PedidoRepositoryFake(),
+      new NotificacionesServiceFake() as unknown as NotificacionesService,
+    );
   });
 
   it('crea pedido con detalles y calcula el total', async () => {

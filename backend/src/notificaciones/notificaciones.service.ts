@@ -53,6 +53,26 @@ export class NotificacionesService {
     });
   }
 
+  async enviarCotizacionCancelada(params: {
+    email: string;
+    nombres: string;
+    codigoCotizacion: string;
+  }): Promise<void> {
+    await this.emailService.sendEmail({
+      to: params.email,
+      subject: `Tu cotización ${params.codigoCotizacion} fue cancelada`,
+      text: `Hola ${params.nombres}. Tu cotización ${params.codigoCotizacion} fue cancelada por vencimiento del plazo de respuesta.`,
+      html: `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+          <h2>Cotización cancelada</h2>
+          <p>Hola ${params.nombres},</p>
+          <p>Tu cotización <strong>${params.codigoCotizacion}</strong> fue cancelada por vencimiento del plazo de respuesta.</p>
+          <p>Si aún te interesa, puedes generar una nueva solicitud de cotización desde tu cuenta.</p>
+        </div>
+      `,
+    });
+  }
+
   async enviarEstadoPedidoActualizado(params: {
     email: string;
     nombres: string;

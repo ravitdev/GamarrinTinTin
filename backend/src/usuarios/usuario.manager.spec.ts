@@ -3,10 +3,18 @@ import {
   SolicitudCambioDocumento,
   SolicitudDesactivacion,
 } from './domain/solicitud.entity';
-import { IUsuarioRepository } from './iusuario.repository';
+import {
+  IUsuarioRepository,
+  PasswordResetTokenRegistro,
+} from './iusuario.repository';
 import { ContrasenaService } from './seguridad/contrasena.service';
 import { JwtService } from './seguridad/jwt.service';
 import { UsuarioManager } from './usuario.manager';
+import { NotificacionesService } from '../notificaciones/notificaciones.service';
+
+class NotificacionesServiceFake {
+  async enviarRecuperacionContrasena(): Promise<void> {}
+}
 
 class UsuarioRepositoryFake implements IUsuarioRepository {
   private usuarios: Usuario[];
@@ -14,6 +22,7 @@ class UsuarioRepositoryFake implements IUsuarioRepository {
     number,
     { refreshTokenHash: string; fechaExpiracion: Date }
   >();
+  private passwordResetTokens = new Map<string, PasswordResetTokenRegistro>();
 
   constructor(private readonly contrasenaService: ContrasenaService) {
     const fechaRegistro = new Date('2026-06-01T00:00:00.000Z');
@@ -233,6 +242,56 @@ class UsuarioRepositoryFake implements IUsuarioRepository {
   async revocarRefreshToken(idUsuario: number): Promise<boolean> {
     return this.refreshTokens.delete(idUsuario);
   }
+
+  async crearPasswordResetToken(
+    idUsuario: number,
+    tokenHash: string,
+    fechaExpiracion: Date,
+  ): Promise<boolean> {
+    this.passwordResetTokens.set(tokenHash, {
+      idPasswordResetToken: this.passwordResetTokens.size + 1,
+      idUsuario,
+      tokenHash,
+      fechaExpiracion,
+      usadoEn: null,
+    });
+    return true;
+  }
+
+  async buscarPasswordResetTokenValido(
+    tokenHash: string,
+  ): Promise<PasswordResetTokenRegistro | null> {
+    const token = this.passwordResetTokens.get(tokenHash);
+
+    if (!token || token.usadoEn || token.fechaExpiracion < new Date()) {
+      return null;
+    }
+
+    return token;
+  }
+
+  async marcarPasswordResetTokenUsado(
+    idPasswordResetToken: number,
+  ): Promise<boolean> {
+    for (const token of this.passwordResetTokens.values()) {
+      if (token.idPasswordResetToken === idPasswordResetToken) {
+        token.usadoEn = new Date();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async invalidarPasswordResetTokensActivos(
+    idUsuario: number,
+  ): Promise<boolean> {
+    for (const token of this.passwordResetTokens.values()) {
+      if (token.idUsuario === idUsuario && !token.usadoEn) {
+        token.usadoEn = new Date();
+      }
+    }
+    return true;
+  }
 }
 
 describe('UsuarioManager', () => {
@@ -245,6 +304,7 @@ describe('UsuarioManager', () => {
       repository,
       contrasenaService,
       new JwtService(),
+      new NotificacionesServiceFake() as unknown as NotificacionesService,
     );
   });
 

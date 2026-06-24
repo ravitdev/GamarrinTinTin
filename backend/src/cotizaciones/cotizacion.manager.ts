@@ -131,11 +131,48 @@ export class CotizacionManager {
     return this.aResponseDto(cotizacion);
   }
 
+  /**
+   * Cancela (estado EXPIRADO) las cotizaciones cotizadas cuyo plazo de
+   * respuesta venció y notifica al cliente por correo. Un fallo de correo
+   * no impide cancelar las demás. Devuelve la cantidad cancelada.
+   */
+  async procesarVencimientos(): Promise<number> {
+    const canceladas =
+      await this.cotizacionRepository.expirarCotizacionesVencidas(new Date());
+
+    for (const cotizacion of canceladas) {
+      await this.notificarCotizacionCancelada(cotizacion);
+    }
+
+    return canceladas.length;
+  }
+
+  private async notificarCotizacionCancelada(
+    cotizacion: CotizacionConDetalle,
+  ): Promise<void> {
+    try {
+      await this.notificacionesService.enviarCotizacionCancelada({
+        email: cotizacion.cliente.email,
+        nombres: cotizacion.cliente.nombres,
+        codigoCotizacion: this.generarCodigo(cotizacion.idCotizacion),
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Error desconocido';
+
+      this.logger.warn(
+        `No se pudo enviar correo de cotización cancelada ${this.generarCodigo(
+          cotizacion.idCotizacion,
+        )}: ${message}`,
+      );
+    }
+  }
+
   async listarMisCotizaciones(
     usuario: UsuarioAutenticado,
   ): Promise<CotizacionResponseDto[]> {
     this.validarCliente(usuario);
-    await this.cotizacionRepository.expirarCotizacionesVencidas(new Date());
+    await this.procesarVencimientos();
 
     const cotizaciones = await this.cotizacionRepository.listarPorCliente(
       usuario.idUsuario,
@@ -148,7 +185,7 @@ export class CotizacionManager {
     usuario: UsuarioAutenticado,
   ): Promise<CotizacionResponseDto[]> {
     this.validarPersonalNegocio(usuario);
-    await this.cotizacionRepository.expirarCotizacionesVencidas(new Date());
+    await this.procesarVencimientos();
 
     const cotizaciones = await this.cotizacionRepository.listarTodas();
 
@@ -159,7 +196,7 @@ export class CotizacionManager {
     usuario: UsuarioAutenticado,
     idCotizacion: number,
   ): Promise<CotizacionResponseDto> {
-    await this.cotizacionRepository.expirarCotizacionesVencidas(new Date());
+    await this.procesarVencimientos();
 
     const cotizacion = await this.cotizacionRepository.buscarPorId(idCotizacion);
 
