@@ -61,7 +61,7 @@ export default function NosotrosPage() {
                 Transformamos Ideas en Prendas Unicas
               </h1>
               <p className="mt-6 text-lg leading-relaxed opacity-90">
-                Desde 2014, en GamarrinTinTin nos dedicamos a crear prendas personalizadas
+                Desde 2016, en GamarrinTinTin nos dedicamos a crear prendas personalizadas
                 de alta calidad para empresas, instituciones y particulares en todo el Peru.
               </p>
             </div>
@@ -237,7 +237,7 @@ export default function NosotrosPage() {
                     <h4 className="font-medium text-foreground">Horario</h4>
                     <p className="mt-1 text-sm text-muted-foreground">
                       Lunes a Viernes: 9:00 - 18:00<br />
-                      Sabados: 9:00 - 14:00
+                      Sabados:         9:00 - 15:00
                     </p>
                   </div>
                 </div>
@@ -262,8 +262,8 @@ export default function NosotrosPage() {
                   <div>
                     <h4 className="font-medium text-foreground">Email</h4>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      ventas@gamarrintintin.com<br />
-                      cotizaciones@gamarrintintin.com
+                      gamarrintintin.ventas@gmail.com<br />
+                      gamarrintintin.cotizaciones@gmail.com
                     </p>
                   </div>
                 </div>

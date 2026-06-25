@@ -19,7 +19,6 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';

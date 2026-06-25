@@ -182,7 +182,7 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
                 <div className="hidden items-center gap-2 sm:flex">
                   <Link href="/login">
                     <Button variant="ghost" size="sm">
-                      Iniciar Sesion
+                      Iniciar Sesión
                     </Button>
                   </Link>
                   <Link href="/registro">
@@ -281,7 +281,7 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
             <div className="flex gap-2 pt-4">
               <Link href="/login" className="flex-1">
                 <Button variant="outline" className="w-full" size="sm">
-                  Iniciar Sesion
+                  Iniciar Sesión
                 </Button>
               </Link>
               <Link href="/registro" className="flex-1">

@@ -161,7 +161,7 @@ export class ProductoController {
 
   @Patch(':idProducto/estado')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMINISTRADOR')
+  @Roles('VENDEDOR', 'ADMINISTRADOR')
   async cambiarEstadoProducto(
     @Param('idProducto') idProducto: string,
     @Body() body: CambiarEstadoProductoDto,

@@ -1018,9 +1018,16 @@ export default function AdminProductsPage() {
                               Editar
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => handleChangeProductStatus(product)}>
-                              <Power className="w-4 h-4 mr-2" />
-                              Cambiar estado
+                            <DropdownMenuItem
+                              className={isProductActive(product) ? "text-destructive" : ""}
+                              onClick={() => handleChangeProductStatus(product)}
+                            >
+                              {isProductActive(product) ? (
+                                <Trash2 className="w-4 h-4 mr-2" />
+                              ) : (
+                                <CheckCircle2 className="w-4 h-4 mr-2" />
+                              )}
+                              {isProductActive(product) ? "Desactivar" : "Reactivar"}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

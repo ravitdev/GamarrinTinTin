@@ -187,23 +187,7 @@ export default function VendedorDashboardPage() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Tips */}
-      <Card className="bg-accent/10 border-accent/30">
-        <CardContent className="pt-6">
-          <div className="flex items-start gap-4">
-            <div className="p-2 bg-accent/20 rounded-lg">
-              <AlertCircle className="w-5 h-5 text-accent" />
-            </div>
-            <div>
-              <h4 className="font-medium text-primary">Recuerda</h4>
-              <p className="text-sm text-muted-foreground">
-                Las cotizaciones tienen una vigencia de 7 dias por defecto. Asegurate de responder las solicitudes pendientes lo antes posible para no perder ventas potenciales.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      
     </div>
   )
 }

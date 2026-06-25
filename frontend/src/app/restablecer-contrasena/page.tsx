@@ -64,7 +64,7 @@ export default function RestablecerContrasenaPage() {
       await AuthService.resetPassword(token, contrasena);
       setCompletado(true);
       toast({
-        title: 'Contraseña actualizada',
+        title: 'Contraseña actualizada correctamente',
         description: 'Ya puedes iniciar sesión con tu nueva contraseña.',
       });
     } catch (error) {

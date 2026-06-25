@@ -25,9 +25,9 @@ import {
 } from '@/components/ui/accordion';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
-import { formatPrice, checkStock } from '@/lib/mock-data';
+import { formatPrice } from '@/lib/mock-data';
 import { ProductService } from '@/features/product/services/product.service';
-import type { ProductSize, PredefinedDesign, Producto } from '@/lib/types';
+import type { ProductSize, PredefinedDesign } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useCart } from '@/features/cart/hooks/use-cart';
 import { toast } from '@/hooks/use-toast';
@@ -190,8 +190,6 @@ export default function ProductDetailPage() {
               <ChevronLeft className="h-4 w-4" />
               Catalogo
             </Link>
-            <span className="text-muted-foreground">/</span>
-            <span className="capitalize text-muted-foreground">{product.categoria}s</span>
             <span className="text-muted-foreground">/</span>
             <span className="text-foreground">{product.nombre}</span>
           </nav>
@@ -609,7 +607,12 @@ export default function ProductDetailPage() {
                     </Button>
                   </Link>
                 )}
-
+                {selectedSize && currentStock > 0 && currentStock <= quantity && (
+                  <p className="mt-2 flex items-center gap-1 text-sm text-accent">
+                    <AlertCircle className="h-4 w-4" />
+                    Solo quedan {currentStock} unidades disponibles
+                  </p>
+                )}
                 {isOutOfStock && selectedSize && (
                   <p className="text-center text-sm text-muted-foreground">
                     Stock insuficiente. Puedes solicitar una cotizacion para esta cantidad.
