@@ -54,7 +54,12 @@ export default function AdminLayout({
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
-  const {logout} = useAuth();
+  const { logout, user } = useAuth();
+
+  const userName = user ? `${user.nombres} ${user.apellidos}`.trim() : 'Administrador'
+  const initials = user
+    ? `${user.nombres?.[0] ?? ''}${user.apellidos?.[0] ?? ''}`.toUpperCase() || 'AD'
+    : 'AD'
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -152,24 +157,14 @@ export default function AdminLayout({
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative">
                   <Bell className="w-5 h-5" />
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-accent rounded-full" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80">
                 <DropdownMenuLabel>Notificaciones</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Cotizacion pendiente</p>
-                    <p className="text-xs text-muted-foreground">Hace 1 hora</p>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Stock bajo: Polo Premium</p>
-                    <p className="text-xs text-muted-foreground">Hace 2 horas</p>
-                  </div>
-                </DropdownMenuItem>
+                <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                  No tienes notificaciones nuevas.
+                </div>
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -178,9 +173,9 @@ export default function AdminLayout({
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="gap-2">
                   <Avatar className="w-8 h-8">
-                    <AvatarFallback className="bg-primary text-primary-foreground">AD</AvatarFallback>
+                    <AvatarFallback className="bg-primary text-primary-foreground">{initials}</AvatarFallback>
                   </Avatar>
-                  <span className="hidden sm:inline font-medium">Admin</span>
+                  <span className="hidden sm:inline font-medium">{userName}</span>
                   <ChevronDown className="w-4 h-4 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>

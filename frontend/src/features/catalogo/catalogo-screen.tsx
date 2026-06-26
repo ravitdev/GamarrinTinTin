@@ -66,8 +66,9 @@ export function CatalogoScreen() {
         <div className="container mx-auto px-4">
           {/* Encabezado */}
           <div className="mb-8">
-            <h1 className="font-serif text-3xl font-semibold text-foreground">
-              Catálogo de Productos
+            <span className="eyebrow text-accent">Catálogo</span>
+            <h1 className="mt-3 font-display text-3xl font-bold text-foreground">
+              Polos y poleras para personalizar
             </h1>
             <p className="mt-2 text-muted-foreground">
               Encuentra la prenda perfecta para tu marca o evento

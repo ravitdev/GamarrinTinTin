@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { ShoppingCart, User, Menu, X, Search, ChevronDown, LayoutDashboard, AlertTriangle } from 'lucide-react';
+import { ShoppingCart, User, Menu, X, Search, LayoutDashboard, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -25,8 +26,10 @@ interface MaintenanceBanner {
 const MAINTENANCE_KEY = 'gtt_maintenance';
 
 export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
+  const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen]         = useState(false);
+  const [searchTerm, setSearchTerm]             = useState('');
   const [maintenance, setMaintenance]           = useState<MaintenanceBanner | null>(null);
 
   const { isLoggedIn, user, rol, logout, isHydrating } = useAuth();
@@ -50,51 +53,64 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
   const userName = user ? `${user.nombres} ${user.apellidos}` : '';
   const rolLabel = user?.rol ?? '';
 
+  const runSearch = () => {
+    const term = searchTerm.trim();
+    router.push(term ? `/catalogo?buscar=${encodeURIComponent(term)}` : '/catalogo');
+    setIsSearchOpen(false);
+    setIsMobileMenuOpen(false);
+  };
+
   return (
     <>
     {/* Maintenance Banner */}
     {maintenance?.activo && (
-      <div className="w-full bg-yellow-400 text-yellow-900 py-2 px-4 flex items-center justify-center gap-2 text-sm font-medium z-50">
-        <AlertTriangle className="w-4 h-4 shrink-0" />
+      <div className="flex w-full items-center justify-center gap-2 bg-warning px-4 py-2 text-sm font-medium text-warning-foreground">
+        <AlertTriangle className="h-4 w-4 shrink-0" />
         <span>{maintenance.mensaje || 'El sistema estará en mantenimiento programado. Disculpe las molestias.'}</span>
         {maintenance.fechaInicio && maintenance.fechaFin && (
-          <span className="hidden sm:inline opacity-75">
+          <span className="hidden opacity-75 sm:inline">
             ({new Date(maintenance.fechaInicio).toLocaleString('es-PE')} – {new Date(maintenance.fechaFin).toLocaleString('es-PE')})
           </span>
         )}
       </div>
     )}
-    <header className="sticky top-0 z-50 w-full border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+    <header className="sticky top-0 z-50 w-full border-b border-border bg-card/85 backdrop-blur supports-[backdrop-filter]:bg-card/70">
       <div className="container mx-auto px-4">
-        <div className="flex h-16 items-center justify-between">
+        <div className="flex h-16 items-center justify-between gap-4">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-              <span className="font-serif text-xl font-bold text-primary-foreground">G</span>
+          <Link href="/" className="group flex items-center gap-2.5">
+            <div className="reg-frame flex h-9 w-9 items-center justify-center rounded-md bg-primary">
+              <span className="font-display text-lg font-bold text-primary-foreground">G</span>
             </div>
-            <span className="hidden font-serif text-xl font-semibold text-foreground sm:inline-block">
-              GamarrinTinTin
+            <span className="hidden font-display text-lg font-bold tracking-tight text-foreground sm:inline-block">
+              Gamarrin<span className="text-accent">TinTin</span>
             </span>
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden items-center gap-8 md:flex">
+          <nav className="hidden items-center gap-7 md:flex">
             <Link
               href="/catalogo"
-              className="text-sm font-medium text-foreground/80 transition-colors hover:text-foreground"
+              className="text-sm font-medium text-foreground/70 transition-colors hover:text-foreground"
             >
-              Catalogo
+              Catálogo
+            </Link>
+            <Link
+              href="/solicitar-cotizacion"
+              className="text-sm font-medium text-foreground/70 transition-colors hover:text-foreground"
+            >
+              Cotizar por volumen
             </Link>
             <Link
               href="/nosotros"
-              className="text-sm font-medium text-foreground/80 transition-colors hover:text-foreground"
+              className="text-sm font-medium text-foreground/70 transition-colors hover:text-foreground"
             >
               Nosotros
             </Link>
           </nav>
 
           {/* Actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {/* Search Toggle */}
             <Button
               variant="ghost"
@@ -103,7 +119,7 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
               onClick={() => setIsSearchOpen(!isSearchOpen)}
             >
               <Search className="h-5 w-5" />
-              <span className="sr-only">Buscar</span>
+              <span className="sr-only">Buscar productos</span>
             </Button>
 
             {/* Backoffice shortcut — visible solo para ADMIN y VENDEDOR */}
@@ -125,7 +141,7 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
               <Button variant="ghost" size="icon" className="relative">
                 <ShoppingCart className="h-5 w-5" />
                 {cartItemCount > 0 && (
-                  <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-xs font-medium text-accent-foreground">
+                  <span className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-accent font-mono text-[10px] font-semibold text-accent-foreground">
                     {cartItemCount > 9 ? '9+' : cartItemCount}
                   </span>
                 )}
@@ -140,7 +156,7 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon">
                       <User className="h-5 w-5" />
-                      <span className="sr-only">Menu de usuario</span>
+                      <span className="sr-only">Menú de usuario</span>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
@@ -150,13 +166,13 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
                     </div>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
-                      <Link href="/mi-cuenta">Mi Cuenta</Link>
+                      <Link href="/mi-cuenta">Mi cuenta</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link href="/mis-pedidos">Mis Pedidos</Link>
+                      <Link href="/mis-pedidos">Mis pedidos</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link href="/mis-cotizaciones">Mis Cotizaciones</Link>
+                      <Link href="/mis-cotizaciones">Mis cotizaciones</Link>
                     </DropdownMenuItem>
                     {showPanel && (
                       <>
@@ -174,7 +190,7 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
                       className="text-destructive focus:text-destructive"
                       onSelect={() => logout()}
                     >
-                      Cerrar Sesión
+                      Cerrar sesión
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -182,7 +198,7 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
                 <div className="hidden items-center gap-2 sm:flex">
                   <Link href="/login">
                     <Button variant="ghost" size="sm">
-                      Iniciar Sesión
+                      Iniciar sesión
                     </Button>
                   </Link>
                   <Link href="/registro">
@@ -202,7 +218,7 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             >
               {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-              <span className="sr-only">Menu</span>
+              <span className="sr-only">Menú</span>
             </Button>
           </div>
         </div>
@@ -214,19 +230,26 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
             isSearchOpen ? 'h-14 opacity-100' : 'h-0 opacity-0'
           )}
         >
-          <div className="flex items-center gap-2 pb-4">
+          <form
+            className="flex items-center gap-2 pb-4"
+            onSubmit={(e) => { e.preventDefault(); runSearch(); }}
+          >
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="search"
-                placeholder="Buscar productos..."
+                autoFocus={isSearchOpen}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar polos, poleras, diseños…"
                 className="h-10 w-full rounded-lg border border-input bg-background pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
-            <Button variant="outline" size="sm" onClick={() => setIsSearchOpen(false)}>
+            <Button type="submit" size="sm">Buscar</Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setIsSearchOpen(false)}>
               Cancelar
             </Button>
-          </div>
+          </form>
         </div>
       </div>
 
@@ -238,12 +261,26 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
         )}
       >
         <nav className="container mx-auto space-y-1 px-4 py-4">
+          {/* Mobile search */}
+          <form
+            className="relative mb-3"
+            onSubmit={(e) => { e.preventDefault(); runSearch(); }}
+          >
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="search"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar productos…"
+              className="h-10 w-full rounded-lg border border-input bg-background pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </form>
           <Link
             href="/catalogo"
             className="block rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted"
             onClick={() => setIsMobileMenuOpen(false)}
           >
-            Catalogo
+            Catálogo
           </Link>
           <Link
             href="/catalogo?categoria=polo"
@@ -258,6 +295,13 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
             onClick={() => setIsMobileMenuOpen(false)}
           >
             Poleras
+          </Link>
+          <Link
+            href="/solicitar-cotizacion"
+            className="block rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted"
+            onClick={() => setIsMobileMenuOpen(false)}
+          >
+            Cotizar por volumen
           </Link>
           <Link
             href="/nosotros"
@@ -281,7 +325,7 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
             <div className="flex gap-2 pt-4">
               <Link href="/login" className="flex-1">
                 <Button variant="outline" className="w-full" size="sm">
-                  Iniciar Sesión
+                  Iniciar sesión
                 </Button>
               </Link>
               <Link href="/registro" className="flex-1">

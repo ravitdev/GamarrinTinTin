@@ -1,16 +1,25 @@
 import type { Metadata, Viewport } from 'next'
-import { Playfair_Display, Inter } from 'next/font/google'
+import { Space_Grotesk, Inter, JetBrains_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 
-const playfair = Playfair_Display({ 
+// Display: grotesca tecnica (apparel/print), no serif editorial.
+const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
-  variable: '--font-serif'
+  weight: ["400", "500", "600", "700"],
+  variable: '--font-display'
 });
 
-const inter = Inter({ 
+const inter = Inter({
   subsets: ["latin"],
   variable: '--font-sans'
+});
+
+// Mono utilitaria para datos: precios, codigos, numeros de pedido/cotizacion.
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: '--font-mono'
 });
 
 export const metadata: Metadata = {
@@ -38,7 +47,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#1a1f3d',
+  themeColor: '#1b2640',
   width: 'device-width',
   initialScale: 1,
 }
@@ -49,7 +58,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="es" className={`${playfair.variable} ${inter.variable}`}>
+    <html lang="es" className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable}`}>
       <body className="font-sans antialiased bg-background text-foreground">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
