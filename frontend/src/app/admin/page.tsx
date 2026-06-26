@@ -60,7 +60,6 @@ const stats = [
 ]
 
 const recentOrders = [
-  { id: "PED-2024-0128", customer: "Maria Garcia", total: 450, items: 3, status: "en_produccion", date: "Hace 2 horas" },
   { id: "PED-2024-0127", customer: "Carlos Lopez", total: 1200, items: 10, status: "pendiente", date: "Hace 4 horas" },
   { id: "PED-2024-0126", customer: "Tech Solutions SAC", total: 3500, items: 50, status: "enviado", date: "Ayer" },
   { id: "PED-2024-0125", customer: "Ana Martinez", total: 180, items: 2, status: "entregado", date: "Ayer" },
@@ -204,6 +203,7 @@ export default function AdminDashboard() {
             <Button variant="ghost" size="sm" asChild>
               <Link href="/admin/cotizaciones">
                 Ver todas
+                <ArrowRight className="w-4 h-4 ml-2" />
               </Link>
             </Button>
           </CardHeader>
@@ -262,40 +262,6 @@ export default function AdminDashboard() {
             <Button variant="outline" className="w-full mt-4">
               <Package className="w-4 h-4 mr-2" />
               Gestionar Inventario
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Quick Actions */}
-        <Card className="border-2">
-          <CardHeader>
-            <CardTitle>Acciones Rapidas</CardTitle>
-            <CardDescription>Tareas frecuentes</CardDescription>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-3">
-            <Button variant="outline" className="h-auto py-4 flex-col gap-2" asChild>
-              <Link href="/admin/pedidos/nuevo">
-                <ShoppingBag className="w-5 h-5" />
-                <span className="text-sm">Nuevo Pedido</span>
-              </Link>
-            </Button>
-            <Button variant="outline" className="h-auto py-4 flex-col gap-2" asChild>
-              <Link href="/admin/productos/nuevo">
-                <Package className="w-5 h-5" />
-                <span className="text-sm">Agregar Producto</span>
-              </Link>
-            </Button>
-            <Button variant="outline" className="h-auto py-4 flex-col gap-2" asChild>
-              <Link href="/admin/cotizaciones">
-                <FileText className="w-5 h-5" />
-                <span className="text-sm">Ver Cotizaciones</span>
-              </Link>
-            </Button>
-            <Button variant="outline" className="h-auto py-4 flex-col gap-2" asChild>
-              <Link href="/admin/clientes">
-                <Users className="w-5 h-5" />
-                <span className="text-sm">Ver Clientes</span>
-              </Link>
             </Button>
           </CardContent>
         </Card>

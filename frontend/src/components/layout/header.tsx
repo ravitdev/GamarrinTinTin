@@ -43,8 +43,8 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
   }, []);
 
   // Deep-link directo al area de trabajo de cada rol
-  const panelHref  = rol === RolUsuario.ADMINISTRADOR ? '/admin/productos'        : '/vendedor/cotizaciones';
-  const panelLabel = rol === RolUsuario.ADMINISTRADOR ? 'Volver al Panel Admin'   : 'Volver al Panel';
+  const panelHref  = rol === RolUsuario.ADMINISTRADOR ? '/admin'        : '/vendedor';
+  const panelLabel = rol === RolUsuario.ADMINISTRADOR ? 'Volver al Panel Admin'   : 'Volver al Panel Vendedor';
   const showPanel  = isLoggedIn && (rol === RolUsuario.ADMINISTRADOR || rol === RolUsuario.VENDEDOR);
 
   const userName = user ? `${user.nombres} ${user.apellidos}` : '';
@@ -85,24 +85,6 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
             >
               Catalogo
             </Link>
-            <DropdownMenu>
-              <DropdownMenuTrigger className="flex items-center gap-1 text-sm font-medium text-foreground/80 transition-colors hover:text-foreground">
-                Categorias
-                <ChevronDown className="h-4 w-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="center" className="w-48">
-                <DropdownMenuItem asChild>
-                  <Link href="/catalogo?categoria=polo">Polos</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/catalogo?categoria=polera">Poleras</Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/catalogo?tipo=personalizable">Personalizables</Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
             <Link
               href="/nosotros"
               className="text-sm font-medium text-foreground/80 transition-colors hover:text-foreground"
@@ -192,7 +174,7 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
                       className="text-destructive focus:text-destructive"
                       onSelect={() => logout()}
                     >
-                      Cerrar Sesion
+                      Cerrar Sesión
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -200,7 +182,7 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
                 <div className="hidden items-center gap-2 sm:flex">
                   <Link href="/login">
                     <Button variant="ghost" size="sm">
-                      Iniciar Sesion
+                      Iniciar Sesión
                     </Button>
                   </Link>
                   <Link href="/registro">
@@ -299,7 +281,7 @@ export function Header({ cartItemCount = 0 }: { cartItemCount?: number }) {
             <div className="flex gap-2 pt-4">
               <Link href="/login" className="flex-1">
                 <Button variant="outline" className="w-full" size="sm">
-                  Iniciar Sesion
+                  Iniciar Sesión
                 </Button>
               </Link>
               <Link href="/registro" className="flex-1">

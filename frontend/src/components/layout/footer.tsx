@@ -100,8 +100,8 @@ export function Footer() {
               </li>
               <li className="flex items-center gap-2">
                 <Mail className="h-4 w-4 text-accent shrink-0" />
-                <a href="mailto:ventas@gamarrintin.pe" className="text-primary-foreground/70 hover:text-accent transition-colors">
-                  ventas@gamarrintin.pe
+                <a href="mailto:gamarrintin.ventas@gmail.pe" className="text-primary-foreground/70 hover:text-accent transition-colors">
+                  gamarrintin.ventas@gmail.pe
                 </a>
               </li>
             </ul>
@@ -111,7 +111,7 @@ export function Footer() {
         <div className="mt-12 border-t border-primary-foreground/10 pt-6">
           <div className="flex flex-col items-center justify-between gap-4 text-center sm:flex-row sm:text-left">
             <p className="text-sm text-primary-foreground/50">
-              2024 GamarrinTinTin. Todos los derechos reservados.
+              2026 GamarrinTinTin. Todos los derechos reservados.
             </p>
             <div className="flex items-center gap-4 text-sm text-primary-foreground/50">
               <span>Pagos seguros:</span>

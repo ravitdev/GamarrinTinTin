@@ -38,8 +38,12 @@ export class JwtAuthGuard implements CanActivate {
 
     const usuario = await this.usuarioRepository.buscarPorId(payload.sub);
 
-    if (!usuario || !usuario.estaActivo()) {
+    if (!usuario) {
       throw new UnauthorizedException('Usuario no autorizado.');
+    }
+
+    if (!usuario.estaActivo()) {
+      throw new UnauthorizedException('La cuenta no está disponible.');
     }
 
     request.usuario = {

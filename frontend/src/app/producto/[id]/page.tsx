@@ -25,12 +25,14 @@ import {
 } from '@/components/ui/accordion';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
-import { formatPrice, checkStock } from '@/lib/mock-data';
+import { formatPrice } from '@/lib/mock-data';
 import { ProductService } from '@/features/product/services/product.service';
-import type { ProductSize, PredefinedDesign, Producto } from '@/lib/types';
+import type { ProductSize, PredefinedDesign } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useCart } from '@/features/cart/hooks/use-cart';
 import { toast } from '@/hooks/use-toast';
+import { DisenoPredefinidoService } from '@/features/disenos/services/diseno-predefinido.service';
+
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -39,14 +41,39 @@ export default function ProductDetailPage() {
   const { cart, addToCart } = useCart();
   const [isAdding, setIsAdding] = useState(false);
   const [product, setProduct] = useState<any | null>(null);
+  const [predefinedDesigns, setPredefinedDesigns] = useState<PredefinedDesign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
   useEffect(() => {
-    ProductService.getProductDetail(productId)
-      .then(setProduct)
-      .catch((err) => setError(err.message))
-      .finally(() => setIsLoading(false));
+    async function cargarDetalle() {
+      try {
+        setIsLoading(true);
+
+        const [productoDetalle, disenos] = await Promise.all([
+          ProductService.getProductDetail(productId),
+          DisenoPredefinidoService.listarActivos(),
+        ]);
+
+        setProduct(productoDetalle);
+
+        setPredefinedDesigns(
+          disenos.map((diseno) => ({
+            id: diseno.idDisenoPredefinido ?? diseno.idDiseno ?? 0,
+            idDisenoPredefinido: diseno.idDisenoPredefinido,
+            nombre: diseno.nombre,
+            imagen: diseno.urlImagen ?? diseno.imagen ?? '',
+            urlImagen: diseno.urlImagen,
+          })) as PredefinedDesign[],
+        );
+      } catch (err: any) {
+        setError(err.message || 'No se pudo cargar el producto.');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    cargarDetalle();
   }, [productId]);
   
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
@@ -93,24 +120,32 @@ export default function ProductDetailPage() {
     );
   }
 
-  const selectedColor = product.colores?.[selectedColorIndex];
+  const selectedColor = product.colores?.[selectedColorIndex] ?? {nombre: 'Blanco', codigoHex: '#FFFFFF', hexCode: '#FFFFFF', urlImagen: '/placeholder.svg',};
   const selectedVariant = product.variantes?.find(
     (v: any) =>
-      v.colorHex.toUpperCase() === selectedColor?.codigoHex.toUpperCase() &&
+      v.colorHex.toUpperCase() === selectedColor.codigoHex.toUpperCase() &&
       v.talla === selectedSize
   );
   const currentStock = selectedVariant ? selectedVariant.stock : 0;
   const isOutOfStock = selectedSize && currentStock < quantity;
-  const canAddToCart = selectedSize && currentStock >= quantity && quantity > 0;
+  const canAddToCart =
+    !product.esPersonalizable &&
+    selectedSize &&
+    currentStock >= quantity &&
+    quantity > 0;
   const shouldQuote = isOutOfStock || product.esPersonalizable;
+
+  const isPersonalizable = Boolean(product.esPersonalizable);
+  const hasPredefinedDesigns = predefinedDesigns.length > 0;
+  const canCustomize = isPersonalizable;
 
   // discountPercentage calculated above
 
   const unitPrice = product.precio * (1 - discountPercentage / 100);
   const totalPrice = unitPrice * quantity;
 
-  const pechoDesigns = (product.disenosPredefinidos || []).filter((d: any) => d.posicion === 'pecho');
-  const espaldaDesigns = (product.disenosPredefinidos || []).filter((d: any) => d.posicion === 'espalda');
+  const pechoDesigns = predefinedDesigns;
+  const espaldaDesigns = predefinedDesigns;
 
   const handleAddToCart = async () => {
     if (!selectedSize || !selectedColor || !selectedVariant) return;
@@ -156,8 +191,6 @@ export default function ProductDetailPage() {
               Catalogo
             </Link>
             <span className="text-muted-foreground">/</span>
-            <span className="capitalize text-muted-foreground">{product.categoria}s</span>
-            <span className="text-muted-foreground">/</span>
             <span className="text-foreground">{product.nombre}</span>
           </nav>
 
@@ -193,10 +226,14 @@ export default function ProductDetailPage() {
                 
                 {/* Badges */}
                 <div className="absolute left-4 top-4 flex flex-col gap-2">
-                  {product.tipoDiseno === 'personalizable' && (
+                  {isPersonalizable ? (
                     <Badge className="bg-accent text-accent-foreground">
                       <Sparkles className="mr-1 h-3 w-3" />
                       Personalizable
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">
+                      Diseño predefinido
                     </Badge>
                   )}
                 </div>
@@ -233,7 +270,11 @@ export default function ProductDetailPage() {
                 {product.colores.map((color: any, index: number) => (
                   <button
                     key={color.idColor || color.id || index}
-                    onClick={() => setSelectedColorIndex(index)}
+                    onClick={() => {
+                      setSelectedColorIndex(index);
+                      setSelectedSize(null);
+                      setQuantity(1);
+                    }}
                     className={cn(
                       'h-16 w-16 rounded-lg border-2 transition-all',
                       selectedColorIndex === index
@@ -265,6 +306,26 @@ export default function ProductDetailPage() {
                 <p className="mt-3 text-muted-foreground leading-relaxed">
                   {product.descripcion}
                 </p>
+                <div className="mt-4 rounded-xl border border-border bg-muted/30 p-4">
+                  <div className="flex items-start gap-3">
+                    {isPersonalizable ? (
+                      <Sparkles className="mt-0.5 h-5 w-5 text-accent" />
+                    ) : (
+                      <Check className="mt-0.5 h-5 w-5 text-accent" />
+                    )}
+
+                    <div>
+                      <p className="font-medium text-foreground">
+                        {isPersonalizable ? "Producto personalizable" : "Producto con diseño predefinido"}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {isPersonalizable
+                          ? "Puedes iniciar una personalización o solicitar una cotización según tu diseño."
+                          : "Puedes elegir color, talla y cantidad para agregarlo directamente al carrito si hay stock disponible."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Price */}
@@ -300,7 +361,11 @@ export default function ProductDetailPage() {
                   {product.colores.map((color: any, index: number) => (
                     <button
                       key={color.idColor || color.id || index}
-                      onClick={() => setSelectedColorIndex(index)}
+                      onClick={() => {
+                        setSelectedColorIndex(index);
+                        setSelectedSize(null);
+                        setQuantity(1);
+                      }}
                       className={cn(
                         'h-10 w-10 rounded-full border-2 transition-all',
                         selectedColorIndex === index
@@ -326,7 +391,11 @@ export default function ProductDetailPage() {
                 </label>
                 <div className="flex gap-3">
                   {product.tallas.map((size: any) => {
-                    const sizeStock = checkStock(product, selectedColor, size);
+                    const sizeStock = product.variantes?.find(
+                                                              (v: any) =>
+                                                                v.colorHex.toUpperCase() === selectedColor.codigoHex.toUpperCase() &&
+                                                                v.talla === size,
+                                                            )?.stock ?? 0;
                     return (
                       <button
                         key={size}
@@ -355,7 +424,7 @@ export default function ProductDetailPage() {
               </div>
 
               {/* Design Selection (if available) */}
-              {product.disenosPredefinidos.length > 0 && (
+              {hasPredefinedDesigns && (
                 <div className="space-y-4">
                   {pechoDesigns.length > 0 && (
                     <div>
@@ -376,11 +445,11 @@ export default function ProductDetailPage() {
                         </button>
                         {pechoDesigns.map((design: any) => (
                           <button
-                            key={design.id}
+                            key={design.idDisenoPredefinido ?? design.id}
                             onClick={() => setSelectedPechoDesign(design)}
                             className={cn(
                               'rounded-lg border px-3 py-2 text-sm transition-colors',
-                              selectedPechoDesign?.id === design.id
+                              (selectedPechoDesign as any)?.id === (design as any).id
                                 ? 'border-accent bg-accent/10 text-foreground'
                                 : 'border-border bg-card text-muted-foreground hover:border-accent/50'
                             )}
@@ -427,8 +496,8 @@ export default function ProductDetailPage() {
                     </div>
                   )}
 
-                  {product.tipoDiseno === 'personalizable' && (
-                    <Link href={`/personalizar/${product.id}`}>
+                  {canCustomize && (
+                    <Link href={`/personalizar/${product.idProducto}`}>
                       <Button variant="outline" className="w-full gap-2">
                         <Sparkles className="h-4 w-4" />
                         Subir Mi Propio Diseno
@@ -497,35 +566,53 @@ export default function ProductDetailPage() {
 
               {/* Actions */}
               <div className="flex flex-col gap-3 pt-2">
-                {canAddToCart ? (
-                  <Button 
-                    size="lg" 
-                    className="w-full gap-2 bg-accent text-accent-foreground hover:bg-accent/90 cursor-pointer"
-                    onClick={handleAddToCart}
-                    disabled={isAdding}
-                  >
-                    <ShoppingCart className="h-5 w-5" />
-                    {isAdding ? 'Agregando...' : 'Agregar al Carrito'}
-                  </Button>
-                ) : !selectedSize ? (
-                  <Button size="lg" className="w-full" disabled>
-                    Selecciona una talla
-                  </Button>
-                ) : (
-                  <Button size="lg" className="w-full" disabled>
-                    Stock Insuficiente
-                  </Button>
-                )}
-
-                {(shouldQuote || !canAddToCart && selectedSize) && (
-                  <Link href={`/solicitar-cotizacion?producto=${product.id}`}>
-                    <Button size="lg" variant="outline" className="w-full gap-2">
-                      <FileText className="h-5 w-5" />
-                      Solicitar Cotizacion
+                {canCustomize && (
+                  <Link href={`/personalizar/${product.idProducto}`}>
+                    <Button size="lg" className="w-full gap-2 bg-accent text-accent-foreground hover:bg-accent/90">
+                      <Sparkles className="h-5 w-5" />
+                      Personalizar Producto
                     </Button>
                   </Link>
                 )}
 
+                {!canCustomize && (
+                  canAddToCart ? (
+                    <Button
+                      size="lg"
+                      className="w-full gap-2 bg-accent text-accent-foreground hover:bg-accent/90 cursor-pointer"
+                      onClick={handleAddToCart}
+                      disabled={isAdding}
+                    >
+                      <ShoppingCart className="h-5 w-5" />
+                      {isAdding ? 'Agregando...' : 'Agregar al Carrito'}
+                    </Button>
+                  ) : !selectedSize ? (
+                    <Button size="lg" className="w-full" disabled>
+                      Selecciona una talla
+                    </Button>
+                  ) : (
+                    <Button size="lg" className="w-full" disabled>
+                      Stock Insuficiente
+                    </Button>
+                  )
+                )}
+
+                {(shouldQuote || (!canAddToCart && selectedSize)) && (
+                  <Link
+                    href={`/solicitar-cotizacion?producto=${product.idProducto}&color=${encodeURIComponent(selectedColor.nombre)}&talla=${selectedSize}&cantidad=${quantity}`}
+                  >
+                    <Button size="lg" variant="outline" className="w-full gap-2">
+                      <FileText className="h-5 w-5" />
+                      Solicitar Cotización
+                    </Button>
+                  </Link>
+                )}
+                {selectedSize && currentStock > 0 && currentStock <= quantity && (
+                  <p className="mt-2 flex items-center gap-1 text-sm text-accent">
+                    <AlertCircle className="h-4 w-4" />
+                    Solo quedan {currentStock} unidades disponibles
+                  </p>
+                )}
                 {isOutOfStock && selectedSize && (
                   <p className="text-center text-sm text-muted-foreground">
                     Stock insuficiente. Puedes solicitar una cotizacion para esta cantidad.

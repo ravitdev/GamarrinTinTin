@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Header } from "@/components/layout/header"
 import { Footer } from "@/components/layout/footer"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,9 +9,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
 import {
   Dialog,
   DialogContent,
@@ -27,22 +27,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { 
-  User, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  FileText, 
-  Calendar, 
-  Edit, 
-  Lock, 
-  Shield, 
-  Eye, 
+import {
+  User,
+  Mail,
+  Phone,
+  MapPin,
+  FileText,
+  Calendar,
+  Edit,
+  Lock,
+  Shield,
+  Eye,
   EyeOff,
   Check,
   AlertCircle,
   UserX,
-  AlertTriangle
+  AlertTriangle,
+  Loader2,
 } from "lucide-react"
 import {
   AlertDialog,
@@ -55,31 +56,72 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { TipoDocumento } from "@/lib/types"
+import { TipoDocumento, RolUsuario } from "@/lib/types"
+import { useAuth } from "@/features/auth/hooks/use-auth"
+import {
+  UserService,
+  type UpdateProfilePayload,
+  type UserProfile,
+} from "@/features/user/services/user.service"
+import { toast } from "@/hooks/use-toast"
 
-// Mock user data - would come from auth/database
-const mockUser = {
-  id: "user-1",
-  nombres: "Juan Carlos",
-  apellidos: "Rodriguez Perez",
-  correo: "juan.rodriguez@email.com",
-  celular: "+51 999 888 777",
-  documento: "12345678",
-  tipoDocumento: TipoDocumento.DNI,
-  direccion: "Av. Javier Prado 1234, San Isidro",
-  distrito: "San Isidro",
-  provincia: "Lima",
-  departamento: "Lima",
-  rol: "cliente" as const,
-  estado: "activo" as const,
-  createdAt: new Date("2024-01-15"),
-  avatarUrl: "",
+interface EditFormState {
+  nombres: string
+  apellidos: string
+  email: string
+  telefono: string
+  tipoDocumento: TipoDocumento
+  numeroDocumento: string
+  direccion: string
+}
+
+function profileToForm(profile: UserProfile): EditFormState {
+  return {
+    nombres: profile.nombres,
+    apellidos: profile.apellidos,
+    email: profile.email,
+    telefono: profile.telefono,
+    tipoDocumento: profile.tipoDocumento,
+    numeroDocumento: profile.numeroDocumento,
+    direccion: profile.direccion ?? "",
+  }
+}
+
+function syncCachedUser(profile: UserProfile) {
+  if (typeof window === "undefined") return
+  const raw = window.localStorage.getItem("gtt_user")
+  if (!raw) return
+  try {
+    const cached = JSON.parse(raw)
+    window.localStorage.setItem(
+      "gtt_user",
+      JSON.stringify({
+        ...cached,
+        nombres: profile.nombres,
+        apellidos: profile.apellidos,
+        email: profile.email,
+        telefono: profile.telefono,
+        tipoDocumento: profile.tipoDocumento,
+        numeroDocumento: profile.numeroDocumento,
+        direccion: profile.direccion ?? "",
+      }),
+    )
+  } catch {
+    // ignore corrupt cache
+  }
 }
 
 export default function MiCuentaPage() {
-  const [user, setUser] = useState(mockUser)
+  const router = useRouter()
+  const { isLoggedIn, isHydrating, user: authUser } = useAuth()
+
+  const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
-  const [editForm, setEditForm] = useState(user)
+  const [editForm, setEditForm] = useState<EditFormState | null>(null)
+  const [isSavingProfile, setIsSavingProfile] = useState(false)
+  const [profileFieldErrors, setProfileFieldErrors] = useState<Record<string, string>>({})
+
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false)
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
@@ -91,26 +133,183 @@ export default function MiCuentaPage() {
   })
   const [passwordError, setPasswordError] = useState("")
   const [passwordSuccess, setPasswordSuccess] = useState(false)
-  const [isDeactivateDialogOpen, setIsDeactivateDialogOpen] = useState(false)
-  const [deactivationRequested, setDeactivationRequested] = useState(false)
-  const [hasPendingOrders] = useState(false) // Would come from API in real app
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
 
-  const handleSaveProfile = () => {
-    setUser(editForm)
-    setIsEditing(false)
+  const [isDeactivateDialogOpen, setIsDeactivateDialogOpen] = useState(false)
+  const [isRequestingDeactivation, setIsRequestingDeactivation] = useState(false)
+
+  const [isDocumentDialogOpen, setIsDocumentDialogOpen] = useState(false)
+  const [documentForm, setDocumentForm] = useState({
+    tipoDocumento: TipoDocumento.DNI,
+    numeroDocumento: "",
+  })
+  const [isRequestingDocumentChange, setIsRequestingDocumentChange] = useState(false)
+  const [documentFieldErrors, setDocumentFieldErrors] = useState<Record<string, string>>({})
+
+  const canRequestDocumentChange =
+    profile?.rol === RolUsuario.CLIENTE || profile?.rol === RolUsuario.VENDEDOR
+
+  useEffect(() => {
+    if (isHydrating) return
+    if (!isLoggedIn) {
+      router.push("/login?callback=/mi-cuenta")
+      return
+    }
+
+    const loadProfile = async () => {
+      setIsLoadingProfile(true)
+      try {
+        const data = await UserService.getProfile()
+        setProfile(data)
+        setEditForm(profileToForm(data))
+      } catch (error) {
+        toast({
+          title: "Error al cargar perfil",
+          description: error instanceof Error ? error.message : "Intenta nuevamente.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoadingProfile(false)
+      }
+    }
+
+    loadProfile()
+  }, [isHydrating, isLoggedIn, router])
+
+  const handleSaveProfile = async () => {
+    if (!profile || !editForm) return
+
+    setProfileFieldErrors({})
+
+    const nextErrors: Record<string, string> = {}
+    const telefonoNormalizado = editForm.telefono.replace(/\D/g, "")
+
+    if (!editForm.nombres.trim()) {
+      nextErrors.nombres = "Los nombres son obligatorios."
+    }
+
+    if (!editForm.apellidos.trim()) {
+      nextErrors.apellidos = "Los apellidos son obligatorios."
+    }
+
+    if (telefonoNormalizado.length !== 9) {
+      nextErrors.telefono = "El teléfono debe tener 9 dígitos."
+    } else if (!telefonoNormalizado.startsWith("9")) {
+      nextErrors.telefono = "El teléfono debe empezar con 9."
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setProfileFieldErrors(nextErrors)
+      return
+    }
+
+    setIsSavingProfile(true)
+
+    try {
+      const payload: UpdateProfilePayload = {
+        nombres: editForm.nombres.trim(),
+        apellidos: editForm.apellidos.trim(),
+        email: editForm.email.trim(),
+        telefono: telefonoNormalizado,
+        direccion: editForm.direccion.trim() || null,
+      }
+
+      const updated = await UserService.updateProfile(payload)
+      setProfile(updated)
+      setEditForm(profileToForm(updated))
+      syncCachedUser(updated)
+      setIsEditing(false)
+      toast({
+        title: "Perfil actualizado",
+        description: "Tus datos fueron actualizados correctamente.",
+      })
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Revisa los datos ingresados."
+
+      const normalizedMessage = message.toLowerCase()
+
+      if (normalizedMessage.includes("nombre")) {
+        setProfileFieldErrors((prev) => ({
+          ...prev,
+          nombres: message,
+        }))
+      }
+
+      if (normalizedMessage.includes("apellido")) {
+        setProfileFieldErrors((prev) => ({
+          ...prev,
+          apellidos: message,
+        }))
+      }
+
+      if (normalizedMessage.includes("email") || normalizedMessage.includes("correo")) {
+        setProfileFieldErrors((prev) => ({
+          ...prev,
+          email: message,
+        }))
+      }
+
+      if (
+        normalizedMessage.includes("teléfono") ||
+        normalizedMessage.includes("telefono") ||
+        normalizedMessage.includes("celular")
+      ) {
+        setProfileFieldErrors((prev) => ({
+          ...prev,
+          telefono: message,
+        }))
+      }
+
+      toast({
+        title: "Error al actualizar perfil",
+        description: message,
+        variant: "destructive",
+      })
+    } finally {
+      setIsSavingProfile(false)
+    }
   }
 
   const handleCancelEdit = () => {
-    setEditForm(user)
+    if (profile) setEditForm(profileToForm(profile))
+    setProfileFieldErrors({})
     setIsEditing(false)
   }
 
-  const handleChangePassword = () => {
+  const handleChangePassword = async () => {
     setPasswordError("")
     setPasswordSuccess(false)
 
+    if (!passwordForm.currentPassword.trim()) {
+      setPasswordError("La contraseña actual es obligatoria")
+      return
+    }
+
+    if (!passwordForm.newPassword.trim()) {
+      setPasswordError("La nueva contraseña es obligatoria")
+      return
+    }
+
+    if (!passwordForm.confirmPassword.trim()) {
+      setPasswordError("Debes confirmar la nueva contraseña")
+      return
+    }
+
+    if (passwordForm.currentPassword === passwordForm.newPassword) {
+      setPasswordError("La nueva contraseña debe ser diferente a la actual")
+      return
+    }
+
     if (passwordForm.newPassword.length < 8) {
       setPasswordError("La contraseña debe tener al menos 8 caracteres")
+      return
+    }
+
+    if (!/[A-Za-z]/.test(passwordForm.newPassword) || !/\d/.test(passwordForm.newPassword)) {
+      setPasswordError("La contraseña debe incluir letras y números")
       return
     }
 
@@ -119,53 +318,159 @@ export default function MiCuentaPage() {
       return
     }
 
-    // Simulate password change
-    setPasswordSuccess(true)
-    setTimeout(() => {
-      setIsChangePasswordOpen(false)
-      setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" })
-      setPasswordSuccess(false)
-    }, 2000)
+    setIsChangingPassword(true)
+    try {
+      await UserService.changePassword({
+        contrasenaActual: passwordForm.currentPassword,
+        contrasenaNueva: passwordForm.newPassword,
+      })
+      setPasswordSuccess(true)
+      setTimeout(() => {
+        setIsChangePasswordOpen(false)
+        setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" })
+        setPasswordSuccess(false)
+      }, 2000)
+    } catch (error) {
+      setPasswordError(error instanceof Error ? error.message : "No fue posible cambiar la contraseña")
+    } finally {
+      setIsChangingPassword(false)
+    }
+  }
+
+  const handleRequestDeactivation = async () => {
+    setIsRequestingDeactivation(true)
+    try {
+      await UserService.requestAccountDeactivation()
+      const refreshed = await UserService.getProfile()
+      setProfile(refreshed)
+      setIsDeactivateDialogOpen(false)
+      toast({
+        title: "Solicitud enviada",
+        description: "Su cuenta será desactivada por un administrador.",
+      })
+    } catch (error) {
+      toast({
+        title: "No se pudo enviar la solicitud",
+        description: error instanceof Error ? error.message : "Intenta nuevamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsRequestingDeactivation(false)
+    }
+  }
+
+  const handleRequestDocumentChange = async () => {
+    const numeroDocumento = documentForm.numeroDocumento.replace(/\D/g, "")
+
+    const nextErrors: Record<string, string> = {}
+
+    if (documentForm.tipoDocumento === TipoDocumento.DNI && numeroDocumento.length !== 8) {
+      nextErrors.numeroDocumento = "El DNI debe tener 8 dígitos."
+    }
+
+    if (documentForm.tipoDocumento === TipoDocumento.RUC && numeroDocumento.length !== 11) {
+      nextErrors.numeroDocumento = "El RUC debe tener 11 dígitos."
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setDocumentFieldErrors(nextErrors)
+      return
+    }
+
+    setIsRequestingDocumentChange(true)
+    setDocumentFieldErrors({})
+
+    try {
+      await UserService.requestDocumentChange({
+        tipoDocumento: documentForm.tipoDocumento,
+        numeroDocumento,
+      })
+
+      const refreshed = await UserService.getProfile()
+      setProfile(refreshed)
+      setIsDocumentDialogOpen(false)
+
+      const successMessage =
+        profile?.rol === RolUsuario.VENDEDOR
+          ? "Su solicitud de cambio de DNI será evaluada por un administrador."
+          : "Su solicitud de cambio de RUC o DNI será evaluada por un administrador."
+
+      toast({ title: "Solicitud registrada", description: successMessage })
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Revisa los datos ingresados."
+
+      const normalizedMessage = message.toLowerCase()
+
+      if (
+        normalizedMessage.includes("documento") ||
+        normalizedMessage.includes("dni") ||
+        normalizedMessage.includes("ruc")
+      ) {
+        setDocumentFieldErrors((prev) => ({
+          ...prev,
+          numeroDocumento: message,
+        }))
+      }
+
+      toast({
+        title: "Error en la solicitud",
+        description: message,
+        variant: "destructive",
+      })
+    } finally {
+      setIsRequestingDocumentChange(false)
+    }
   }
 
   const getInitials = () => {
-    return `${user.nombres.charAt(0)}${user.apellidos.charAt(0)}`
+    if (!profile) return "?"
+    return `${profile.nombres.charAt(0)}${profile.apellidos.charAt(0)}`
   }
 
-  const handleRequestDeactivation = () => {
-    // In real app, this would send a request to the backend
-    setDeactivationRequested(true)
-    setIsDeactivateDialogOpen(false)
+  if (isHydrating || isLoadingProfile || !profile || !editForm) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    )
   }
+
+  const rolLabel =
+    profile.rol === RolUsuario.ADMINISTRADOR
+      ? "administrador"
+      : profile.rol === RolUsuario.VENDEDOR
+        ? "vendedor"
+        : "cliente"
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Header cartItemCount={2} />
-      
+
       <main className="flex-1 container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
-          {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
             <div className="flex items-center gap-4">
               <Avatar className="w-20 h-20 border-4 border-background shadow-lg">
-                <AvatarImage src={user.avatarUrl} />
                 <AvatarFallback className="text-2xl font-semibold bg-primary text-primary-foreground">
                   {getInitials()}
                 </AvatarFallback>
               </Avatar>
               <div>
                 <h1 className="font-serif text-2xl font-bold text-foreground">
-                  {user.nombres} {user.apellidos}
+                  {profile.nombres} {profile.apellidos}
                 </h1>
-                <p className="text-muted-foreground">{user.correo}</p>
-                <Badge variant="secondary" className="mt-1 capitalize">{user.rol}</Badge>
+                <p className="text-muted-foreground">{profile.email}</p>
+                <Badge variant="secondary" className="mt-1 capitalize">{rolLabel}</Badge>
               </div>
             </div>
             <div className="flex gap-2">
               {!isEditing && (
                 <Button variant="outline" onClick={() => setIsEditing(true)}>
                   <Edit className="w-4 h-4 mr-2" />
-                  Editar Perfil
+                  {authUser?.rol === RolUsuario.ADMINISTRADOR ? "Gestionar cuenta" : "Editar Perfil"}
                 </Button>
               )}
               <Dialog open={isChangePasswordOpen} onOpenChange={setIsChangePasswordOpen}>
@@ -182,13 +487,13 @@ export default function MiCuentaPage() {
                       Ingresa tu contraseña actual y la nueva contraseña
                     </DialogDescription>
                   </DialogHeader>
-                  
+
                   {passwordSuccess ? (
                     <div className="py-8 text-center">
                       <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Check className="w-8 h-8 text-green-600" />
                       </div>
-                      <h3 className="text-lg font-semibold text-green-600">Contraseña actualizada</h3>
+                      <h3 className="text-lg font-semibold text-green-600">Contraseña actualizada correctamente</h3>
                       <p className="text-sm text-muted-foreground mt-1">Tu contraseña ha sido cambiada exitosamente</p>
                     </div>
                   ) : (
@@ -212,7 +517,7 @@ export default function MiCuentaPage() {
                             </button>
                           </div>
                         </div>
-                        
+
                         <div className="space-y-2">
                           <Label htmlFor="newPassword">Nueva Contraseña</Label>
                           <div className="relative">
@@ -230,9 +535,9 @@ export default function MiCuentaPage() {
                               {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                             </button>
                           </div>
-                          <p className="text-xs text-muted-foreground">Minimo 8 caracteres</p>
+                          <p className="text-xs text-muted-foreground">Minimo 8 caracteres, letras y numeros</p>
                         </div>
-                        
+
                         <div className="space-y-2">
                           <Label htmlFor="confirmPassword">Confirmar Nueva Contraseña</Label>
                           <div className="relative">
@@ -260,11 +565,18 @@ export default function MiCuentaPage() {
                         )}
                       </div>
                       <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsChangePasswordOpen(false)}>
+                        <Button variant="outline" onClick={() => setIsChangePasswordOpen(false)} disabled={isChangingPassword}>
                           Cancelar
                         </Button>
-                        <Button onClick={handleChangePassword}>
-                          Actualizar Contraseña
+                        <Button onClick={handleChangePassword} disabled={isChangingPassword}>
+                          {isChangingPassword ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Actualizando...
+                            </>
+                          ) : (
+                            "Actualizar Contraseña"
+                          )}
                         </Button>
                       </DialogFooter>
                     </>
@@ -274,7 +586,6 @@ export default function MiCuentaPage() {
             </div>
           </div>
 
-          {/* Content */}
           <Tabs defaultValue="perfil" className="space-y-6">
             <TabsList className="w-full sm:w-auto">
               <TabsTrigger value="perfil" className="flex-1 sm:flex-initial">Perfil</TabsTrigger>
@@ -282,7 +593,6 @@ export default function MiCuentaPage() {
             </TabsList>
 
             <TabsContent value="perfil" className="space-y-6">
-              {/* Personal Information */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -301,56 +611,80 @@ export default function MiCuentaPage() {
                         <Input
                           id="nombres"
                           value={editForm.nombres}
-                          onChange={(e) => setEditForm({ ...editForm, nombres: e.target.value })}
+                          onChange={(e) => {
+                            setEditForm({ ...editForm, nombres: e.target.value })
+                            if (profileFieldErrors.nombres) {
+                              setProfileFieldErrors((prev) => ({ ...prev, nombres: "" }))
+                            }
+                          }}
+                          className={profileFieldErrors.nombres ? "border-destructive" : ""}
                         />
+                        {profileFieldErrors.nombres && (
+                          <p className="text-xs text-destructive">{profileFieldErrors.nombres}</p>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="apellidos">Apellidos</Label>
                         <Input
                           id="apellidos"
                           value={editForm.apellidos}
-                          onChange={(e) => setEditForm({ ...editForm, apellidos: e.target.value })}
+                          onChange={(e) => {
+                            setEditForm({ ...editForm, apellidos: e.target.value })
+                            if (profileFieldErrors.apellidos) {
+                              setProfileFieldErrors((prev) => ({ ...prev, apellidos: "" }))
+                            }
+                          }}
+                          className={profileFieldErrors.apellidos ? "border-destructive" : ""}
                         />
+                        {profileFieldErrors.apellidos && (
+                          <p className="text-xs text-destructive">{profileFieldErrors.apellidos}</p>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="correo">Correo Electronico</Label>
                         <Input
                           id="correo"
                           type="email"
-                          value={editForm.correo}
-                          onChange={(e) => setEditForm({ ...editForm, correo: e.target.value })}
+                          value={editForm.email}
+                          onChange={(e) => {
+                            setEditForm({ ...editForm, email: e.target.value })
+                            if (profileFieldErrors.email) {
+                              setProfileFieldErrors((prev) => ({ ...prev, email: "" }))
+                            }
+                          }}
+                          className={profileFieldErrors.email ? "border-destructive" : ""}
                         />
+                        {profileFieldErrors.email && (
+                          <p className="text-xs text-destructive">{profileFieldErrors.email}</p>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="celular">Celular</Label>
                         <Input
                           id="celular"
-                          value={editForm.celular}
-                          onChange={(e) => setEditForm({ ...editForm, celular: e.target.value })}
+                          type="tel"
+                          maxLength={9}
+                          value={editForm.telefono}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/\D/g, "").slice(0, 9)
+                            setEditForm({ ...editForm, telefono: value })
+                            if (profileFieldErrors.telefono) {
+                              setProfileFieldErrors((prev) => ({ ...prev, telefono: "" }))
+                            }
+                          }}
+                          className={profileFieldErrors.telefono ? "border-destructive" : ""}
                         />
+                        {profileFieldErrors.telefono && (
+                          <p className="text-xs text-destructive">{profileFieldErrors.telefono}</p>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="tipoDocumento">Tipo de Documento</Label>
-                        <Select 
-                          value={editForm.tipoDocumento}
-                          onValueChange={(value: TipoDocumento) => setEditForm({ ...editForm, tipoDocumento: value })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="DNI">DNI</SelectItem>
-                            <SelectItem value="RUC">RUC</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <Input id="tipoDocumento" value={editForm.tipoDocumento} disabled />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="documento">Numero de Documento</Label>
-                        <Input
-                          id="documento"
-                          value={editForm.documento}
-                          onChange={(e) => setEditForm({ ...editForm, documento: e.target.value })}
-                        />
+                        <Input id="documento" value={editForm.numeroDocumento} disabled />
                       </div>
                     </div>
                   ) : (
@@ -359,108 +693,200 @@ export default function MiCuentaPage() {
                         <User className="w-5 h-5 text-muted-foreground mt-0.5" />
                         <div>
                           <p className="text-sm text-muted-foreground">Nombre Completo</p>
-                          <p className="font-medium">{user.nombres} {user.apellidos}</p>
+                          <p className="font-medium">{profile.nombres} {profile.apellidos}</p>
                         </div>
                       </div>
                       <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
                         <Mail className="w-5 h-5 text-muted-foreground mt-0.5" />
                         <div>
                           <p className="text-sm text-muted-foreground">Correo Electronico</p>
-                          <p className="font-medium">{user.correo}</p>
+                          <p className="font-medium">{profile.email}</p>
                         </div>
                       </div>
                       <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
                         <Phone className="w-5 h-5 text-muted-foreground mt-0.5" />
                         <div>
                           <p className="text-sm text-muted-foreground">Celular</p>
-                          <p className="font-medium">{user.celular}</p>
+                          <p className="font-medium">{profile.telefono}</p>
                         </div>
                       </div>
                       <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
                         <FileText className="w-5 h-5 text-muted-foreground mt-0.5" />
                         <div>
-                          <p className="text-sm text-muted-foreground">{user.tipoDocumento}</p>
-                          <p className="font-medium">{user.documento}</p>
+                          <p className="text-sm text-muted-foreground">{profile.tipoDocumento}</p>
+                          <p className="font-medium">{profile.numeroDocumento}</p>
                         </div>
                       </div>
+                    </div>
+                  )}
+
+                  {canRequestDocumentChange && (
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border rounded-lg bg-muted/30">
+                      <div>
+                        <p className="font-medium">Cambio de documento</p>
+                        <p className="text-sm text-muted-foreground">
+                          {profile.solicitudCambioDocumentoPendiente
+                            ? profile?.rol === RolUsuario.VENDEDOR
+                              ? "Su solicitud de cambio de DNI será evaluada por un administrador."
+                              : "Su solicitud de cambio de RUC o DNI será evaluada por un administrador."
+                            : profile.rol === RolUsuario.VENDEDOR
+                              ? "Para modificar tu DNI debes solicitar el cambio a un administrador."
+                              : "Para modificar tu RUC o DNI debes solicitar el cambio a un administrador."}
+                        </p>
+                      </div>
+                      {!profile.solicitudCambioDocumentoPendiente && (
+                        <Dialog
+                          open={isDocumentDialogOpen}
+                          onOpenChange={(open) => {
+                            setIsDocumentDialogOpen(open)
+                            setDocumentFieldErrors({})
+
+                            if (open && profile.rol === RolUsuario.VENDEDOR) {
+                              setDocumentForm({
+                                tipoDocumento: TipoDocumento.DNI,
+                                numeroDocumento: "",
+                              })
+                            }
+
+                            if (!open) {
+                              setDocumentForm({
+                                tipoDocumento: TipoDocumento.DNI,
+                                numeroDocumento: "",
+                              })
+                            }
+                          }}
+                        >
+                          <DialogTrigger asChild>
+                            <Button variant="outline" size="sm">Solicitar cambio</Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Solicitar cambio de documento</DialogTitle>
+                              <DialogDescription>
+                                Ingresa el nuevo tipo y número de documento. Un administrador revisara tu solicitud.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4 py-4">
+                              <div className="space-y-2">
+                                <Label>Tipo de documento</Label>
+                                {profile.rol === RolUsuario.VENDEDOR ? (
+                                  <Input value="DNI" disabled />
+                                ) : (
+                                  <Select
+                                    value={documentForm.tipoDocumento}
+                                    onValueChange={(value: TipoDocumento) => {
+                                      setDocumentForm({ tipoDocumento: value, numeroDocumento: "" })
+                                      setDocumentFieldErrors({})
+                                    }}
+                                  >
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="DNI">DNI</SelectItem>
+                                      <SelectItem value="RUC">RUC</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                )}
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Nuevo numero</Label>
+                                <Input
+                                  value={documentForm.numeroDocumento}
+                                  maxLength={documentForm.tipoDocumento === TipoDocumento.DNI ? 8 : 11}
+                                  placeholder={
+                                    documentForm.tipoDocumento === TipoDocumento.DNI
+                                      ? "Ingrese 8 dígitos"
+                                      : "Ingrese 11 dígitos"
+                                  }
+                                  onChange={(e) => {
+                                    const maxLength = documentForm.tipoDocumento === TipoDocumento.DNI ? 8 : 11
+                                    const value = e.target.value.replace(/\D/g, "").slice(0, maxLength)
+
+                                    setDocumentForm({
+                                      ...documentForm,
+                                      numeroDocumento: value,
+                                    })
+
+                                    if (documentFieldErrors.numeroDocumento) {
+                                      setDocumentFieldErrors((prev) => ({ ...prev, numeroDocumento: "" }))
+                                    }
+                                  }}
+                                  className={documentFieldErrors.numeroDocumento ? "border-destructive" : ""}
+                                />
+                                {documentFieldErrors.numeroDocumento && (
+                                  <p className="text-xs text-destructive">{documentFieldErrors.numeroDocumento}</p>
+                                )}
+                              </div>
+                            </div>
+                            <DialogFooter>
+                              <Button variant="outline" onClick={() => setIsDocumentDialogOpen(false)}>
+                                Cancelar
+                              </Button>
+                              <Button
+                                onClick={handleRequestDocumentChange}
+                                disabled={isRequestingDocumentChange || !documentForm.numeroDocumento.trim()}
+                              >
+                                {isRequestingDocumentChange ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Enviando...
+                                  </>
+                                ) : (
+                                  "Enviar solicitud"
+                                )}
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      )}
                     </div>
                   )}
                 </CardContent>
               </Card>
 
-              {/* Address */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <MapPin className="w-5 h-5" />
-                    Direccion de Envio
+                    Direccion
                   </CardTitle>
-                  <CardDescription>
-                    Direccion predeterminada para tus pedidos
-                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {isEditing ? (
-                    <div className="grid gap-6 sm:grid-cols-2">
-                      <div className="space-y-2 sm:col-span-2">
-                        <Label htmlFor="direccion">Direccion</Label>
-                        <Input
-                          id="direccion"
-                          value={editForm.direccion}
-                          onChange={(e) => setEditForm({ ...editForm, direccion: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="distrito">Distrito</Label>
-                        <Input
-                          id="distrito"
-                          value={editForm.distrito}
-                          onChange={(e) => setEditForm({ ...editForm, distrito: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="provincia">Provincia</Label>
-                        <Input
-                          id="provincia"
-                          value={editForm.provincia}
-                          onChange={(e) => setEditForm({ ...editForm, provincia: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="departamento">Departamento</Label>
-                        <Input
-                          id="departamento"
-                          value={editForm.departamento}
-                          onChange={(e) => setEditForm({ ...editForm, departamento: e.target.value })}
-                        />
-                      </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="direccion">Direccion</Label>
+                      <Input
+                        id="direccion"
+                        value={editForm.direccion}
+                        onChange={(e) => setEditForm({ ...editForm, direccion: e.target.value })}
+                      />
                     </div>
                   ) : (
                     <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
                       <MapPin className="w-5 h-5 text-muted-foreground mt-0.5" />
-                      <div>
-                        <p className="font-medium">{user.direccion}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {user.distrito}, {user.provincia}, {user.departamento}
-                        </p>
-                      </div>
+                      <p className="font-medium">{profile.direccion || "No registrada"}</p>
                     </div>
                   )}
 
                   {isEditing && (
                     <div className="flex justify-end gap-2 mt-6">
-                      <Button variant="outline" onClick={handleCancelEdit}>
+                      <Button variant="outline" onClick={handleCancelEdit} disabled={isSavingProfile}>
                         Cancelar
                       </Button>
-                      <Button onClick={handleSaveProfile}>
-                        Guardar Cambios
+                      <Button onClick={handleSaveProfile} disabled={isSavingProfile}>
+                        {isSavingProfile ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Guardando...
+                          </>
+                        ) : (
+                          "Guardar Cambios"
+                        )}
                       </Button>
                     </div>
                   )}
                 </CardContent>
               </Card>
 
-              {/* Account Info */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -474,10 +900,10 @@ export default function MiCuentaPage() {
                     <div>
                       <p className="text-sm text-muted-foreground">Miembro desde</p>
                       <p className="font-medium">
-                        {user.createdAt.toLocaleDateString('es-PE', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric'
+                        {new Date(profile.fechaRegistro).toLocaleDateString("es-PE", {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
                         })}
                       </p>
                     </div>
@@ -493,9 +919,6 @@ export default function MiCuentaPage() {
                     <Shield className="w-5 h-5" />
                     Seguridad de la Cuenta
                   </CardTitle>
-                  <CardDescription>
-                    Gestiona la seguridad de tu cuenta
-                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex items-center justify-between p-4 border rounded-lg">
@@ -505,120 +928,95 @@ export default function MiCuentaPage() {
                       </div>
                       <div>
                         <p className="font-medium">Contraseña</p>
-                        <p className="text-sm text-muted-foreground">Ultima actualizacion hace 30 dias</p>
+                        <p className="text-sm text-muted-foreground">Actualiza tu contraseña cuando lo necesites</p>
                       </div>
                     </div>
                     <Button variant="outline" onClick={() => setIsChangePasswordOpen(true)}>
                       Cambiar
                     </Button>
                   </div>
-
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-muted rounded-lg">
-                        <Mail className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <p className="font-medium">Correo Verificado</p>
-                        <p className="text-sm text-muted-foreground">{user.correo}</p>
-                      </div>
-                    </div>
-                    <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
-                      <Check className="w-3 h-3 mr-1" />
-                      Verificado
-                    </Badge>
-                  </div>
                 </CardContent>
               </Card>
 
-              <Card className="border-amber-300/50">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-amber-700">
-                    <UserX className="w-5 h-5" />
-                    Desactivar Cuenta
-                  </CardTitle>
-                  <CardDescription>
-                    Desactiva tu cuenta de forma temporal o permanente
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {deactivationRequested ? (
-                    <div className="flex items-start gap-3 p-4 border border-amber-300 rounded-lg bg-amber-50">
-                      <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
-                      <div>
-                        <p className="font-medium text-amber-800">Solicitud enviada</p>
-                        <p className="text-sm text-amber-700 mt-1">
-                          Tu solicitud de desactivacion ha sido enviada. Un administrador procesara tu solicitud 
-                          y seras notificado por correo electronico cuando tu cuenta sea desactivada.
-                        </p>
+              {profile.rol === RolUsuario.CLIENTE && (
+                <Card className="border-amber-300/50">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-amber-700">
+                      <UserX className="w-5 h-5" />
+                      Desactivar Cuenta
+                    </CardTitle>
+                    <CardDescription>
+                      Desactiva tu cuenta de forma temporal o permanente
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {profile.solicitudDesactivacionPendiente ? (
+                      <div className="flex items-start gap-3 p-4 border border-amber-300 rounded-lg bg-amber-50">
+                        <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
+                        <div>
+                          <p className="font-medium text-amber-800">Solicitud enviada</p>
+                          <p className="text-sm text-amber-700 mt-1">
+                            Su cuenta será desactivada por un administrador.
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between p-4 border border-amber-300/50 rounded-lg bg-amber-50/50">
-                      <div>
-                        <p className="font-medium">Desactivar mi Cuenta</p>
-                        <p className="text-sm text-muted-foreground">
-                          Tu cuenta sera desactivada y no podras acceder al sistema. Tus datos se mantendran almacenados.
-                        </p>
-                      </div>
-                      <AlertDialog open={isDeactivateDialogOpen} onOpenChange={setIsDeactivateDialogOpen}>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="outline" size="sm" className="border-amber-300 text-amber-700 hover:bg-amber-100">
-                            Desactivar
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle className="flex items-center gap-2">
-                              <AlertTriangle className="w-5 h-5 text-amber-500" />
-                              Confirmar desactivacion de cuenta
-                            </AlertDialogTitle>
-                            <AlertDialogDescription asChild>
-                              <div className="space-y-4">
-                                {hasPendingOrders ? (
-                                  <div className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg">
-                                    <p className="text-destructive font-medium">No puedes desactivar tu cuenta</p>
-                                    <p className="text-sm text-muted-foreground mt-1">
-                                      Tienes pedidos en proceso. Debes esperar a que todos tus pedidos sean 
-                                      entregados o cancelados antes de poder desactivar tu cuenta.
-                                    </p>
-                                  </div>
-                                ) : (
-                                  <>
+                    ) : (
+                      <div className="flex items-center justify-between p-4 border border-amber-300/50 rounded-lg bg-amber-50/50">
+                        <div>
+                          <p className="font-medium">Desactivar mi Cuenta</p>
+                          <p className="text-sm text-muted-foreground">
+                            Tu cuenta sera desactivada y no podras acceder al sistema.
+                          </p>
+                        </div>
+                        <AlertDialog open={isDeactivateDialogOpen} onOpenChange={setIsDeactivateDialogOpen}>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="outline" size="sm" className="border-amber-300 text-amber-700 hover:bg-amber-100">
+                              Desactivar
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle className="flex items-center gap-2">
+                                <AlertTriangle className="w-5 h-5 text-amber-500" />
+                                Confirmar desactivacion de cuenta
+                              </AlertDialogTitle>
+                              <AlertDialogDescription asChild>
+                                <div className="space-y-4">
+                                  {!profile.puedeDesactivarse ? (
+                                    <div className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg">
+                                      <p className="text-destructive font-medium">No puedes desactivar tu cuenta</p>
+                                      <p className="text-sm text-muted-foreground mt-1">
+                                        {profile.motivoNoDesactivacion}
+                                      </p>
+                                    </div>
+                                  ) : (
                                     <p>
                                       Estas a punto de solicitar la desactivacion de tu cuenta. Un administrador
                                       revisara tu solicitud y procedera con la desactivacion.
                                     </p>
-                                    <div className="p-3 bg-muted rounded-lg">
-                                      <p className="text-sm font-medium">Al desactivar tu cuenta:</p>
-                                      <ul className="text-sm text-muted-foreground mt-2 space-y-1">
-                                        <li>- No podras acceder al sistema</li>
-                                        <li>- Tus datos permaneceran almacenados</li>
-                                        <li>- Podras solicitar la reactivacion contactando a soporte</li>
-                                      </ul>
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            {!hasPendingOrders && (
-                              <AlertDialogAction 
-                                onClick={handleRequestDeactivation}
-                                className="bg-amber-600 text-white hover:bg-amber-700"
-                              >
-                                Confirmar Desactivacion
-                              </AlertDialogAction>
-                            )}
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                                  )}
+                                </div>
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel disabled={isRequestingDeactivation}>Cancelar</AlertDialogCancel>
+                              {profile.puedeDesactivarse && (
+                                <AlertDialogAction
+                                  onClick={handleRequestDeactivation}
+                                  disabled={isRequestingDeactivation}
+                                  className="bg-amber-600 text-white hover:bg-amber-700"
+                                >
+                                  {isRequestingDeactivation ? "Enviando..." : "Confirmar Desactivacion"}
+                                </AlertDialogAction>
+                              )}
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
           </Tabs>
         </div>

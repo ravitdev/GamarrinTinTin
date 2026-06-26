@@ -55,7 +55,7 @@ export class VendedorService {
   }
 
   static async getProducts() {
-    return ApiClient.get('/vendedor/products');
+    return ApiClient.get('/productos');
   }
 
   static async getCommissions() {

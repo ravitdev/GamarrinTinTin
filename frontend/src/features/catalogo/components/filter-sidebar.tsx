@@ -31,9 +31,9 @@ export function FilterSidebar({
 }: FilterSidebarProps) {
   return (
     <div className="space-y-6">
-      {/* Categorias */}
+      {/* Categorías */}
       <div>
-        <h3 className="mb-3 font-medium text-foreground">Categoria</h3>
+        <h3 className="mb-3 font-medium text-foreground">Categoría</h3>
         <div className="space-y-2">
           <label className="flex cursor-pointer items-center gap-2">
             <Checkbox
@@ -73,16 +73,16 @@ export function FilterSidebar({
         </div>
       </div>
 
-      {/* Tipo de Diseno */}
+      {/* Tipo de Diseño */}
       <div>
-        <h3 className="mb-3 font-medium text-foreground">Tipo de Diseno</h3>
+        <h3 className="mb-3 font-medium text-foreground">Tipo de diseño</h3>
         <div className="space-y-2">
           <label className="flex cursor-pointer items-center gap-2">
             <Checkbox
               checked={filters.tipoDiseno.includes('predefinido')}
               onCheckedChange={() => onToggleDesign('predefinido')}
             />
-            <span className="text-sm">Disenos Predefinidos</span>
+            <span className="text-sm">Diseños Predefinidos</span>
           </label>
           <label className="flex cursor-pointer items-center gap-2">
             <Checkbox

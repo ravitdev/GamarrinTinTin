@@ -25,6 +25,50 @@ export class ApiError extends Error {
   }
 }
 
+function extractErrorMessage(data: unknown, fallback: string): string {
+  if (!data || typeof data !== 'object') return fallback;
+
+  if ('message' in data) {
+    const message = (data as { message: unknown }).message;
+    if (Array.isArray(message)) return message.map(String).join(', ');
+    if (message) return String(message);
+  }
+
+  if ('error' in data) {
+    const error = (data as { error: unknown }).error;
+    if (typeof error === 'string') return error;
+    if (error && typeof error === 'object' && 'issues' in error) {
+      const issues = (error as { issues: unknown }).issues;
+      if (Array.isArray(issues)) {
+        return issues
+          .map((issue) => {
+            if (issue && typeof issue === 'object' && 'message' in issue) {
+              return String((issue as { message: unknown }).message);
+            }
+            return String(issue);
+          })
+          .join(', ');
+      }
+    }
+  }
+
+  if ('issues' in data) {
+    const issues = (data as { issues: unknown }).issues;
+    if (Array.isArray(issues)) {
+      return issues
+        .map((issue) => {
+          if (issue && typeof issue === 'object' && 'message' in issue) {
+            return String((issue as { message: unknown }).message);
+          }
+          return String(issue);
+        })
+        .join(', ');
+    }
+  }
+
+  return fallback;
+}
+
 /**
  * Recupera el token JWT almacenado en el cliente.
  * En un proyecto real esto podria leer de cookies httpOnly via un endpoint,
@@ -70,35 +114,43 @@ export async function apiClient<TResponse>(
     return undefined as TResponse;
   }
 
-  // 401 Unauthorized: sesión expirada o token inválido.
-  // Limpia las credenciales locales y redirige al login sin romper el servidor.
-  if (response.status === 401) {
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem('gtt_access_token');
-      // Eliminar también la cookie que usa el middleware
-      document.cookie = 'gtt_access_token=; Max-Age=0; path=/';
-      // Solo redirigir si no estamos ya en /login para evitar loops
-      if (!window.location.pathname.startsWith('/login')) {
-        window.location.href = '/login';
-      }
-    }
-    throw new ApiError(401, 'Sesión expirada. Por favor inicia sesión nuevamente.');
-  }
-
   const data = await response.json().catch(() => null);
 
+  // 401 Unauthorized: sesión expirada o token inválido.
+  // Si la petición no usa auth, por ejemplo login, se debe respetar el mensaje real del backend.
+  if (response.status === 401) {
+    const message = extractErrorMessage(
+      data,
+      'Sesión expirada. Por favor inicia sesión nuevamente.',
+    );
+
+    if (auth && typeof window !== 'undefined') {
+      window.localStorage.removeItem('gtt_access_token');
+      window.localStorage.removeItem('gtt_refresh_token');
+      document.cookie = 'gtt_access_token=; Max-Age=0; path=/';
+
+      if (!window.location.pathname.startsWith('/login')) {
+        const reason =
+          message === 'La cuenta no está disponible.'
+            ? 'account_inactive'
+            : 'session_expired';
+
+        window.location.href = `/login?reason=${reason}`;
+      }
+    }
+
+    throw new ApiError(response.status, message, data);
+  }
+
   if (!response.ok) {
-    const message =
-      (data && typeof data === 'object' && 'message' in data
-        ? String((data as { message: unknown }).message)
-        : null) ?? `Error HTTP ${response.status}`;
+    const message = extractErrorMessage(data, `Error HTTP ${response.status}`);
     throw new ApiError(response.status, message, data);
   }
 
   // Desempaquetar el envoltorio del backend NestJS
   if (data && typeof data === 'object' && 'success' in data) {
     if (data.success === false) {
-      throw new ApiError(response.status, data.message || 'Error', data);
+      throw new ApiError(response.status, extractErrorMessage(data, 'Error'), data);
     }
     if ('data' in data) {
       return data.data as TResponse;

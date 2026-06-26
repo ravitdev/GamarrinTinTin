@@ -97,7 +97,7 @@ export interface Usuario {
   telefono:        string;
   tipoDocumento:   TipoDocumento;
   numeroDocumento: string;
-  direccion:       string;
+  direccion?:       string | null;
   rol:             RolUsuario;
   estado:          EstadoUsuario;
   fechaRegistro:   string; // DateTime ISO
@@ -158,6 +158,7 @@ export interface Producto {
 
   // Relaciones opcionales
   categoria?:          Categoria;
+  categoriaObjeto?:    Categoria;
   variantes?:          ProductoVariante[];
   imagenes?:           ProductoImagen[];
   descuentosVolumen?:  DescuentoVolumen[];
@@ -426,7 +427,6 @@ export interface AuthCredentials {
 
 /**
  * Datos que captura el formulario de registro (frontend).
- * Se transforman en RegistroPayload antes de enviar al backend.
  */
 export interface RegistroData {
   nombres:         string;
@@ -435,26 +435,9 @@ export interface RegistroData {
   numeroDocumento: string;
   celular:         string;
   email:           string;
-  direccion:       string;
+  direccion?:       string | null;
   password:        string;
   confirmPassword: string;
-  distrito?:       string;
-  provincia?:      string;
-  departamento?:   string;
-}
-
-/**
- * RegistroPayload — shape que se envía al backend POST /usuarios/clientes.
- * Mapeado desde RegistroData con nombres según la API backend.
- */
-export interface RegistroPayload {
-  nombres:   string;
-  apellidos: string;
-  email:     string;
-  contrasena: string;     // del password
-  telefono:  string;      // del celular
-  dniRuc:    string;      // del numeroDocumento
-  direccion: string;
 }
 
 /**
@@ -507,7 +490,7 @@ export interface Order {
     celular: string;
     tipoDocumento: string;
     documento: string;
-    direccion: string;
+    direccion?: string | null;
   };
   direccionEnvio: string;
   metodoPago: string;
@@ -582,8 +565,8 @@ export interface ColorProducto {
 
 export interface PredefinedDesign {
   id: number;
+  idDisenoPredefinido?: number;
   nombre: string;
-  posicion: 'pecho' | 'espalda';
   urlImagen: string;
+  imagen?: string;
 }
-

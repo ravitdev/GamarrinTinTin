@@ -1,11 +1,34 @@
-import { Usuario } from './domain/usuario.entity';
+import { Usuario, RolUsuario } from './domain/usuario.entity';
+import {
+  SolicitudCambioDocumento,
+  SolicitudDesactivacion,
+} from './domain/solicitud.entity';
 import { IUsuarioRepository } from './iusuario.repository';
 import { ContrasenaService } from './seguridad/contrasena.service';
 import { JwtService } from './seguridad/jwt.service';
 import { UsuarioManager } from './usuario.manager';
+import type { RegistroPendienteUsuarioData } from './iusuario.repository';
+
+class NotificacionManagerFake {
+  codigos = new Map<string, string>();
+
+  enviarCodigoVerificacionRegistro(
+    destinatario: string,
+    _nombre: string,
+    codigo: string,
+  ): Promise<boolean> {
+    this.codigos.set(destinatario, codigo);
+    return Promise.resolve(true);
+  }
+
+  enviarBienvenida(): Promise<boolean> {
+    return Promise.resolve(true);
+  }
+}
 
 class UsuarioRepositoryFake implements IUsuarioRepository {
   private usuarios: Usuario[];
+  private registrosPendientes: RegistroPendienteUsuarioData[] = [];
   private refreshTokens = new Map<
     number,
     { refreshTokenHash: string; fechaExpiracion: Date }
@@ -43,6 +66,10 @@ class UsuarioRepositoryFake implements IUsuarioRepository {
         'INACTIVO',
       ),
     ];
+  }
+
+  async listarPedidosResumenPorCliente(): Promise<any[]> {
+    return [];
   }
 
   async guardar(usuario: Usuario): Promise<Usuario> {
@@ -87,6 +114,14 @@ class UsuarioRepositoryFake implements IUsuarioRepository {
     return true;
   }
 
+  async reactivar(idUsuario: number): Promise<boolean> {
+    const usuario = this.usuarios.find((item) => item.idUsuario === idUsuario);
+    if (!usuario) return false;
+
+    usuario.estado = 'ACTIVO';
+    return true;
+  }
+
   async buscarPorId(idUsuario: number): Promise<Usuario | null> {
     return (
       this.usuarios.find((usuario) => usuario.idUsuario === idUsuario) ?? null
@@ -111,8 +146,170 @@ class UsuarioRepositoryFake implements IUsuarioRepository {
     );
   }
 
+  async guardarRegistroPendiente(
+    registro: RegistroPendienteUsuarioData,
+  ): Promise<RegistroPendienteUsuarioData> {
+    const existente = this.registrosPendientes.findIndex(
+      (item) => item.email === registro.email,
+    );
+    const guardado = {
+      ...registro,
+      idRegistro:
+        existente >= 0
+          ? this.registrosPendientes[existente].idRegistro
+          : this.registrosPendientes.length + 1,
+      estado: 'PENDIENTE' as const,
+    };
+
+    if (existente >= 0) {
+      this.registrosPendientes[existente] = guardado;
+    } else {
+      this.registrosPendientes.push(guardado);
+    }
+
+    return guardado;
+  }
+
+  async buscarRegistroPendientePorEmail(
+    email: string,
+  ): Promise<RegistroPendienteUsuarioData | null> {
+    return (
+      this.registrosPendientes.find(
+        (registro) => registro.email.toLowerCase() === email.toLowerCase(),
+      ) ?? null
+    );
+  }
+
+  async buscarRegistroPendientePorTokenAnulacion(
+    tokenAnulacionHash: string,
+  ): Promise<RegistroPendienteUsuarioData | null> {
+    return (
+      this.registrosPendientes.find(
+        (registro) => registro.tokenAnulacionHash === tokenAnulacionHash,
+      ) ?? null
+    );
+  }
+
+  async actualizarCodigoRegistroPendiente(
+    idRegistro: number,
+    codigoHash: string,
+    tokenAnulacionHash: string,
+    fechaExpiracion: Date,
+  ): Promise<RegistroPendienteUsuarioData> {
+    const registro = this.registrosPendientes.find(
+      (item) => item.idRegistro === idRegistro,
+    );
+
+    if (!registro) {
+      throw new Error('Registro pendiente no encontrado.');
+    }
+
+    registro.codigoHash = codigoHash;
+    registro.tokenAnulacionHash = tokenAnulacionHash;
+    registro.fechaExpiracion = fechaExpiracion;
+    registro.estado = 'PENDIENTE';
+    return registro;
+  }
+
+  async actualizarEstadoRegistroPendiente(
+    idRegistro: number,
+    estado: 'CONFIRMADO' | 'ANULADO' | 'EXPIRADO',
+  ): Promise<boolean> {
+    const registro = this.registrosPendientes.find(
+      (item) => item.idRegistro === idRegistro,
+    );
+
+    if (!registro) return false;
+    registro.estado = estado;
+    return true;
+  }
+
   async listarUsuarios(): Promise<Usuario[]> {
     return [...this.usuarios];
+  }
+
+  async listarPorRol(rol: RolUsuario): Promise<Usuario[]> {
+    return this.usuarios.filter((usuario) => usuario.rol === rol);
+  }
+
+  async contarPedidosEnProceso(_idCliente: number): Promise<number> {
+    return 0;
+  }
+
+  async crearSolicitudCambioDocumento(
+    solicitud: SolicitudCambioDocumento,
+  ): Promise<SolicitudCambioDocumento> {
+    return new SolicitudCambioDocumento(
+      1,
+      solicitud.idUsuario,
+      solicitud.tipoDocumento,
+      solicitud.numeroDocumento,
+      solicitud.estado,
+      solicitud.fechaSolicitud,
+    );
+  }
+
+  async buscarSolicitudCambioDocumentoPendiente(): Promise<SolicitudCambioDocumento | null> {
+    return null;
+  }
+
+  async listarSolicitudesCambioDocumentoPendientes(): Promise<
+    Array<SolicitudCambioDocumento & { usuario: Usuario }>
+  > {
+    return [];
+  }
+
+  async resolverSolicitudCambioDocumento(
+    idSolicitud: number,
+    estado: 'APROBADA' | 'RECHAZADA',
+    idAdmin: number,
+  ): Promise<SolicitudCambioDocumento | null> {
+    return new SolicitudCambioDocumento(
+      idSolicitud,
+      1,
+      'DNI',
+      '70000002',
+      estado,
+      new Date(),
+      new Date(),
+      idAdmin,
+    );
+  }
+
+  async crearSolicitudDesactivacion(
+    solicitud: SolicitudDesactivacion,
+  ): Promise<SolicitudDesactivacion> {
+    return new SolicitudDesactivacion(
+      1,
+      solicitud.idUsuario,
+      solicitud.estado,
+      solicitud.fechaSolicitud,
+    );
+  }
+
+  async buscarSolicitudDesactivacionPendiente(): Promise<SolicitudDesactivacion | null> {
+    return null;
+  }
+
+  async listarSolicitudesDesactivacionPendientes(): Promise<
+    Array<SolicitudDesactivacion & { usuario: Usuario }>
+  > {
+    return [];
+  }
+
+  async resolverSolicitudDesactivacion(
+    idSolicitud: number,
+    estado: 'PROCESADA' | 'RECHAZADA',
+    idAdmin: number,
+  ): Promise<SolicitudDesactivacion | null> {
+    return new SolicitudDesactivacion(
+      idSolicitud,
+      1,
+      estado,
+      new Date(),
+      new Date(),
+      idAdmin,
+    );
   }
 
   async guardarRefreshToken(
@@ -137,14 +334,17 @@ class UsuarioRepositoryFake implements IUsuarioRepository {
 
 describe('UsuarioManager', () => {
   let manager: UsuarioManager;
+  let notificaciones: NotificacionManagerFake;
 
   beforeEach(() => {
     const contrasenaService = new ContrasenaService();
     const repository = new UsuarioRepositoryFake(contrasenaService);
+    notificaciones = new NotificacionManagerFake();
     manager = new UsuarioManager(
       repository,
       contrasenaService,
       new JwtService(),
+      notificaciones as any,
     );
   });
 
@@ -184,7 +384,7 @@ describe('UsuarioManager', () => {
   });
 
   it('registra cuenta de cliente con contraseña cifrada', async () => {
-    const usuario = await manager.registrarCuentaCliente({
+    const verificacion = await manager.registrarCuentaCliente({
       nombres: 'Nuevo',
       apellidos: 'Cliente',
       email: 'nuevo.cliente@gamarrintintin.com',
@@ -195,16 +395,23 @@ describe('UsuarioManager', () => {
       direccion: 'Lima',
     });
 
-    const sesion = await manager.iniciarSesion({
-      email: 'nuevo.cliente@gamarrintintin.com',
-      contrasena: 'Cliente456',
-    });
+    const codigo = notificaciones.codigos.get(
+      'nuevo.cliente@gamarrintintin.com',
+    );
 
-    expect(usuario.idUsuario).toBe(3);
-    expect(usuario.rol).toBe('CLIENTE');
-    expect(usuario.estado).toBe('ACTIVO');
-    expect(usuario.contrasenaHash).not.toBe('Cliente456');
-    expect(sesion.usuario.email).toBe('nuevo.cliente@gamarrintintin.com');
+    expect(verificacion.email).toBe('nuevo.cliente@gamarrintintin.com');
+    expect(codigo).toHaveLength(6);
+
+    const sesionRegistro = await manager.confirmarRegistroCliente(
+      'nuevo.cliente@gamarrintintin.com',
+      codigo!,
+    );
+
+    expect(sesionRegistro.accessToken).toBeTruthy();
+    expect(sesionRegistro.refreshToken).toBeTruthy();
+    expect(sesionRegistro.usuario.idUsuario).toBe(3);
+    expect(sesionRegistro.usuario.rol).toBe('CLIENTE');
+    expect(sesionRegistro.usuario.email).toBe('nuevo.cliente@gamarrintintin.com');
   });
 
   it('rechaza registro con email inválido', async () => {
@@ -237,6 +444,21 @@ describe('UsuarioManager', () => {
     ).rejects.toThrow('El teléfono debe tener 9 dígitos.');
   });
 
+  it('rechaza registro con teléfono que no empieza con 9', async () => {
+    await expect(
+      manager.registrarCuentaCliente({
+        nombres: 'Nuevo',
+        apellidos: 'Cliente',
+        email: 'telefono.inicio.invalido@gamarrintintin.com',
+        contrasena: 'Cliente456',
+        telefono: '888777666',
+        tipoDocumento: 'DNI',
+        numeroDocumento: '70000005',
+        direccion: 'Lima',
+      }),
+    ).rejects.toThrow('El teléfono debe empezar con 9.');
+  });
+
   it('rechaza registro con documento inválido según tipo', async () => {
     await expect(
       manager.registrarCuentaCliente({
@@ -250,6 +472,21 @@ describe('UsuarioManager', () => {
         direccion: 'Lima',
       }),
     ).rejects.toThrow('El RUC debe tener 11 dígitos.');
+  });
+
+  it('rechaza registro con RUC que no empieza con 10 o 20', async () => {
+    await expect(
+      manager.registrarCuentaCliente({
+        nombres: 'Nuevo',
+        apellidos: 'Cliente',
+        email: 'ruc.inicio.invalido@gamarrintintin.com',
+        contrasena: 'Cliente456',
+        telefono: '988777666',
+        tipoDocumento: 'RUC',
+        numeroDocumento: '30123456789',
+        direccion: 'Lima',
+      }),
+    ).rejects.toThrow('El RUC debe empezar con 10 o 20.');
   });
 
   it('registra usuario vendedor', async () => {
@@ -267,6 +504,26 @@ describe('UsuarioManager', () => {
     expect(usuario.idUsuario).toBe(3);
     expect(usuario.rol).toBe('VENDEDOR');
     expect(usuario.estado).toBe('ACTIVO');
+  });
+
+  it('rechaza solicitud de cambio de documento RUC para vendedor', async () => {
+    const vendedor = await manager.registrarUsuarioVendedor({
+      nombres: 'Nuevo',
+      apellidos: 'Vendedor',
+      email: 'vendedor.documento@gamarrintintin.com',
+      contrasena: 'Vendedor456',
+      telefono: '977666555',
+      tipoDocumento: 'DNI',
+      numeroDocumento: '70000006',
+      direccion: 'Gamarra',
+    });
+
+    await expect(
+      manager.solicitarCambioDocumento(vendedor.idUsuario, {
+        tipoDocumento: 'RUC',
+        numeroDocumento: '20123456789',
+      }),
+    ).rejects.toThrow('Los vendedores solo pueden solicitar cambio de DNI.');
   });
 
   it('renueva sesión con refresh token y lo rota', async () => {
@@ -303,5 +560,18 @@ describe('UsuarioManager', () => {
         refreshToken: sesion.refreshToken,
       }),
     ).rejects.toThrow('Refresh token inválido o expirado.');
+  });
+
+  it('reactiva una cuenta inactiva', async () => {
+    const resultado = await manager.procesarReactivacionCuenta(2);
+
+    expect(resultado).toBe(true);
+
+    const sesion = await manager.iniciarSesion({
+      email: 'inactivo@gamarrintintin.com',
+      contrasena: 'Inactivo123',
+    });
+
+    expect(sesion.usuario.email).toBe('inactivo@gamarrintintin.com');
   });
 });

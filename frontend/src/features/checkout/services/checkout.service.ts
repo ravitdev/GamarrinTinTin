@@ -1,9 +1,17 @@
 import { ApiClient } from '@/lib/api-client';
 
+export type TipoEntrega = 'ENVIO' | 'RECOJO_TIENDA';
+
 export interface CheckoutItemPayload {
   idProductoVariante: number;
   idCotizacion?: number;
   cantidad: number;
+}
+
+export interface CreateOrderPayload {
+  items: CheckoutItemPayload[];
+  tipoEntrega: TipoEntrega;
+  direccionEnvio?: string | null;
 }
 
 export class CheckoutService {
@@ -11,8 +19,8 @@ export class CheckoutService {
    * POST /pedidos
    * Registra un nuevo pedido a partir de las variantes y cantidades.
    */
-  static async createOrder(items: CheckoutItemPayload[]): Promise<any> {
-    return ApiClient.post('/pedidos', { items });
+  static async createOrder(payload: CreateOrderPayload): Promise<any> {
+    return ApiClient.post('/pedidos', payload);
   }
 
   /**

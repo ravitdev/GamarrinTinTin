@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
+import { useAuth } from '@/features/auth/hooks/use-auth';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,14 +26,20 @@ import {
   ChevronDown,
   Shirt,
   User,
-  Package
+  Package,
+  ImageIcon
 } from "lucide-react"
 
 const navigation = [
   { name: "Dashboard", href: "/vendedor", icon: LayoutDashboard },
-  { name: "Cotizaciones", href: "/vendedor/cotizaciones", icon: FileText, badge: 5 },
-  { name: "Pedidos", href: "/vendedor/pedidos", icon: ShoppingBag, badge: 3 },
+  { name: "Cotizaciones", href: "/vendedor/cotizaciones", icon: FileText },
+  { name: "Pedidos", href: "/vendedor/pedidos", icon: ShoppingBag },
   { name: "Productos", href: "/vendedor/productos", icon: Package },
+  {
+    name: "Diseños predefinidos",
+    href: "/vendedor/disenos-predefinidos",
+    icon: ImageIcon,
+  },
 ]
 
 export default function VendedorLayout({
@@ -43,6 +49,7 @@ export default function VendedorLayout({
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
+  const {logout} = useAuth();
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -100,17 +107,6 @@ export default function VendedorLayout({
                     <item.icon className="w-5 h-5" />
                     {item.name}
                   </div>
-                  {item.badge && (
-                    <Badge 
-                      variant={isActive ? "secondary" : "default"}
-                      className={cn(
-                        "text-xs",
-                        isActive && "bg-sidebar-primary-foreground/20 text-sidebar-primary-foreground"
-                      )}
-                    >
-                      {item.badge}
-                    </Badge>
-                  )}
                 </Link>
               )
             })}
@@ -118,17 +114,7 @@ export default function VendedorLayout({
 
           {/* User section */}
           <div className="p-4 border-t border-sidebar-border">
-            <div className="flex items-center gap-3 px-4 py-3 mb-2 text-sm">
-              <Avatar className="w-8 h-8">
-                <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground">MG</AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">Maria Garcia</p>
-                <p className="text-xs text-sidebar-foreground/60">Vendedor</p>
-              </div>
-            </div>
-            <Link
-              href="/catalogo"
+            <Link href="/catalogo"
               className="flex items-center gap-3 px-4 py-3 text-sm text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent rounded-lg transition-colors"
             >
               <LogOut className="w-5 h-5" />
@@ -197,11 +183,13 @@ export default function VendedorLayout({
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>
                   <User className="w-4 h-4 mr-2" />
-                  Mi Perfil
+                  <Link href="/mi-cuenta">
+                      Mi Perfil
+                  </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem className="text-destructive">
+                <DropdownMenuItem className="text-destructive" onSelect={() => logout()}>
                   <LogOut className="w-4 h-4 mr-2" />
-                  Cerrar Sesion
+                    Cerrar Sesión
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

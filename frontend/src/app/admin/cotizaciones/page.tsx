@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
 import {
   Dialog,
   DialogContent,
@@ -58,8 +57,6 @@ export default function AdminQuotationsPage() {
   const [selectedQuotation, setSelectedQuotation] = useState<Quotation | null>(null)
   const [isQuotingDialogOpen, setIsQuotingDialogOpen] = useState(false)
   const [quotationPrice, setQuotationPrice] = useState("")
-  const [quotationNotes, setQuotationNotes] = useState("")
-  const [validDays, setValidDays] = useState("15")
   const [quotations, setQuotations] = useState<Quotation[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -92,11 +89,9 @@ export default function AdminQuotationsPage() {
   const handleSendQuotation = async () => {
     if (!selectedQuotation || !quotationPrice) return
     try {
-      const expiryDate = new Date(Date.now() + parseInt(validDays) * 24 * 60 * 60 * 1000).toISOString()
       const updated = await QuotationService.updateQuotation(selectedQuotation.id, {
         estado: 'cotizado',
         precioSugerido: parseFloat(quotationPrice),
-        fechaVencimiento: expiryDate,
       })
       setQuotations(prev => prev.map(q => q.id === updated.id ? updated : q))
     } catch (err: any) {
@@ -105,7 +100,6 @@ export default function AdminQuotationsPage() {
     setIsQuotingDialogOpen(false)
     setSelectedQuotation(null)
     setQuotationPrice("")
-    setQuotationNotes("")
   }
 
   const openQuotingDialog = (quotation: Quotation) => {
@@ -597,32 +591,9 @@ export default function AdminQuotationsPage() {
                   )}
                 </div>
 
-                {/* Validity */}
-                <div className="space-y-2">
-                  <Label htmlFor="validity">Dias de validez</Label>
-                  <Select value={validDays} onValueChange={setValidDays}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="7">7 dias</SelectItem>
-                      <SelectItem value="15">15 dias</SelectItem>
-                      <SelectItem value="30">30 dias</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Notes */}
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Notas (opcional)</Label>
-                  <Textarea
-                    id="notes"
-                    placeholder="Notas adicionales para el cliente..."
-                    rows={3}
-                    value={quotationNotes}
-                    onChange={(e) => setQuotationNotes(e.target.value)}
-                  />
-                </div>
+                <p className="text-sm text-muted-foreground">
+                  La cotizacion tendra una vigencia de 48 horas.
+                </p>
 
                 {/* Warning */}
                 <div className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">

@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
@@ -47,6 +48,7 @@ import {
   Search,
   MoreHorizontal,
   Eye,
+  Edit,
   Mail,
   Phone,
   ShoppingBag,
@@ -65,12 +67,24 @@ import {
   Clock,
   ArrowLeft
 } from "lucide-react"
+import { AdminService } from "@/features/admin/services/admin.service"
+import {
+  UserService,
+  type DocumentChangeRequest,
+  type UserProfile,
+} from "@/features/user/services/user.service"
+import { toast } from "@/hooks/use-toast"
 
 interface Client {
   id: string
+  nombres: string
+  apellidos: string
   name: string
   email: string
   phone: string
+  direccion: string | null
+  tipoDocumento: "DNI" | "RUC"
+  numeroDocumento: string
   type: "individual" | "business"
   company?: string
   ruc?: string
@@ -79,6 +93,7 @@ interface Client {
   lastOrder: string
   createdAt: string
   status: "active" | "inactive"
+  orders: Order[]
   hasPendingOrders?: boolean
   deactivationRequest?: boolean
 }
@@ -93,118 +108,13 @@ interface Order {
   productos: string[]
 }
 
-const mockOrders: Record<string, Order[]> = {
-  "CLI-001": [
-    { id: "ord-1", codigo: "PED-2024-0045", fecha: "2024-01-15", estado: "entregado", total: 450, items: 3, productos: ["Polo Premium Blanco", "Polo Basico Negro"] },
-    { id: "ord-2", codigo: "PED-2024-0032", fecha: "2024-01-08", estado: "entregado", total: 320, items: 2, productos: ["Polera Cuello V"] },
-    { id: "ord-3", codigo: "PED-2024-0018", fecha: "2023-12-20", estado: "entregado", total: 480, items: 4, productos: ["Polo Premium", "Polo Basico"] },
-  ],
-  "CLI-002": [
-    { id: "ord-4", codigo: "PED-2024-0048", fecha: "2024-01-14", estado: "en_produccion", total: 2500, items: 50, productos: ["Polo Corporativo Tech Solutions"] },
-    { id: "ord-5", codigo: "PED-2024-0041", fecha: "2024-01-10", estado: "entregado", total: 3200, items: 60, productos: ["Polo Corporativo Tech Solutions"] },
-    { id: "ord-6", codigo: "PED-2024-0028", fecha: "2024-01-02", estado: "entregado", total: 4800, items: 100, productos: ["Camiseta Evento", "Polo Promocional"] },
-  ],
-  "CLI-003": [
-    { id: "ord-7", codigo: "PED-2024-0039", fecha: "2024-01-10", estado: "enviado", total: 1800, items: 30, productos: ["Polo Uniforme Restaurant"] },
-    { id: "ord-8", codigo: "PED-2024-0022", fecha: "2023-12-28", estado: "entregado", total: 2400, items: 40, productos: ["Polo Uniforme Restaurant"] },
-  ],
-  "CLI-004": [
-    { id: "ord-9", codigo: "PED-2024-0035", fecha: "2024-01-08", estado: "entregado", total: 280, items: 2, productos: ["Polo Casual"] },
-    { id: "ord-10", codigo: "PED-2023-0412", fecha: "2023-11-15", estado: "entregado", total: 370, items: 3, productos: ["Polera Basica", "Polo Premium"] },
-  ],
-  "CLI-005": [
-    { id: "ord-11", codigo: "PED-2024-0030", fecha: "2024-01-05", estado: "pendiente", total: 8500, items: 150, productos: ["Polo Escolar San Martin"] },
-    { id: "ord-12", codigo: "PED-2023-0380", fecha: "2023-09-01", estado: "entregado", total: 14000, items: 280, productos: ["Polo Escolar San Martin", "Polera Escolar"] },
-  ],
-  "CLI-006": [
-    { id: "ord-13", codigo: "PED-2023-0398", fecha: "2023-12-20", estado: "entregado", total: 180, items: 1, productos: ["Polo Basico"] },
-  ],
+interface EditClientForm {
+  nombres: string
+  apellidos: string
+  email: string
+  telefono: string
+  direccion: string
 }
-
-const clients: Client[] = [
-  {
-    id: "CLI-001",
-    name: "Maria Garcia",
-    email: "maria@email.com",
-    phone: "+51 999 888 777",
-    type: "individual",
-    totalOrders: 5,
-    totalSpent: 1250,
-    lastOrder: "2024-01-15",
-    createdAt: "2023-06-15",
-    status: "active"
-  },
-  {
-    id: "CLI-002",
-    name: "Carlos Lopez",
-    email: "carlos@techsolutions.pe",
-    phone: "+51 987 654 321",
-    type: "business",
-    company: "Tech Solutions SAC",
-    ruc: "20456789012",
-    totalOrders: 12,
-    totalSpent: 15800,
-    lastOrder: "2024-01-14",
-    createdAt: "2023-03-20",
-    status: "active",
-    hasPendingOrders: true
-  },
-  {
-    id: "CLI-003",
-    name: "Rosa Martinez",
-    email: "rosa@restaurantlima.pe",
-    phone: "+51 912 345 678",
-    type: "business",
-    company: "Restaurant Lima SAC",
-    ruc: "20123456789",
-    totalOrders: 8,
-    totalSpent: 8500,
-    lastOrder: "2024-01-10",
-    createdAt: "2023-08-10",
-    status: "active",
-    hasPendingOrders: true
-  },
-  {
-    id: "CLI-004",
-    name: "Pedro Ramirez",
-    email: "pedro@email.com",
-    phone: "+51 945 678 123",
-    type: "individual",
-    totalOrders: 3,
-    totalSpent: 650,
-    lastOrder: "2024-01-08",
-    createdAt: "2023-11-05",
-    status: "active"
-  },
-  {
-    id: "CLI-005",
-    name: "Ana Fernandez",
-    email: "ana@colegiosanmartin.edu.pe",
-    phone: "+51 998 765 432",
-    type: "business",
-    company: "Colegio San Martin",
-    ruc: "20987654321",
-    totalOrders: 4,
-    totalSpent: 22500,
-    lastOrder: "2024-01-05",
-    createdAt: "2023-02-15",
-    status: "active",
-    hasPendingOrders: true,
-    deactivationRequest: true
-  },
-  {
-    id: "CLI-006",
-    name: "Luis Vargas",
-    email: "luis@email.com",
-    phone: "+51 955 123 456",
-    type: "individual",
-    totalOrders: 1,
-    totalSpent: 180,
-    lastOrder: "2023-12-20",
-    createdAt: "2023-12-20",
-    status: "inactive"
-  },
-]
 
 const estadoConfig = {
   pendiente: { label: "Pendiente", color: "bg-yellow-100 text-yellow-700", icon: Clock },
@@ -215,8 +125,66 @@ const estadoConfig = {
   cancelado: { label: "Cancelado", color: "bg-red-100 text-red-700", icon: XCircle },
 }
 
+function mapBackendOrderStatus(
+  estado: string,
+): Order["estado"] {
+  const estados: Record<string, Order["estado"]> = {
+    REGISTRADO: "pendiente",
+    CONFIRMADO: "confirmado",
+    PROCESANDO: "en_produccion",
+    ENVIADO: "enviado",
+    ENTREGADO: "entregado",
+    CANCELADO: "cancelado",
+  }
+
+  return estados[estado] ?? "pendiente"
+}
+
+function mapProfileToClient(
+  profile: UserProfile,
+  deactivationRequest = false,
+): Client {
+  const orders: Order[] = (profile.pedidos ?? []).map((pedido) => ({
+    id: String(pedido.idPedido),
+    codigo: pedido.codigo,
+    fecha: pedido.fecha,
+    estado: mapBackendOrderStatus(pedido.estado),
+    total: pedido.total,
+    items: pedido.items,
+    productos: pedido.productos,
+  }))
+
+  return {
+    id: String(profile.idUsuario),
+    nombres: profile.nombres,
+    apellidos: profile.apellidos,
+    name: `${profile.nombres} ${profile.apellidos}`,
+    email: profile.email,
+    phone: profile.telefono,
+    direccion: profile.direccion,
+    tipoDocumento: profile.tipoDocumento,
+    numeroDocumento: profile.numeroDocumento,
+    type: profile.tipoDocumento === "RUC" ? "business" : "individual",
+    company: profile.tipoDocumento === "RUC" ? `${profile.nombres} ${profile.apellidos}` : undefined,
+    ruc: profile.tipoDocumento === "RUC" ? profile.numeroDocumento : undefined,
+    totalOrders: profile.totalPedidos ?? orders.length,
+    totalSpent: profile.totalGastado ?? orders.reduce((total, order) => total + order.total, 0),
+    lastOrder: profile.fechaUltimoPedido ?? orders[0]?.fecha ?? profile.fechaRegistro,
+    createdAt: profile.fechaRegistro,
+    status: profile.estado === "ACTIVO" ? "active" : "inactive",
+    orders,
+    hasPendingOrders: profile.puedeDesactivarse === false,
+    deactivationRequest,
+  }
+}
+
 export default function AdminClientsPage() {
-  const [clientsList, setClientsList] = useState(clients)
+  const [clientsList, setClientsList] = useState<Client[]>([])
+  const [isLoadingClients, setIsLoadingClients] = useState(true)
+  const [pendingDeactivationMap, setPendingDeactivationMap] = useState<Record<string, number>>({})
+  const [pendingDocumentRequests, setPendingDocumentRequests] = useState<DocumentChangeRequest[]>([])
+  const [isApprovingDocumentRequest, setIsApprovingDocumentRequest] = useState<number | null>(null)
+  const [isRejectingDocumentRequest, setIsRejectingDocumentRequest] = useState<number | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [typeFilter, setTypeFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -224,6 +192,56 @@ export default function AdminClientsPage() {
   const [viewMode, setViewMode] = useState<"profile" | "orders">("profile")
   const [clientToDeactivate, setClientToDeactivate] = useState<Client | null>(null)
   const [deactivationError, setDeactivationError] = useState<string | null>(null)
+  const [isProcessingDeactivation, setIsProcessingDeactivation] = useState(false)
+  const [clientToEdit, setClientToEdit] = useState<Client | null>(null)
+  const [editClientForm, setEditClientForm] = useState<EditClientForm>({
+    nombres: "",
+    apellidos: "",
+    email: "",
+    telefono: "",
+    direccion: "",
+  })
+  const [editClientErrors, setEditClientErrors] = useState<Record<string, string>>({})
+  const [isSavingClientEdit, setIsSavingClientEdit] = useState(false)
+
+  useEffect(() => {
+    const loadClients = async () => {
+      setIsLoadingClients(true)
+      try {
+        const [profiles, pendingRequests, documentRequests] = await Promise.all([
+          AdminService.getClients(),
+          AdminService.getPendingDeactivationRequests(),
+          AdminService.getPendingDocumentRequests(),
+        ])
+
+        const pendingMap: Record<string, number> = {}
+        pendingRequests.forEach((request) => {
+          pendingMap[String(request.idUsuario)] = request.idSolicitud
+        })
+        setPendingDeactivationMap(pendingMap)
+
+        setPendingDocumentRequests(
+          documentRequests.filter((request) => request.rol === "CLIENTE"),
+        )
+
+        setClientsList(
+          profiles.map((profile) =>
+            mapProfileToClient(profile, Boolean(pendingMap[String(profile.idUsuario)])),
+          ),
+        )
+      } catch (error) {
+        toast({
+          title: "Error al cargar clientes",
+          description: error instanceof Error ? error.message : "Intenta nuevamente.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoadingClients(false)
+      }
+    }
+
+    loadClients()
+  }, [])
 
   const filteredClients = clientsList.filter(client => {
     const matchesSearch = 
@@ -241,6 +259,7 @@ export default function AdminClientsPage() {
   const businessClients = clientsList.filter(c => c.type === "business").length
   const totalRevenue = clientsList.reduce((sum, c) => sum + c.totalSpent, 0)
   const pendingDeactivations = clientsList.filter(c => c.deactivationRequest).length
+  const pendingDocumentChanges = pendingDocumentRequests.length
 
   const handleViewOrders = (client: Client) => {
     setSelectedClient(client)
@@ -252,45 +271,288 @@ export default function AdminClientsPage() {
     setViewMode("profile")
   }
 
-  const handleDeactivateAccount = (client: Client) => {
-    setDeactivationError(null)
-    
-    // Check for pending orders
-    const clientOrders = mockOrders[client.id] || []
-    const hasPendingOrders = clientOrders.some(order => 
-      ["pendiente", "confirmado", "en_produccion", "enviado"].includes(order.estado)
-    )
-    
-    if (hasPendingOrders) {
-      setDeactivationError("No se puede desactivar esta cuenta porque tiene pedidos en proceso. Espere a que todos los pedidos sean entregados o cancelados.")
-      setClientToDeactivate(client)
-      return
+  const handleOpenEditClient = (client: Client) => {
+    setClientToEdit(client)
+    setEditClientForm({
+      nombres: client.nombres,
+      apellidos: client.apellidos,
+      email: client.email,
+      telefono: client.phone,
+      direccion: client.direccion ?? "",
+    })
+    setEditClientErrors({})
+  }
+
+  const handleCloseEditClient = () => {
+    setClientToEdit(null)
+    setEditClientErrors({})
+  }
+
+  const handleSaveEditClient = async () => {
+    if (!clientToEdit) return
+
+    setIsSavingClientEdit(true)
+    setEditClientErrors({})
+
+    try {
+      const nextErrors: Record<string, string> = {}
+      const telefonoNormalizado = editClientForm.telefono.replace(/\D/g, "")
+
+      if (!editClientForm.nombres.trim()) {
+        nextErrors.nombres = "Los nombres son obligatorios."
+      }
+
+      if (!editClientForm.apellidos.trim()) {
+        nextErrors.apellidos = "Los apellidos son obligatorios."
+      }
+
+      if (telefonoNormalizado.length !== 9) {
+        nextErrors.telefono = "El teléfono debe tener 9 dígitos."
+      } else if (!telefonoNormalizado.startsWith("9")) {
+        nextErrors.telefono = "El teléfono debe empezar con 9."
+      }
+
+      if (Object.keys(nextErrors).length > 0) {
+        setEditClientErrors(nextErrors)
+        return
+      }
+
+      const updated = await AdminService.updateUser(Number(clientToEdit.id), {
+        nombres: editClientForm.nombres.trim(),
+        apellidos: editClientForm.apellidos.trim(),
+        email: editClientForm.email.trim(),
+        telefono: telefonoNormalizado,
+        direccion: editClientForm.direccion.trim() || null,
+      })
+
+      const mapped = mapProfileToClient(
+        updated,
+        Boolean(pendingDeactivationMap[String(updated.idUsuario)]),
+      )
+
+      setClientsList((prev) =>
+        prev.map((client) =>
+          client.id === clientToEdit.id
+            ? mapped
+            : client,
+        ),
+      )
+
+      setSelectedClient((prev) =>
+        prev?.id === clientToEdit.id ? mapped : prev,
+      )
+
+      setClientToEdit(null)
+
+      toast({
+        title: "Cliente actualizado",
+        description: "Los datos del cliente fueron actualizados correctamente.",
+      })
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Revisa los datos ingresados."
+
+      const normalizedMessage = message.toLowerCase()
+
+      if (normalizedMessage.includes("nombre")) {
+        setEditClientErrors((prev) => ({
+          ...prev,
+          nombres: message,
+        }))
+      }
+
+      if (normalizedMessage.includes("apellido")) {
+        setEditClientErrors((prev) => ({
+          ...prev,
+          apellidos: message,
+        }))
+      }
+
+      if (normalizedMessage.includes("email") || normalizedMessage.includes("correo")) {
+        setEditClientErrors((prev) => ({
+          ...prev,
+          email: message,
+        }))
+      }
+
+      if (
+        normalizedMessage.includes("teléfono") ||
+        normalizedMessage.includes("telefono") ||
+        normalizedMessage.includes("celular")
+      ) {
+        setEditClientErrors((prev) => ({
+          ...prev,
+          telefono: message,
+        }))
+      }
+
+      toast({
+        title: "Error al actualizar cliente",
+        description: message,
+        variant: "destructive",
+      })
+    } finally {
+      setIsSavingClientEdit(false)
     }
-    
+  }
+
+  const handleApproveDocumentRequest = async (request: DocumentChangeRequest) => {
+    setIsApprovingDocumentRequest(request.idSolicitud)
+
+    try {
+      const updated = await AdminService.approveDocumentRequest(request.idSolicitud)
+      const mapped = mapProfileToClient(
+        updated,
+        Boolean(pendingDeactivationMap[String(updated.idUsuario)]),
+      )
+
+      setClientsList((prev) =>
+        prev.map((client) =>
+          client.id === String(updated.idUsuario)
+            ? mapped
+            : client,
+        ),
+      )
+
+      setSelectedClient((prev) =>
+        prev?.id === String(updated.idUsuario) ? mapped : prev,
+      )
+
+      setPendingDocumentRequests((prev) =>
+        prev.filter((item) => item.idSolicitud !== request.idSolicitud),
+      )
+
+      toast({
+        title: "Solicitud aprobada",
+        description: "El documento del cliente fue actualizado correctamente.",
+      })
+    } catch (error) {
+      toast({
+        title: "No se pudo aprobar la solicitud",
+        description: error instanceof Error ? error.message : "Intenta nuevamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsApprovingDocumentRequest(null)
+    }
+  }
+
+  const handleRejectDocumentRequest = async (request: DocumentChangeRequest) => {
+    setIsRejectingDocumentRequest(request.idSolicitud)
+
+    try {
+      await AdminService.rejectDocumentRequest(request.idSolicitud)
+
+      setPendingDocumentRequests((prev) =>
+        prev.filter((item) => item.idSolicitud !== request.idSolicitud),
+      )
+
+      toast({
+        title: "Solicitud rechazada",
+        description: "La solicitud de cambio de documento fue rechazada correctamente.",
+      })
+    } catch (error) {
+      toast({
+        title: "No se pudo rechazar la solicitud",
+        description: error instanceof Error ? error.message : "Intenta nuevamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsRejectingDocumentRequest(null)
+    }
+  }
+
+  const handleDeactivateAccount = async (client: Client) => {
+    setDeactivationError(null)
+
+    try {
+      const validation = await UserService.canDeactivateUser(Number(client.id))
+      if (!validation.puede) {
+        setDeactivationError(
+          validation.motivo ??
+            "No se puede desactivar esta cuenta porque tiene pedidos en proceso.",
+        )
+        setClientToDeactivate(client)
+        return
+      }
+    } catch {
+      if (client.hasPendingOrders) {
+        setDeactivationError(
+          "No se puede desactivar esta cuenta porque tiene pedidos en proceso. Espere a que todos los pedidos sean entregados o cancelados.",
+        )
+        setClientToDeactivate(client)
+        return
+      }
+    }
+
     setClientToDeactivate(client)
   }
 
-  const confirmDeactivation = () => {
-    if (clientToDeactivate && !deactivationError) {
-      setClientsList(clientsList.map(c => 
-        c.id === clientToDeactivate.id 
-          ? { ...c, status: "inactive" as const, deactivationRequest: false }
-          : c
-      ))
+  const confirmDeactivation = async () => {
+    if (!clientToDeactivate || deactivationError) return
+
+    setIsProcessingDeactivation(true)
+    try {
+      const idSolicitud = pendingDeactivationMap[clientToDeactivate.id]
+      await AdminService.deactivateUser(Number(clientToDeactivate.id), idSolicitud)
+      setClientsList((prev) =>
+        prev.map((c) =>
+          c.id === clientToDeactivate.id
+            ? { ...c, status: "inactive" as const, deactivationRequest: false }
+            : c,
+        ),
+      )
       setClientToDeactivate(null)
       setSelectedClient(null)
+      toast({
+        title: "Cuenta desactivada",
+        description: "La cuenta del cliente fue desactivada correctamente.",
+      })
+    } catch (error) {
+      toast({
+        title: "No se pudo desactivar",
+        description: error instanceof Error ? error.message : "Intenta nuevamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessingDeactivation(false)
     }
   }
 
-  const handleReactivateAccount = (client: Client) => {
-    setClientsList(clientsList.map(c => 
-      c.id === client.id 
-        ? { ...c, status: "active" as const }
-        : c
-    ))
+  const handleReactivateAccount = async (client: Client) => {
+    try {
+      await AdminService.reactivateUser(Number(client.id))
+
+      setClientsList((prev) =>
+        prev.map((c) =>
+          c.id === client.id
+            ? { ...c, status: "active" as const }
+            : c,
+        ),
+      )
+
+      setSelectedClient((prev) =>
+        prev?.id === client.id
+          ? { ...prev, status: "active" as const }
+          : prev,
+      )
+
+      toast({
+        title: "Cuenta reactivada",
+        description: "La cuenta del cliente fue reactivada correctamente.",
+      })
+    } catch (error) {
+      toast({
+        title: "No se pudo reactivar",
+        description: error instanceof Error ? error.message : "Intenta nuevamente.",
+        variant: "destructive",
+      })
+    }
   }
 
-  const clientOrders = selectedClient ? mockOrders[selectedClient.id] || [] : []
+  const clientOrders = selectedClient?.orders ?? []
 
   return (
     <div className="space-y-6">
@@ -370,6 +632,87 @@ export default function AdminClientsPage() {
         </Card>
       </div>
 
+      {/* Document Change Requests */}
+      {pendingDocumentChanges > 0 && (
+        <Card className="border-amber-200 bg-amber-50/40">
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h3 className="font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-600" />
+                  Solicitudes de cambio de documento
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Revisa y aprueba las solicitudes de cambio de DNI/RUC enviadas por clientes.
+                </p>
+              </div>
+              <Badge variant="outline" className="border-amber-300 text-amber-700">
+                {pendingDocumentChanges} pendiente{pendingDocumentChanges === 1 ? "" : "s"}
+              </Badge>
+            </div>
+
+            <div className="space-y-3">
+              {pendingDocumentRequests.map((request) => (
+                <div
+                  key={request.idSolicitud}
+                  className="flex flex-col gap-3 rounded-lg border bg-background p-4 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="space-y-1">
+                    <p className="font-medium">
+                      {request.nombres} {request.apellidos}
+                    </p>
+                    <p className="text-sm text-muted-foreground">{request.email}</p>
+                    <div className="flex flex-wrap gap-2 text-sm">
+                      <Badge variant="secondary">
+                        Actual: {request.tipoDocumentoActual} {request.numeroDocumentoActual}
+                      </Badge>
+                      <Badge variant="outline">
+                        Nuevo: {request.tipoDocumentoNuevo} {request.numeroDocumentoNuevo}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Solicitud enviada el{" "}
+                      {new Date(request.fechaSolicitud).toLocaleDateString("es-PE", {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })}
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => handleRejectDocumentRequest(request)}
+                      disabled={
+                        isRejectingDocumentRequest === request.idSolicitud ||
+                        isApprovingDocumentRequest === request.idSolicitud
+                      }
+                    >
+                      {isRejectingDocumentRequest === request.idSolicitud
+                        ? "Rechazando..."
+                        : "Rechazar"}
+                    </Button>
+
+                    <Button
+                      onClick={() => handleApproveDocumentRequest(request)}
+                      disabled={
+                        isApprovingDocumentRequest === request.idSolicitud ||
+                        isRejectingDocumentRequest === request.idSolicitud
+                      }
+                    >
+                      {isApprovingDocumentRequest === request.idSolicitud
+                        ? "Aprobando..."
+                        : "Aprobar"}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
@@ -442,6 +785,11 @@ export default function AdminClientsPage() {
                                 Solicita desactivar
                               </Badge>
                             )}
+                            {pendingDocumentRequests.some((request) => String(request.idUsuario) === client.id) && (
+                              <Badge variant="outline" className="text-blue-600 border-blue-300 text-xs">
+                                Solicita documento
+                              </Badge>
+                            )}
                           </div>
                           {client.company && (
                             <p className="text-xs text-muted-foreground">{client.company}</p>
@@ -497,6 +845,10 @@ export default function AdminClientsPage() {
                           <DropdownMenuItem onClick={() => handleViewOrders(client)}>
                             <ShoppingBag className="w-4 h-4 mr-2" />
                             Ver Pedidos
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleOpenEditClient(client)}>
+                            <Edit className="w-4 h-4 mr-2" />
+                            Editar Cliente
                           </DropdownMenuItem>
                           <DropdownMenuItem>
                             <Mail className="w-4 h-4 mr-2" />
@@ -705,6 +1057,10 @@ export default function AdminClientsPage() {
                       <Mail className="w-4 h-4 mr-2" />
                       Enviar Email
                     </Button>
+                    <Button variant="outline" onClick={() => handleOpenEditClient(selectedClient)}>
+                      <Edit className="w-4 h-4 mr-2" />
+                      Editar Cliente
+                    </Button>
                     {selectedClient.status === "active" ? (
                       <Button 
                         variant="destructive" 
@@ -727,6 +1083,132 @@ export default function AdminClientsPage() {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Client Dialog */}
+      <Dialog open={!!clientToEdit} onOpenChange={(open) => {
+        if (!open) handleCloseEditClient()
+      }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Modificar datos del cliente</DialogTitle>
+            <DialogDescription>
+              Actualiza los datos básicos del cliente. El documento solo puede modificarse mediante solicitud aprobada.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="edit-client-nombres">Nombres</Label>
+                <Input
+                  id="edit-client-nombres"
+                  value={editClientForm.nombres}
+                  onChange={(e) => {
+                    setEditClientForm({ ...editClientForm, nombres: e.target.value })
+                    if (editClientErrors.nombres) {
+                      setEditClientErrors((prev) => ({ ...prev, nombres: "" }))
+                    }
+                  }}
+                  className={editClientErrors.nombres ? "border-destructive" : ""}
+                />
+                {editClientErrors.nombres && (
+                  <p className="text-xs text-destructive">{editClientErrors.nombres}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-client-apellidos">Apellidos</Label>
+                <Input
+                  id="edit-client-apellidos"
+                  value={editClientForm.apellidos}
+                  onChange={(e) => {
+                    setEditClientForm({ ...editClientForm, apellidos: e.target.value })
+                    if (editClientErrors.apellidos) {
+                      setEditClientErrors((prev) => ({ ...prev, apellidos: "" }))
+                    }
+                  }}
+                  className={editClientErrors.apellidos ? "border-destructive" : ""}
+                />
+                {editClientErrors.apellidos && (
+                  <p className="text-xs text-destructive">{editClientErrors.apellidos}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-client-email">Correo</Label>
+              <Input
+                id="edit-client-email"
+                type="email"
+                value={editClientForm.email}
+                onChange={(e) => {
+                  setEditClientForm({ ...editClientForm, email: e.target.value })
+                  if (editClientErrors.email) {
+                    setEditClientErrors((prev) => ({ ...prev, email: "" }))
+                  }
+                }}
+                className={editClientErrors.email ? "border-destructive" : ""}
+              />
+              {editClientErrors.email && (
+                <p className="text-xs text-destructive">{editClientErrors.email}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-client-telefono">Celular</Label>
+              <Input
+                id="edit-client-telefono"
+                value={editClientForm.telefono}
+                type="tel"
+                maxLength={9}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, "").slice(0, 9)
+                  setEditClientForm({ ...editClientForm, telefono: value })
+                  if (editClientErrors.telefono) {
+                    setEditClientErrors((prev) => ({ ...prev, telefono: "" }))
+                  }
+                }}
+                className={editClientErrors.telefono ? "border-destructive" : ""}
+              />
+              {editClientErrors.telefono && (
+                <p className="text-xs text-destructive">{editClientErrors.telefono}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-client-direccion">Dirección</Label>
+              <Input
+                id="edit-client-direccion"
+                value={editClientForm.direccion}
+                onChange={(e) =>
+                  setEditClientForm({ ...editClientForm, direccion: e.target.value })
+                }
+                placeholder="Opcional"
+              />
+            </div>
+
+            {clientToEdit && (
+              <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+                Documento actual:{" "}
+                <strong>
+                  {clientToEdit.tipoDocumento} {clientToEdit.numeroDocumento}
+                </strong>
+                <br />
+                Para modificar este dato, el cliente debe solicitar el cambio y un administrador debe aprobarlo.
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseEditClient} disabled={isSavingClientEdit}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveEditClient} disabled={isSavingClientEdit}>
+              {isSavingClientEdit ? "Guardando..." : "Guardar cambios"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

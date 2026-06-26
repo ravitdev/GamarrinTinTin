@@ -55,7 +55,6 @@ export default function VendedorCotizacionesPage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [isQuoteOpen, setIsQuoteOpen] = useState(false)
   const [quotedPrice, setQuotedPrice] = useState("")
-  const [validityDays, setValidityDays] = useState("7")
 
   const [quotations, setQuotations] = useState<Quotation[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -85,13 +84,12 @@ export default function VendedorCotizacionesPage() {
   const handleOpenQuote = (quotation: Quotation) => {
     setSelectedQuotation(quotation)
     // Calculate suggested price with volume discount
-    const basePrice = quotation.producto.precio * quotation.cantidad
     const discount = quotation.producto.descuentosVolumen.find(
       d => quotation.cantidad >= d.cantidadMinima
     )
     const discountedPrice = discount 
-      ? basePrice * (1 - discount.porcentajeDescuento / 100)
-      : basePrice
+      ? quotation.producto.precio * (1 - discount.porcentajeDescuento / 100)
+      : quotation.producto.precio
     setQuotedPrice(discountedPrice.toFixed(2))
     setIsQuoteOpen(true)
   }
@@ -102,7 +100,6 @@ export default function VendedorCotizacionesPage() {
         const updated = await QuotationService.updateQuotation(selectedQuotation.id, {
           estado: 'cotizado',
           precioSugerido: parseFloat(quotedPrice),
-          fechaVencimiento: new Date(Date.now() + parseInt(validityDays) * 24 * 60 * 60 * 1000).toISOString(),
         });
         setQuotations(prev => prev.map(q => q.id === updated.id ? updated : q));
       } catch (err: any) {
@@ -471,16 +468,9 @@ export default function VendedorCotizacionesPage() {
                   </p>
                 </div>
 
-                {/* Validity */}
-                <div className="space-y-2">
-                  <Label htmlFor="validity">Dias de Validez</Label>
-                  <Input
-                    id="validity"
-                    type="number"
-                    value={validityDays}
-                    onChange={(e) => setValidityDays(e.target.value)}
-                  />
-                </div>
+                <p className="text-sm text-muted-foreground">
+                  La cotizacion tendra una vigencia de 48 horas.
+                </p>
               </div>
 
               <DialogFooter>

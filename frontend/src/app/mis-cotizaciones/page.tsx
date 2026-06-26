@@ -42,6 +42,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Separator } from '@/components/ui/separator';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
@@ -82,6 +93,7 @@ export default function MisCotizacionesPage() {
   const [selectedQuotation, setSelectedQuotation] = useState<Quotation | null>(null);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [cancelingQuotationId, setCancelingQuotationId] = useState<number | string | null>(null);
 
   const { addToCart } = useCart();
   const { toast } = useToast();
@@ -111,6 +123,7 @@ export default function MisCotizacionesPage() {
 
   const handleAddToCart = async (quotation: Quotation) => {
     try {
+      await QuotationService.addQuotationToCart(quotation.id);
       await addToCart({
         productId: String(quotation.producto.id),
         productName: `${quotation.producto.nombre} (Cotizado)`,
@@ -131,6 +144,38 @@ export default function MisCotizacionesPage() {
         description: err.message || "No se pudo agregar al carrito",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleCancelQuotation = async (
+    quotation: Quotation,
+    closeDetail = false,
+  ) => {
+    try {
+      setCancelingQuotationId(quotation.id);
+      const updated = await QuotationService.cancelMyQuotation(quotation.id);
+      setQuotations((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      setSelectedQuotation((current) =>
+        closeDetail && current?.id === updated.id
+          ? null
+          : current?.id === updated.id
+            ? updated
+            : current,
+      );
+      toast({
+        title: 'Cotización cancelada',
+        description: `La cotización ${quotation.codigo} fue cancelada correctamente.`,
+      });
+    } catch (err: any) {
+      toast({
+        title: 'No se pudo cancelar la cotización',
+        description: err.message || 'Intenta nuevamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setCancelingQuotationId(null);
     }
   };
 
@@ -333,9 +378,38 @@ export default function MisCotizacionesPage() {
 
                         {/* Additional actions by status */}
                         {quotation.estado === 'pendiente' && (
-                          <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
-                            Cancelar Solicitud
-                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:text-destructive"
+                                disabled={cancelingQuotationId === quotation.id}
+                              >
+                                {cancelingQuotationId === quotation.id
+                                  ? 'Cancelando...'
+                                  : 'Cancelar Solicitud'}
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>
+                                  ¿Cancelar esta solicitud?
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  La cotización {quotation.codigo} pasará a estado rechazado y ya no podrá agregarse al carrito.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>No, mantener</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleCancelQuotation(quotation)}
+                                >
+                                  Sí, cancelar
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         )}
                         
                         {quotation.estado === 'pagado' && (
@@ -592,12 +666,39 @@ export default function MisCotizacionesPage() {
                 <div className="flex gap-2">
                   {selectedQuotation.estado === 'cotizado' && (
                     <>
-                      <Button 
-                        variant="outline" 
-                        className="text-destructive hover:text-destructive"
-                      >
-                        Rechazar
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="text-destructive hover:text-destructive"
+                            disabled={cancelingQuotationId === selectedQuotation.id}
+                          >
+                            {cancelingQuotationId === selectedQuotation.id
+                              ? 'Rechazando...'
+                              : 'Rechazar'}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>
+                              ¿Rechazar esta cotización?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                              La cotización {selectedQuotation.codigo} pasará a estado rechazado y ya no podrá agregarse al carrito.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>No, mantener</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() =>
+                                handleCancelQuotation(selectedQuotation, true)
+                              }
+                            >
+                              Sí, rechazar
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                       <Button 
                         className="gap-2 bg-accent text-accent-foreground hover:bg-accent/90"
                         onClick={() => {
@@ -611,9 +712,38 @@ export default function MisCotizacionesPage() {
                     </>
                   )}
                   {selectedQuotation.estado === 'pendiente' && (
-                    <Button variant="destructive">
-                      Cancelar Solicitud
-                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="destructive"
+                          disabled={cancelingQuotationId === selectedQuotation.id}
+                        >
+                          {cancelingQuotationId === selectedQuotation.id
+                            ? 'Cancelando...'
+                            : 'Cancelar Solicitud'}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>
+                            ¿Cancelar esta solicitud?
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            La cotización {selectedQuotation.codigo} pasará a estado rechazado y ya no podrá agregarse al carrito.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>No, mantener</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() =>
+                              handleCancelQuotation(selectedQuotation, true)
+                            }
+                          >
+                            Sí, cancelar
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   )}
                   {selectedQuotation.estado === 'vencido' && (
                     <Button asChild>

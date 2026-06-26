@@ -7,12 +7,16 @@ export interface CategoriaProductoResponseDto {
 
 export interface ProductoCatalogoResponseDto {
   idProducto: number;
+  idCategoria: number;
   nombre: string;
   descripcion: string;
   precioBase: number;
   esPersonalizable: boolean;
+  esActivo: boolean;
+  fechaCreacion: Date;
   categoria?: CategoriaProductoResponseDto;
   imagenPrincipal?: string | null;
+  variantes: ProductoVarianteResponseDto[];
 }
 
 export interface ProductoVarianteResponseDto {

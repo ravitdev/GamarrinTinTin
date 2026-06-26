@@ -1,3 +1,5 @@
+export type TipoEntrega = 'ENVIO' | 'RECOJO_TIENDA';
+
 export type EstadoPedido =
   | 'REGISTRADO'
   | 'CONFIRMADO'
@@ -35,6 +37,7 @@ export class Pedido {
     public subtotal: number,
     public descuentoTotal: number,
     public total: number,
+    public tipoEntrega: TipoEntrega,
     public direccionSnapshot: string,
     public detalles: PedidoDetalle[] = [],
   ) {}

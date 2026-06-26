@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { CambiarEstadoProductoDto } from './dto/cambiar-estado-producto.dto';
 import { ModificarProductoDto } from './dto/modificar-producto.dto';
+import type { ConsultarCatalogoProductosDto } from './dto/consultar-catalogo-productos.dto';
 import {
   ProductoCatalogoResponseDto,
   ProductoDetalleResponseDto,
@@ -7,14 +9,46 @@ import {
 import { RegistrarProductoDto } from './dto/registrar-producto.dto';
 import { ProductoMapper } from './producto.mapper';
 import { ProductoRepository } from './producto.repository';
+import {
+  StorageService,
+  type UploadedFile,
+} from '../modules/storage/storage.service';
 
 @Injectable()
 export class ProductoManager {
-  constructor(private readonly productoRepository: ProductoRepository) {}
+  constructor(
+    private readonly productoRepository: ProductoRepository,
+  ) {}
 
-  async consultarCatalogo(): Promise<ProductoCatalogoResponseDto[]> {
-    const productos = await this.productoRepository.listarCatalogo();
-    return productos.map((producto) => ProductoMapper.aCatalogoDto(producto));
+  async consultarCatalogo(
+    filtros: ConsultarCatalogoProductosDto = {},
+  ): Promise<ProductoCatalogoResponseDto[]> {
+    const productos = await this.productoRepository.listarCatalogo({
+      buscar:
+        filtros.buscar !== undefined
+          ? this.normalizarTexto(filtros.buscar)
+          : undefined,
+      idCategoria:
+        filtros.idCategoria !== undefined
+          ? Number(filtros.idCategoria)
+          : undefined,
+      esPersonalizable:
+        filtros.esPersonalizable !== undefined
+          ? filtros.esPersonalizable === 'true'
+          : undefined,
+    });
+
+    return productos.map((producto) =>
+      this.resolverCatalogoDto(ProductoMapper.aCatalogoDto(producto)),
+    );
+  }
+
+  async listarProductosParaAdministracion(): Promise<ProductoDetalleResponseDto[]> {
+    const productos = await this.productoRepository.listarTodosParaAdministracion();
+
+    return productos.map((producto) =>
+      this.resolverDetalleDto(ProductoMapper.aDetalleDto(producto)),
+    );
   }
 
   async consultarDetalleProducto(
@@ -28,7 +62,9 @@ export class ProductoManager {
       throw new Error('Producto no encontrado.');
     }
 
-    return ProductoMapper.aDetalleDto(producto);
+    const dto = ProductoMapper.aDetalleDto(producto);
+
+    return this.resolverDetalleDto(dto);
   }
 
   async registrarProducto(
@@ -36,9 +72,12 @@ export class ProductoManager {
   ): Promise<ProductoDetalleResponseDto> {
     this.validarDatosRegistro(datos);
 
+    const nombreNormalizado = this.normalizarTexto(datos.nombre);
+    await this.validarNombreDisponible(nombreNormalizado);
+
     const producto = await this.productoRepository.registrar({
       idCategoria: datos.idCategoria,
-      nombre: this.normalizarTexto(datos.nombre),
+      nombre: nombreNormalizado,
       descripcion: this.normalizarTexto(datos.descripcion),
       precioBase: datos.precioBase,
       esPersonalizable: datos.esPersonalizable,
@@ -60,7 +99,7 @@ export class ProductoManager {
       })),
     });
 
-    return ProductoMapper.aDetalleDto(producto);
+    return this.resolverDetalleDto(ProductoMapper.aDetalleDto(producto));
   }
 
   async modificarProducto(
@@ -70,12 +109,16 @@ export class ProductoManager {
     this.validarId(idProducto, 'El producto no es válido.');
     this.validarDatosModificacion(datos);
 
+    const nombreNormalizado =
+      datos.nombre !== undefined ? this.normalizarTexto(datos.nombre) : undefined;
+
+    if (nombreNormalizado !== undefined) {
+      await this.validarNombreDisponible(nombreNormalizado, idProducto);
+    }
+
     const producto = await this.productoRepository.modificar(idProducto, {
       idCategoria: datos.idCategoria,
-      nombre:
-        datos.nombre !== undefined
-          ? this.normalizarTexto(datos.nombre)
-          : undefined,
+      nombre: nombreNormalizado,
       descripcion:
         datos.descripcion !== undefined
           ? this.normalizarTexto(datos.descripcion)
@@ -100,7 +143,7 @@ export class ProductoManager {
       })),
     });
 
-    return ProductoMapper.aDetalleDto(producto);
+    return this.resolverDetalleDto(ProductoMapper.aDetalleDto(producto));
   }
 
   async desactivarProducto(idProducto: number): Promise<boolean> {
@@ -112,7 +155,130 @@ export class ProductoManager {
       throw new Error('Producto no encontrado.');
     }
 
+    await this.validarProductoSinPedidosEnProceso(idProducto);
+
     return this.productoRepository.desactivar(idProducto);
+  }
+
+  async cambiarEstadoProducto(
+    idProducto: number,
+    datos: CambiarEstadoProductoDto,
+  ): Promise<ProductoDetalleResponseDto> {
+    this.validarId(idProducto, 'El producto no es válido.');
+    this.validarBooleano(
+      datos.esActivo,
+      'Debe indicar si el producto queda activo o inactivo.',
+    );
+
+    if (datos.esActivo === false) {
+      await this.validarProductoSinPedidosEnProceso(idProducto);
+    }
+
+    const producto = await this.productoRepository.cambiarEstado(
+      idProducto,
+      datos.esActivo,
+    );
+
+    return this.resolverDetalleDto(ProductoMapper.aDetalleDto(producto));
+  }
+
+  async registrarProductoConImagen(
+    datos: RegistrarProductoDto,
+    files: UploadedFile[],
+  ): Promise<ProductoDetalleResponseDto> {
+    if (!files || files.length === 0) {
+      throw new Error('El producto debe tener al menos una imagen.');
+    }
+
+    if (files.length > 2) {
+      throw new Error('Por ahora solo se permiten máximo 2 imágenes por producto.');
+    }
+
+    const colorPrincipal = this.normalizarColorHex(
+      datos.variantes?.[0]?.colorHex ?? '',
+    );
+
+    const imagenesIniciales: RegistrarProductoDto['imagenes'] = files.map(
+      (_file, index) => ({
+        colorHex: colorPrincipal,
+        lado: index === 0 ? 'FRONT' : 'BACK',
+        urlImagen: `pending-${index}`,
+        displayOrder: index,
+      }),
+    );
+
+    const datosParaValidar: RegistrarProductoDto = {
+      ...datos,
+      imagenes: imagenesIniciales,
+    };
+
+    this.validarDatosRegistro(datosParaValidar);
+
+    const nombreNormalizado = this.normalizarTexto(datos.nombre);
+    await this.validarNombreDisponible(nombreNormalizado);
+
+    const timestamp = Date.now();
+
+    const imagenesProcesadas = await Promise.all(
+      files.map(async (file, index) => {
+        const nombreArchivo = this.normalizarNombreArchivo(file.originalname);
+        const key = `products/temp/${timestamp}-${index}-${nombreArchivo}`;
+
+        const uploadedKey = await StorageService.uploadFile(file, key);
+        const imagen = imagenesIniciales[index];
+
+        return {
+          colorHex: this.normalizarColorHex(imagen.colorHex),
+          lado: imagen.lado,
+          urlImagen: uploadedKey,
+          displayOrder: imagen.displayOrder ?? index,
+        };
+      }),
+    );
+
+    const producto = await this.productoRepository.registrar({
+      idCategoria: datos.idCategoria,
+      nombre: nombreNormalizado,
+      descripcion: this.normalizarTexto(datos.descripcion),
+      precioBase: datos.precioBase,
+      esPersonalizable: datos.esPersonalizable,
+      variantes: datos.variantes.map((variante) => ({
+        colorNombre: this.normalizarTexto(variante.colorNombre),
+        colorHex: this.normalizarColorHex(variante.colorHex),
+        talla: variante.talla,
+        stock: variante.stock,
+      })),
+      imagenes: imagenesProcesadas,
+      descuentosVolumen: (datos.descuentosVolumen ?? []).map((descuento) => ({
+        cantidadMinima: descuento.cantidadMinima,
+        porcentajeDescuento: descuento.porcentajeDescuento,
+      })),
+    });
+
+    return this.resolverDetalleDto(ProductoMapper.aDetalleDto(producto));
+  }
+
+  private resolverCatalogoDto(
+    dto: ProductoCatalogoResponseDto,
+  ): ProductoCatalogoResponseDto {
+    return {
+      ...dto,
+      imagenPrincipal: dto.imagenPrincipal
+        ? StorageService.getPublicUrl(dto.imagenPrincipal)
+        : null,
+    };
+  }
+
+  private resolverDetalleDto(
+    dto: ProductoDetalleResponseDto,
+  ): ProductoDetalleResponseDto {
+    return {
+      ...dto,
+      imagenes: dto.imagenes.map((imagen) => ({
+        ...imagen,
+        urlImagen: StorageService.getPublicUrl(imagen.urlImagen),
+      })),
+    };
   }
 
   private validarDatosRegistro(datos: RegistrarProductoDto): void {
@@ -325,5 +491,41 @@ export class ProductoManager {
 
   private normalizarColorHex(colorHex: string): string {
     return this.normalizarTexto(colorHex).toUpperCase();
+  }
+
+  private normalizarNombreArchivo(nombreArchivo: string): string {
+    const nombreSeguro = this.normalizarTexto(nombreArchivo)
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9._-]/g, '');
+
+    return nombreSeguro || 'imagen-producto';
+  }
+
+  private async validarProductoSinPedidosEnProceso(
+    idProducto: number,
+  ): Promise<void> {
+    const tienePedidosEnProceso =
+      await this.productoRepository.tienePedidosEnProceso(idProducto);
+
+    if (tienePedidosEnProceso) {
+      throw new Error(
+        'No se puede desactivar el producto porque tiene pedidos en proceso.',
+      );
+    }
+  }
+
+  private async validarNombreDisponible(
+    nombre: string,
+    idProductoExcluir?: number,
+  ): Promise<void> {
+    const existe = await this.productoRepository.existeNombreActivo(
+      nombre,
+      idProductoExcluir,
+    );
+
+    if (existe) {
+      throw new Error('Ya existe un producto activo con ese nombre.');
+    }
   }
 }

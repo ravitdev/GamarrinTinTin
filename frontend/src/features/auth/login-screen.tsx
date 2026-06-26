@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Eye, EyeOff, Mail, Lock, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -16,13 +17,17 @@ interface LoginScreenProps {
 
 // Validaciones locales (evitan un round-trip innecesario al backend)
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const LOGIN_REASON_MESSAGES: Record<string, string> = {
+  account_inactive: 'La cuenta no está disponible.',
+  session_expired: 'Sesión expirada. Por favor inicia sesión nuevamente.',
+};
 
 function validate(email: string, password: string): Record<string, string> {
   const errors: Record<string, string> = {};
   if (!email.trim()) {
     errors.email = 'El correo es obligatorio';
   } else if (!EMAIL_REGEX.test(email)) {
-    errors.email = 'Ingresa un correo valido (ej. juan.perez@gmail.com)';
+    errors.email = 'Ingresa un correo valido (ej. usuario@dominio.com)';
   }
   if (!password) {
     errors.password = 'La contrasena es obligatoria';
@@ -35,15 +40,27 @@ function validate(email: string, password: string): Record<string, string> {
 export function LoginScreen({ onSuccess }: LoginScreenProps) {
   const { login, isLoading } = useAuth();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
 
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail]               = useState('');
   const [password, setPassword]         = useState('');
   const [fieldErrors, setFieldErrors]   = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState('');
+  useEffect(() => {
+    const reason = searchParams.get('reason');
+    if (!reason) return;
+
+    const message = LOGIN_REASON_MESSAGES[reason];
+    if (!message) return;
+
+    setFormError(message);
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFieldErrors({});
+    setFormError('');
 
     const errors = validate(email, password);
     if (Object.keys(errors).length > 0) {
@@ -60,9 +77,16 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
       await login({ email, password });
       onSuccess?.();
     } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Credenciales incorrectas. Intenta de nuevo.';
+
+      setFormError(message);
+
       toast({
         title: 'Error al iniciar sesion',
-        description: err instanceof Error ? err.message : 'Credenciales incorrectas. Intenta de nuevo.',
+        description: message,
         variant: 'destructive',
       });
     }
@@ -89,17 +113,18 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
           {/* Email */}
           <div>
             <Label htmlFor="email">
-              Correo Electronico <span className="text-destructive">*</span>
+              Correo Electrónico <span className="text-destructive">*</span>
             </Label>
             <div className="relative mt-1">
               <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 id="email"
                 type="email"
-                placeholder="juan.perez@gmail.com"
+                placeholder="usuario@dominio.com"
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
+                  setFormError('');
                   if (fieldErrors.email) setFieldErrors((p) => ({ ...p, email: '' }));
                 }}
                 className={fieldErrors.email ? 'pl-10 border-destructive' : 'pl-10'}
@@ -116,14 +141,8 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
           <div>
             <div className="flex items-center justify-between">
               <Label htmlFor="password">
-                Contrasena <span className="text-destructive">*</span>
+                Contraseña <span className="text-destructive">*</span>
               </Label>
-              <Link
-                href="/recuperar-contrasena"
-                className="text-xs text-accent hover:underline"
-              >
-                Olvidaste tu contrasena?
-              </Link>
             </div>
             <div className="relative mt-1">
               <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -134,6 +153,7 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value);
+                  setFormError('');
                   if (fieldErrors.password) setFieldErrors((p) => ({ ...p, password: '' }));
                 }}
                 className={fieldErrors.password ? 'pl-10 pr-10 border-destructive' : 'pl-10 pr-10'}
@@ -156,10 +176,16 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
             )}
           </div>
 
+          {formError && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {formError}
+            </div>
+          )}
+
           <div className="flex items-center gap-2">
             <Checkbox id="remember" />
             <label htmlFor="remember" className="text-sm text-muted-foreground cursor-pointer">
-              Recordar mi sesion
+              Recordar mi sesión
             </label>
           </div>
 
@@ -171,6 +197,11 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
             {isLoading ? 'Ingresando...' : 'Iniciar Sesion'}
             <ArrowRight className="h-4 w-4" />
           </Button>
+          <div className="w-full text-right">
+            <Link href="/recuperar-contrasena" className="text-xs text-accent hover:underline">
+                ¿Olvidaste tu contraseña?
+            </Link>
+          </div>
         </form>
 
         {/* Divider
@@ -185,16 +216,13 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
           <Button variant="outline" className="w-full" disabled={isLoading}>
             Google
           </Button>
-          <Button variant="outline" className="w-full" disabled={isLoading}>
-            Facebook
-          </Button>
         </div>*/}
 
         {/* Register Link */}
         <p className="mt-6 text-center text-sm text-muted-foreground">
-          No tienes una cuenta?{' '}
+          ¿No tienes una cuenta?{' '}
           <Link href="/registro" className="text-accent font-medium hover:underline">
-            Registrate aqui
+            Registrate aquí
           </Link>
         </p>
       </div>

@@ -1,3 +1,5 @@
+export type TipoEntregaDto = 'ENVIO' | 'RECOJO_TIENDA';
+
 export interface CrearPedidoDetalleDto {
   idProductoVariante: number;
   idCotizacion?: number;
@@ -6,4 +8,6 @@ export interface CrearPedidoDetalleDto {
 
 export interface CrearPedidoDto {
   items: CrearPedidoDetalleDto[];
+  tipoEntrega: TipoEntregaDto;
+  direccionEnvio?: string | null;
 }

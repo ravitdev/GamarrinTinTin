@@ -26,8 +26,7 @@ export default async function HomePage() {
       
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="relative overflow-hidden bg-primary py-20 lg:py-32">
-          <div className="absolute inset-0 bg-[url('/grid-pattern.svg')] opacity-5" />
+        <section className="relative overflow-hidden bg-primary py-18 lg:py-30">
           <div className="container relative mx-auto px-4">
             <div className="mx-auto max-w-3xl text-center">
               <span className="inline-block rounded-full bg-accent/20 px-4 py-1.5 text-sm font-medium text-accent mb-6">
@@ -56,8 +55,8 @@ export default async function HomePage() {
         </section>
 
         {/* Features */}
-        <section className="border-b border-border bg-card py-12">
-          <div className="container mx-auto px-4">
+        <section className="border-b border-border bg-card py-10">
+          <div className="container mx-auto px-6">
             <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
               <div className="flex flex-col items-center gap-3 text-center">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent/10">
@@ -210,50 +209,19 @@ export default async function HomePage() {
             <div className="overflow-hidden rounded-2xl bg-primary">
               <div className="grid items-center lg:grid-cols-2">
                 <div className="p-8 lg:p-12">
-                  <span className="inline-block rounded-full bg-accent/20 px-4 py-1.5 text-sm font-medium text-accent">
-                    Para Empresas
-                  </span>
                   <h2 className="mt-4 font-serif text-3xl font-semibold text-primary-foreground">
                     Descuentos por Volumen
                   </h2>
                   <p className="mt-4 text-primary-foreground/70 leading-relaxed">
-                    Obtén mejores precios al comprar en cantidad. Ideal para uniformes corporativos, 
-                    eventos empresariales y merchandising.
+                    Cada uno de nuestros productos cuenta con sus propios descuentos por volumen.
+                    Obtén mejores precios al comprar en cantidad. Ideal para eventos empresariales y merchandising.
                   </p>
-                  <div className="mt-6 space-y-3">
-                    <div className="flex items-center gap-3 text-primary-foreground/80">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/20">
-                        <span className="text-sm font-semibold text-accent">5%</span>
-                      </div>
-                      <span className="text-sm">A partir de 10 unidades</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-primary-foreground/80">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/20">
-                        <span className="text-sm font-semibold text-accent">10%</span>
-                      </div>
-                      <span className="text-sm">A partir de 25 unidades</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-primary-foreground/80">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/20">
-                        <span className="text-sm font-semibold text-accent">20%</span>
-                      </div>
-                      <span className="text-sm">A partir de 100 unidades</span>
-                    </div>
-                  </div>
-                  <Link href="/producto/1" className="mt-8 inline-block">
+                  <Link href="/catalogo" className="mt-8 inline-block">
                     <Button className="bg-accent text-accent-foreground hover:bg-accent/90 gap-2">
-                      Ver Detalles
+                      Explorar Productos
                       <ArrowRight className="h-4 w-4" />
                     </Button>
                   </Link>
-                </div>
-                <div className="hidden items-center justify-center bg-primary-foreground/5 p-12 lg:flex">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="h-32 w-24 rounded-lg border border-primary-foreground/20 bg-primary-foreground/10" />
-                    <div className="h-32 w-24 rounded-lg border border-primary-foreground/20 bg-primary-foreground/10 mt-8" />
-                    <div className="h-32 w-24 rounded-lg border border-primary-foreground/20 bg-primary-foreground/10 -mt-4" />
-                    <div className="h-32 w-24 rounded-lg border border-primary-foreground/20 bg-primary-foreground/10 mt-4" />
-                  </div>
                 </div>
               </div>
             </div>
@@ -268,15 +236,8 @@ export default async function HomePage() {
                 Confian en Nosotros
               </h2>
               <p className="mt-2 text-muted-foreground">
-                Mas de 500 empresas han elegido GamarrinTinTin para sus prendas corporativas
+                Mas de 100 empresas han elegido GamarrinTinTin para sus eventos empresariales y merchandising.
               </p>
-              <div className="mt-8 flex flex-wrap items-center justify-center gap-8 opacity-50 grayscale">
-                <div className="h-8 w-24 rounded bg-foreground/20" />
-                <div className="h-8 w-20 rounded bg-foreground/20" />
-                <div className="h-8 w-28 rounded bg-foreground/20" />
-                <div className="h-8 w-24 rounded bg-foreground/20" />
-                <div className="h-8 w-20 rounded bg-foreground/20" />
-              </div>
             </div>
           </div>
         </section>

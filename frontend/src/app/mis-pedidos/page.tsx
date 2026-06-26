@@ -54,10 +54,22 @@ export default function MisPedidosPage() {
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all');
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     OrderService.getMyOrders()
-      .then(setOrders)
+      .then((data) => {
+        setOrders(data);
+        setLoadError(null);
+      })
+      .catch((error) => {
+        setOrders([]);
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : 'No se pudieron cargar tus pedidos.',
+        );
+      })
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -115,7 +127,15 @@ export default function MisPedidosPage() {
           </div>
 
           {/* Orders List */}
-          {filteredOrders.length === 0 ? (
+          {loadError ? (
+            <div className="rounded-xl border border-dashed border-border bg-muted/30 py-16 text-center">
+              <XCircle className="mx-auto h-12 w-12 text-destructive" />
+              <h2 className="mt-4 text-lg font-medium text-foreground">
+                No se pudieron cargar tus pedidos
+              </h2>
+              <p className="mx-auto mt-2 max-w-md text-muted-foreground">{loadError}</p>
+            </div>
+          ) : filteredOrders.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border bg-muted/30 py-16 text-center">
               <Package className="mx-auto h-12 w-12 text-muted-foreground" />
               <h2 className="mt-4 text-lg font-medium text-foreground">No tienes pedidos</h2>
