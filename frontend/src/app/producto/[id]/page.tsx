@@ -199,30 +199,45 @@ export default function ProductDetailPage() {
             <div className="space-y-4">
               {/* Main Image */}
               <div className="relative aspect-square overflow-hidden rounded-2xl border border-border bg-secondary">
-                <div className="flex h-full w-full flex-col items-center justify-center p-8">
-                  <div 
-                    className="h-64 w-48 rounded-xl border-2 border-dashed border-border transition-colors"
-                    style={{ 
-                      backgroundColor: selectedColor.hexCode === '#FFFFFF' ? '#f5f5f5' : selectedColor.hexCode 
-                    }}
-                  >
-                    <div className="flex h-full flex-col items-center justify-center p-4">
-                      <span className="text-xs text-muted-foreground uppercase">
-                        Vista {viewingSide}
-                      </span>
-                      {viewingSide === 'frente' && selectedPechoDesign && (
-                        <div className="mt-2 rounded bg-card/80 px-2 py-1 text-xs">
-                          {selectedPechoDesign.nombre}
+                {(() => {
+                  const sideUrl = viewingSide === 'frente'
+                    ? (selectedColor.urlImagenFrontal || selectedColor.urlImagen)
+                    : (selectedColor.urlImagenTrasera || selectedColor.urlImagenFrontal || selectedColor.urlImagen);
+                  return sideUrl && sideUrl !== '/placeholder.svg' ? (
+                    <img
+                      key={`${selectedColor.codigoHex}-${viewingSide}`}
+                      src={sideUrl}
+                      alt={`${product.nombre} - Vista ${viewingSide}`}
+                      className="h-full w-full object-contain p-4"
+                      crossOrigin="anonymous"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full flex-col items-center justify-center p-8">
+                      <div
+                        className="h-64 w-48 rounded-xl border-2 border-dashed border-border transition-colors"
+                        style={{
+                          backgroundColor: selectedColor.hexCode === '#FFFFFF' ? '#f5f5f5' : selectedColor.hexCode
+                        }}
+                      >
+                        <div className="flex h-full flex-col items-center justify-center p-4">
+                          <span className="text-xs text-muted-foreground uppercase">
+                            Vista {viewingSide}
+                          </span>
+                          {viewingSide === 'frente' && selectedPechoDesign && (
+                            <div className="mt-2 rounded bg-card/80 px-2 py-1 text-xs">
+                              {selectedPechoDesign.nombre}
+                            </div>
+                          )}
+                          {viewingSide === 'espalda' && selectedEspaldaDesign && (
+                            <div className="mt-2 rounded bg-card/80 px-2 py-1 text-xs">
+                              {selectedEspaldaDesign.nombre}
+                            </div>
+                          )}
                         </div>
-                      )}
-                      {viewingSide === 'espalda' && selectedEspaldaDesign && (
-                        <div className="mt-2 rounded bg-card/80 px-2 py-1 text-xs">
-                          {selectedEspaldaDesign.nombre}
-                        </div>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  );
+                })()}
                 
                 {/* Badges */}
                 <div className="absolute left-4 top-4 flex flex-col gap-2">

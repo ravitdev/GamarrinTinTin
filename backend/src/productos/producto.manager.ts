@@ -274,6 +274,9 @@ export class ProductoManager {
   ): ProductoDetalleResponseDto {
     return {
       ...dto,
+      imagenPrincipal: dto.imagenPrincipal
+        ? StorageService.getPublicUrl(dto.imagenPrincipal)
+        : null,
       imagenes: dto.imagenes.map((imagen) => ({
         ...imagen,
         urlImagen: StorageService.getPublicUrl(imagen.urlImagen),

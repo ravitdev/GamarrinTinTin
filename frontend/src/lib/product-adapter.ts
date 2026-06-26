@@ -21,25 +21,43 @@ export function mapBackendProductToFrontend(backendProduct: any): any {
     new Set((backendProduct.variantes || []).map((v: any) => v.talla)),
   );
 
-  // 3. Map images
-  const imagenes = (backendProduct.imagenes || []).map((img: any) => img.urlImagen);
+  // 3. Map images (preserve full objects with lado/colorHex)
+  const imagenes: ProductoImagen[] = (backendProduct.imagenes || []).map((img: any) => ({
+    idProductoImagen: img.idProductoImagen,
+    idProducto: backendProduct.idProducto,
+    colorHex: img.colorHex,
+    lado: img.lado,
+    ladoProducto: img.lado,
+    urlImagen: img.urlImagen || '/placeholder.svg',
+    displayOrder: img.displayOrder ?? 0,
+  }));
 
-  // 4. Map colors (colores)
+  // 4. Map colors (colores) — derive FRONT/BACK URLs from imagenes by colorHex + lado
   let colores: any[] = [];
   if (backendProduct.variantes && backendProduct.variantes.length > 0) {
     const colorMap = new Map<string, any>();
     backendProduct.variantes.forEach((v: any, index: number) => {
       if (!colorMap.has(v.colorHex)) {
-        // Find matching image URL for this color
-        const matchingImg = (backendProduct.imagenes || []).find(
-          (img: any) => img.colorHex.toUpperCase() === v.colorHex.toUpperCase()
+        const colorHexUpper = v.colorHex?.toUpperCase();
+        const frontImg = (backendProduct.imagenes || []).find(
+          (img: any) =>
+            img.colorHex?.toUpperCase() === colorHexUpper &&
+            img.lado === 'FRONT',
         );
+        const backImg = (backendProduct.imagenes || []).find(
+          (img: any) =>
+            img.colorHex?.toUpperCase() === colorHexUpper &&
+            img.lado === 'BACK',
+        );
+        const fallbackUrl = backendProduct.imagenPrincipal || '/placeholder.svg';
         colorMap.set(v.colorHex, {
           idColor: index + 1,
           nombre: v.colorNombre,
           codigoHex: v.colorHex,
           hexCode: v.colorHex,
-          urlImagen: matchingImg?.urlImagen || backendProduct.imagenPrincipal || '/placeholder.svg',
+          urlImagen: frontImg?.urlImagen || backImg?.urlImagen || fallbackUrl,
+          urlImagenFrontal: frontImg?.urlImagen || null,
+          urlImagenTrasera: backImg?.urlImagen || null,
         });
       }
     });
@@ -54,7 +72,9 @@ export function mapBackendProductToFrontend(backendProduct: any): any {
           nombre: img.colorHex === '#FFFFFF' ? 'Blanco' : 'Color ' + (index + 1),
           codigoHex: colorHex,
           hexCode: colorHex,
-          urlImagen: img.urlImagen || '/placeholder.svg',
+          urlImagen: img.urlImagen || backendProduct.imagenPrincipal || '/placeholder.svg',
+          urlImagenFrontal: img.lado === 'FRONT' ? img.urlImagen : null,
+          urlImagenTrasera: img.lado === 'BACK' ? img.urlImagen : null,
         });
       }
     });
@@ -81,7 +101,14 @@ export function mapBackendProductToFrontend(backendProduct: any): any {
     colores,
     descuentosVolumen,
     disenosPredefinidos: [], // default mock empty array
-    imagenes: imagenes.length > 0 ? imagenes : [backendProduct.imagenPrincipal || '/placeholder.svg'],
+    imagenes: imagenes.length > 0 ? imagenes : (backendProduct.imagenPrincipal ? [{
+      idProducto: backendProduct.idProducto,
+      colorHex: backendProduct.variantes?.[0]?.colorHex || '#000000',
+      lado: 'FRONT',
+      ladoProducto: 'FRONT',
+      urlImagen: backendProduct.imagenPrincipal,
+      displayOrder: 0,
+    }] : []),
     tipoDiseno: backendProduct.esPersonalizable ? 'personalizable' : 'predefinido',
     esPersonalizable: backendProduct.esPersonalizable,
     estado: backendProduct.esActivo ? 'ACTIVO' : 'INACTIVO',

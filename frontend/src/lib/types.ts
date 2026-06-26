@@ -561,6 +561,8 @@ export interface ColorProducto {
   nombre: string;
   codigoHex: string;
   urlImagen: string;
+  urlImagenFrontal?: string;
+  urlImagenTrasera?: string;
 }
 
 export interface PredefinedDesign {

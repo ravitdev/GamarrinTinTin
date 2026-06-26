@@ -204,5 +204,44 @@ export class ApiClient {
   static async delete<T>(endpoint: string, options?: RequestOptions): Promise<T> {
     return apiClient<T>(endpoint, { ...options, method: 'DELETE' });
   }
+
+  /**
+   * Envía un FormData (multipart/form-data) al backend.
+   * No establece Content-Type automáticamente (lo deja para que el
+   * navegador incluya el boundary correcto).
+   */
+  static async postFormData<T>(endpoint: string, formData: FormData): Promise<T> {
+    const headers: Record<string, string> = {};
+    const token = getAuthToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    const data = await response.json().catch(() => null);
+
+    if (response.status === 401) {
+      throw new ApiError(response.status, 'Sesión expirada.', data);
+    }
+
+    if (!response.ok) {
+      const message = extractErrorMessage(data, `Error HTTP ${response.status}`);
+      throw new ApiError(response.status, message, data);
+    }
+
+    if (data && typeof data === 'object' && 'success' in data) {
+      if (data.success === false) {
+        throw new ApiError(response.status, extractErrorMessage(data, 'Error'), data);
+      }
+      if ('data' in data) {
+        return data.data as T;
+      }
+    }
+
+    return data as T;
+  }
 }
 
