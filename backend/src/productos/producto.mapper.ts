@@ -153,6 +153,11 @@ export class ProductoMapper {
   }
 
   static aDetalleDto(producto: Producto): ProductoDetalleResponseDto {
+    const imagenPrincipal =
+      producto.imagenes
+        .filter((imagen) => imagen.esActivo)
+        .sort((a, b) => a.displayOrder - b.displayOrder)[0]?.urlImagen ?? null;
+
     return {
       idProducto: producto.idProducto,
       idCategoria: producto.idCategoria,
@@ -167,6 +172,7 @@ export class ProductoMapper {
             nombre: producto.categoria.nombre,
           }
         : undefined,
+      imagenPrincipal,
       variantes: producto.variantes
         .filter((variante) => variante.esActivo)
         .map((variante) => ({

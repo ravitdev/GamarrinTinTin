@@ -42,14 +42,22 @@ export function ProductCard({ product }: ProductCardProps) {
             isHovered ? "scale-105" : "scale-100"
           )}
         >
-          {/* Placeholder for product image */}
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-8">
-            <div 
-              className="h-32 w-24 rounded-lg border-2 border-dashed border-border"
-              style={{ backgroundColor: selectedColor.codigoHex === '#FFFFFF' ? '#f5f5f5' : selectedColor.codigoHex }}
+          {selectedColor.urlImagen && selectedColor.urlImagen !== '/placeholder.svg' ? (
+            <img
+              src={selectedColor.urlImagen}
+              alt={product.nombre}
+              className="h-full w-full object-contain p-4"
+              crossOrigin="anonymous"
             />
-            <span className="text-xs text-muted-foreground">{selectedColor.nombre}</span>
-          </div>
+          ) : (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-8">
+              <div
+                className="h-32 w-24 rounded-lg border-2 border-dashed border-border"
+                style={{ backgroundColor: selectedColor.codigoHex === '#FFFFFF' ? '#f5f5f5' : selectedColor.codigoHex }}
+              />
+              <span className="text-xs text-muted-foreground">{selectedColor.nombre}</span>
+            </div>
+          )}
         </div>
 
         {/* Badges */}

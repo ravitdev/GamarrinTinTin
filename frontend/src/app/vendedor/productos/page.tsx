@@ -119,7 +119,10 @@ interface ProductFormData {
   esPersonalizable: boolean
   variantes: ProductVariantFormData[]
   descuentosVolumen: DescuentoVolumen[]
-  imagenPreviewUrl?: string | null
+  imagenFrontPreview?: string | null
+  imagenBackPreview?: string | null
+  imagenFrontFile?: File | null
+  imagenBackFile?: File | null
 }
 
 const defaultFormData: ProductFormData = {
@@ -130,7 +133,10 @@ const defaultFormData: ProductFormData = {
   esPersonalizable: false,
   variantes: [],
   descuentosVolumen: [],
-  imagenPreviewUrl: null
+  imagenFrontPreview: null,
+  imagenBackPreview: null,
+  imagenFrontFile: null,
+  imagenBackFile: null,
 }
 
 const availableSizes: Talla[] = [Talla.S, Talla.M, Talla.L, Talla.XL]
@@ -145,8 +151,8 @@ interface ProductFormProps {
   onAddVariant: () => void
   onUpdateVariant: (index: number, field: keyof ProductVariantFormData, value: string | number) => void
   onRemoveVariant: (index: number) => void
-  onImageSelected: (file: File) => void
-  onRemoveImage: () => void
+  onImageSelected: (side: 'front' | 'back', file: File) => void
+  onRemoveImage: (side: 'front' | 'back') => void
   onAddDiscount: () => void
   onUpdateDiscount: (index: number, field: 'cantidadMinima' | 'porcentajeDescuento', value: number) => void
   onRemoveDiscount: (index: number) => void
@@ -229,52 +235,61 @@ function ProductForm({
       </div>
 
       <div className="space-y-2">
-        <Label>Imagen del Producto</Label>
-        <div
-          className="rounded-lg border border-dashed bg-muted/20 p-4"
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={(event) => {
-            event.preventDefault()
-            const file = event.dataTransfer.files?.[0]
-            if (file?.type.startsWith("image/")) onImageSelected(file)
-          }}
-        >
-          {formData.imagenPreviewUrl ? (
-            <div className="flex items-center gap-4">
-              <img
-                src={formData.imagenPreviewUrl}
-                alt="Previsualización del producto"
-                className="h-24 w-24 rounded-md border object-cover"
-              />
-              <div className="flex-1">
-                <p className="text-sm font-medium">Imagen seleccionada</p>
-                <p className="text-xs text-muted-foreground">Previsualización local. Aun no se guarda en la base de datos.</p>
-              </div>
-              <Button type="button" variant="outline" size="sm" onClick={onRemoveImage}>
-                Quitar
-              </Button>
-            </div>
-          ) : (
-            <label className="flex cursor-pointer flex-col items-center justify-center gap-2 py-6 text-center">
-              <ImageIcon className="h-8 w-8 text-muted-foreground" />
-              <span className="text-sm font-medium">Arrastra una imagen o haz clic para subir</span>
-              <span className="text-xs text-muted-foreground">Solo se mostrara como previsualización por ahora.</span>
-              <Input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(event) => {
-                  const file = event.target.files?.[0]
-                  if (file) onImageSelected(file)
-                  event.target.value = ""
+        <Label>Imágenes del Producto</Label>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {(['front', 'back'] as const).map((side) => {
+            const label = side === 'front' ? 'Frontal (Pecho)' : 'Posterior (Espalda)'
+            const preview = side === 'front' ? formData.imagenFrontPreview : formData.imagenBackPreview
+            return (
+              <div
+                key={side}
+                className="rounded-lg border border-dashed bg-muted/20 p-4"
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  const file = event.dataTransfer.files?.[0]
+                  if (file?.type.startsWith("image/")) onImageSelected(side, file)
                 }}
-              />
-              <span className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-                <Upload className="h-4 w-4" />
-                Seleccionar imagen
-              </span>
-            </label>
-          )}
+              >
+                {preview ? (
+                  <div className="flex items-center gap-4">
+                    <img
+                      src={preview}
+                      alt={`Vista ${label}`}
+                      className="h-24 w-24 rounded-md border object-cover"
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{label}</p>
+                      <p className="text-xs text-muted-foreground">Imagen seleccionada.</p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={() => onRemoveImage(side)}>
+                      Quitar
+                    </Button>
+                  </div>
+                ) : (
+                  <label className="flex cursor-pointer flex-col items-center justify-center gap-2 py-6 text-center">
+                    <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                    <span className="text-sm font-medium">{label}</span>
+                    <span className="text-xs text-muted-foreground">Arrastra o haz clic para subir</span>
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0]
+                        if (file) onImageSelected(side, file)
+                        event.target.value = ""
+                      }}
+                    />
+                    <span className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                      <Upload className="h-4 w-4" />
+                      Seleccionar imagen
+                    </span>
+                  </label>
+                )}
+              </div>
+            )
+          })}
         </div>
       </div>
 
@@ -560,21 +575,26 @@ export default function VendedorProductsPage() {
     }))
   }
 
-  const handleImageSelected = (file: File) => {
+  const handleImageSelected = (side: 'front' | 'back', file: File) => {
     const reader = new FileReader()
     reader.onload = () => {
+      const preview = typeof reader.result === 'string' ? reader.result : null
       setFormData(prev => ({
         ...prev,
-        imagenPreviewUrl: typeof reader.result === 'string' ? reader.result : null,
+        ...(side === 'front'
+          ? { imagenFrontPreview: preview, imagenFrontFile: file }
+          : { imagenBackPreview: preview, imagenBackFile: file }),
       }))
     }
     reader.readAsDataURL(file)
   }
 
-  const handleRemoveImage = () => {
+  const handleRemoveImage = (side: 'front' | 'back') => {
     setFormData(prev => ({
       ...prev,
-      imagenPreviewUrl: null,
+      ...(side === 'front'
+        ? { imagenFrontPreview: null, imagenFrontFile: null }
+        : { imagenBackPreview: null, imagenBackFile: null }),
     }))
   }
 
@@ -737,7 +757,15 @@ export default function VendedorProductsPage() {
       try {
         setIsSavingProduct(true)
         const payload = buildCreateProductPayload(formData)
-        const createdProduct = await AdminService.createProduct(payload)
+        const hasFiles = formData.imagenFrontFile || formData.imagenBackFile
+
+        const createdProduct = hasFiles
+          ? await AdminService.createProductWithImage(payload, {
+              front: formData.imagenFrontFile ?? undefined,
+              back: formData.imagenBackFile ?? undefined,
+            })
+          : await AdminService.createProduct(payload)
+
         setProducts((prevProducts) => [createdProduct, ...prevProducts])
         toast({
           title: "Producto creado",
@@ -765,14 +793,20 @@ export default function VendedorProductsPage() {
   const handleOpenEdit = (product: Producto) => {
     setSelectedProduct(product)
     setFieldErrors({})
+
+    const frontImage = product.imagenes?.find((img: any) => img.lado === 'FRONT')
+    const backImage = product.imagenes?.find((img: any) => img.lado === 'BACK')
+
     setFormData({
       idCategoria: product.idCategoria,
       nombre: product.nombre,
       descripcion: product.descripcion,
       precioBase: product.precioBase,
       esPersonalizable: product.esPersonalizable,
-      imagenPreviewUrl:
-        typeof product.imagenes?.[0] === 'string' ? product.imagenes[0] : null,
+      imagenFrontPreview: frontImage?.urlImagen || null,
+      imagenBackPreview: backImage?.urlImagen || null,
+      imagenFrontFile: null,
+      imagenBackFile: null,
       variantes: (product.variantes || []).map((variante: ProductoVariante) => ({
         idProductoVariante: variante.idProductoVariante,
         colorNombre: variante.colorNombre,

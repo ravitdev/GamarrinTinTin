@@ -50,6 +50,7 @@ export interface ProductoDetalleResponseDto {
   esPersonalizable: boolean;
   esActivo: boolean;
   categoria?: CategoriaProductoResponseDto;
+  imagenPrincipal?: string | null;
   variantes: ProductoVarianteResponseDto[];
   imagenes: ProductoImagenResponseDto[];
   descuentosVolumen: DescuentoVolumenResponseDto[];

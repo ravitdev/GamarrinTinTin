@@ -1,22 +1,25 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { 
-  ChevronLeft, 
-  Upload, 
-  Trash2, 
-  Move, 
-  ZoomIn, 
-  ZoomOut,
-  RotateCw,
-  ShoppingCart,
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronLeft,
+  Copy,
+  Eye,
+  EyeOff,
   FileText,
   Image as ImageIcon,
-  X,
-  Check,
-  AlertTriangle
+  Lock,
+  Move,
+  RotateCw,
+  Trash2,
+  Unlock,
+  Upload,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -24,32 +27,60 @@ import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { formatPrice } from '@/lib/mock-data';
 import { ProductService } from '@/features/product/services/product.service';
-import type { ProductSize, Producto, PredefinedDesign } from '@/lib/types';
+import type { PredefinedDesign, Producto, ProductSize } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { DisenoPredefinidoService } from '@/features/disenos/services/diseno-predefinido.service';
 
-interface CustomizationDesign {
-  id: string;
-  tipo: 'SUBIDO' | 'PREDEFINIDO';
-  file?: File;
-  idDisenoPredefinido?: number;
-  nombre: string;
-  preview: string;
-  posicion: 'pecho' | 'espalda';
-  x: number;
-  y: number;
-  scale: number;
-  rotation: number;
-}
+import {
+  type CustomizationDesign,
+  type ProductSide,
+  MAX_DESIGNS,
+  ZOOM_STEP,
+  serializeDesign,
+} from '@/features/personalizar/canvas-types';
+import { useProductCanvas } from '@/features/personalizar/hooks/use-product-canvas';
 
+// ---------------------------------------------------------------------------
+// CONSTANTES DE VALIDACIÓN DE ARCHIVOS
+// ---------------------------------------------------------------------------
+const VALID_TYPES = /^image\/(png|jpeg|jpg)$/;
+const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
+const MIN_IMAGE_DIM = 500;
+const MAX_IMAGE_DIM = 2000;
+
+// ---------------------------------------------------------------------------
+// PÁGINA PRINCIPAL
+// ---------------------------------------------------------------------------
 export default function CustomizePage() {
   const params = useParams();
   const router = useRouter();
   const productId = parseInt(params.id as string, 10);
-  
+
+  // ── Estado de negocio ──────────────────────────────────────────────────
   const [product, setProduct] = useState<Producto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  
+  const [predefinedDesigns, setPredefinedDesigns] = useState<PredefinedDesign[]>([]);
+  const [isLoadingPredefinedDesigns, setIsLoadingPredefinedDesigns] = useState(false);
+
+  const [selectedColorIndex, setSelectedColorIndex] = useState(0);
+  const [selectedSize, setSelectedSize] = useState<ProductSize | null>(null);
+  const [quantity, setQuantity] = useState(1);
+  const [activeSide, setActiveSide] = useState<ProductSide>('pecho');
+
+  const [designs, setDesigns] = useState<CustomizationDesign[]>([]);
+  const [selectedDesignId, setSelectedDesignId] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const canvasElRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const colores = product?.colores ?? [];
+  const selectedColor = colores[selectedColorIndex] ?? { nombre: '', codigoHex: '', urlImagen: '' };
+  const selectedDesign = designs.find((d) => d.id === selectedDesignId);
+  const totalDesigns = designs.length;
+
+  // ── Carga inicial de datos ─────────────────────────────────────────────
   useEffect(() => {
     async function cargarDatos() {
       try {
@@ -61,11 +92,7 @@ export default function CustomizePage() {
           DisenoPredefinidoService.listarActivos(),
         ]);
 
-        if (prod.esPersonalizable) {
-          setProduct(prod);
-        } else {
-          setProduct(null);
-        }
+        setProduct(prod.esPersonalizable ? prod : null);
 
         setPredefinedDesigns(
           disenos.map((diseno) => ({
@@ -81,150 +108,245 @@ export default function CustomizePage() {
         setIsLoadingPredefinedDesigns(false);
       }
     }
-
     cargarDatos();
   }, [productId]);
-  
-  const [selectedColorIndex, setSelectedColorIndex] = useState(0);
-  const [selectedSize, setSelectedSize] = useState<ProductSize | null>(null);
-  const [quantity, setQuantity] = useState(1);
-  const [activeSide, setActiveSide] = useState<'pecho' | 'espalda'>('pecho');
-  const [designs, setDesigns] = useState<CustomizationDesign[]>([]);
-  const [predefinedDesigns, setPredefinedDesigns] = useState<PredefinedDesign[]>([]);
-  const [isLoadingPredefinedDesigns, setIsLoadingPredefinedDesigns] = useState(false);
-  const [selectedDesignId, setSelectedDesignId] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const canvasRef = useRef<HTMLDivElement>(null);
 
-  const colores = product?.colores || [];
-  const selectedColor = colores[selectedColorIndex] || {
-    nombre: '',
-    codigoHex: '',
-    urlImagen: '',
-  };
-  const currentSideDesigns = designs.filter(d => d.posicion === activeSide);
-  const selectedDesign = designs.find(d => d.id === selectedDesignId);
-  const totalDesigns = designs.length;
-  const maxDesigns = 6;
+  // ── Hook de canvas (toda la lógica de Fabric.js) ──────────────────────
+  const {
+    containerScale,
+    zoom,
+    addDesignToCanvas,
+    removeDesignFromCanvas,
+    selectDesignInCanvas,
+    updateDesignInCanvas,
+    setDesignVisible,
+    setDesignLocked,
+    bringDesignToFront,
+    sendDesignToBack,
+    changeZoom,
+    resetZoom,
+  } = useProductCanvas({
+    canvasEl: canvasElRef.current,
+    containerEl: containerRef.current,
+    designs,
+    activeSide,
+    colorImageUrl: activeSide === 'pecho'
+      ? (selectedColor.urlImagenFrontal || selectedColor.urlImagen)
+      : (selectedColor.urlImagenTrasera || selectedColor.urlImagenFrontal || selectedColor.urlImagen),
+    onDesignModified: useCallback(
+      (id: string, updates: Partial<Omit<CustomizationDesign, 'id'>>) => {
+        setDesigns((prev) => prev.map((d) => (d.id === id ? { ...d, ...updates } : d)));
+        setSelectedDesignId(id);
+      },
+      [],
+    ),
+    onDesignSelected: useCallback((id: string | null) => {
+      setSelectedDesignId(id);
+    }, []),
+    onLayerOrderChanged: useCallback((orderedIds: string[]) => {
+      setDesigns((prev) => {
+        const map = new Map(prev.map((d) => [d.id, d]));
+        return orderedIds.map((id) => map.get(id)).filter(Boolean) as CustomizationDesign[];
+      });
+    }, []),
+  });
 
-  const handleFileUpload = useCallback((files: FileList | null) => {
-    if (!files) return;
+  // ── Operaciones de diseño (negocio) ────────────────────────────────────
 
-    const remainingSlots = maxDesigns - totalDesigns;
-    const filesToProcess = Array.from(files).slice(0, remainingSlots);
+  const addDesign = useCallback(
+    (newDesign: CustomizationDesign) => {
+      setDesigns((prev) => [...prev, newDesign]);
+      setSelectedDesignId(newDesign.id);
+      addDesignToCanvas(newDesign);
+    },
+    [addDesignToCanvas],
+  );
 
-    filesToProcess.forEach((file) => {
-      // Validate file type
-      if (!file.type.match(/^image\/(png|jpeg|jpg)$/)) {
-        alert('Solo se permiten archivos PNG o JPG');
+  const removeDesign = useCallback(
+    (id: string) => {
+      setDesigns((prev) => prev.filter((d) => d.id !== id));
+      if (selectedDesignId === id) setSelectedDesignId(null);
+      removeDesignFromCanvas(id);
+    },
+    [selectedDesignId, removeDesignFromCanvas],
+  );
+
+  const duplicateDesign = useCallback(
+    (id: string) => {
+      if (totalDesigns >= MAX_DESIGNS) {
+        alert(`Solo puedes agregar hasta ${MAX_DESIGNS} diseños.`);
         return;
       }
-
-      // Validate file size (max 2MB)
-      if (file.size > 2 * 1024 * 1024) {
-        alert('El archivo debe ser menor a 2MB');
-        return;
-      }
-
-      // Create preview and validate dimensions
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new window.Image();
-        img.onload = () => {
-          if (img.width < 500 || img.height < 500 || img.width > 2000 || img.height > 2000) {
-            alert('La imagen debe tener dimensiones entre 500x500 y 2000x2000 pixeles');
-            return;
-          }
-
-          const newDesign: CustomizationDesign = {
-            id: `uploaded-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            tipo: 'SUBIDO',
-            file,
-            nombre: file.name,
-            preview: e.target?.result as string,
-            posicion: activeSide,
-            x: 50,
-            y: 50,
-            scale: 1,
-            rotation: 0,
-          };
-
-          setDesigns((prev) => [...prev, newDesign]);
-          setSelectedDesignId(newDesign.id);
-        };
-        img.src = e.target?.result as string;
+      const design = designs.find((d) => d.id === id);
+      if (!design) return;
+      const newDesign: CustomizationDesign = {
+        ...design,
+        id: `${design.tipo.toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        x: Math.min(90, design.x + 5),
+        y: Math.min(90, design.y + 5),
       };
-      reader.readAsDataURL(file);
-    });
-  }, [activeSide, totalDesigns]);
+      addDesign(newDesign);
+    },
+    [designs, totalDesigns, addDesign],
+  );
 
-  const handleSelectPredefinedDesign = (diseno: PredefinedDesign) => {
-    if (totalDesigns >= maxDesigns) {
-      alert(`Solo puedes agregar hasta ${maxDesigns} diseños.`);
-      return;
-    }
+  const toggleVisibility = useCallback(
+    (id: string) => {
+      const design = designs.find((d) => d.id === id);
+      if (!design) return;
+      const nextVisible = design.visible !== false ? false : true;
+      setDesigns((prev) => prev.map((d) => (d.id === id ? { ...d, visible: nextVisible } : d)));
+      setDesignVisible(id, nextVisible);
+      if (!nextVisible && selectedDesignId === id) setSelectedDesignId(null);
+    },
+    [designs, selectedDesignId, setDesignVisible],
+  );
 
-    const imageUrl = diseno.urlImagen || diseno.imagen;
+  const toggleLock = useCallback(
+    (id: string) => {
+      const design = designs.find((d) => d.id === id);
+      if (!design) return;
+      const nextLocked = !design.bloqueado;
+      setDesigns((prev) => prev.map((d) => (d.id === id ? { ...d, bloqueado: nextLocked } : d)));
+      setDesignLocked(id, nextLocked);
+    },
+    [designs, setDesignLocked],
+  );
 
-    if (!imageUrl) {
-      alert('El diseño predefinido no tiene imagen disponible.');
-      return;
-    }
+  const updateDesign = useCallback(
+    (id: string, updates: Partial<CustomizationDesign>) => {
+      setDesigns((prev) => prev.map((d) => (d.id === id ? { ...d, ...updates } : d)));
+      updateDesignInCanvas(id, updates);
+    },
+    [updateDesignInCanvas],
+  );
 
-    const newDesign: CustomizationDesign = {
-      id: `predefined-${diseno.id}-${Date.now()}`,
-      tipo: 'PREDEFINIDO',
-      idDisenoPredefinido: diseno.idDisenoPredefinido ?? diseno.id,
-      nombre: diseno.nombre,
-      preview: imageUrl,
-      posicion: activeSide,
-      x: 50,
-      y: 50,
-      scale: 1,
-      rotation: 0,
+  // ── Validación y carga de archivos ─────────────────────────────────────
+  const handleFileUpload = useCallback(
+    (files: FileList | null) => {
+      if (!files) return;
+      const remaining = MAX_DESIGNS - totalDesigns;
+      const toProcess = Array.from(files).slice(0, remaining);
+
+      toProcess.forEach((file) => {
+        if (!VALID_TYPES.test(file.type)) {
+          alert('Solo se permiten archivos PNG o JPG');
+          return;
+        }
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+          alert('El archivo debe ser menor a 2 MB');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const src = e.target?.result as string;
+          const img = new window.Image();
+          img.onload = () => {
+            if (
+              img.width < MIN_IMAGE_DIM ||
+              img.height < MIN_IMAGE_DIM ||
+              img.width > MAX_IMAGE_DIM ||
+              img.height > MAX_IMAGE_DIM
+            ) {
+              alert('La imagen debe tener dimensiones entre 500×500 y 2000×2000 píxeles');
+              return;
+            }
+            addDesign({
+              id: `uploaded-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+              tipo: 'SUBIDO',
+              file,
+              nombre: file.name,
+              preview: src,
+              posicion: activeSide,
+              x: 50,
+              y: 50,
+              scale: 1.0,
+              rotation: 0,
+              bloqueado: false,
+              visible: true,
+            });
+          };
+          img.src = src;
+        };
+        reader.readAsDataURL(file);
+      });
+    },
+    [activeSide, totalDesigns, addDesign],
+  );
+
+  const handleSelectPredefinedDesign = useCallback(
+    (diseno: PredefinedDesign) => {
+      if (totalDesigns >= MAX_DESIGNS) {
+        alert(`Solo puedes agregar hasta ${MAX_DESIGNS} diseños.`);
+        return;
+      }
+      const imageUrl = diseno.urlImagen || diseno.imagen;
+      if (!imageUrl) {
+        alert('El diseño predefinido no tiene imagen disponible.');
+        return;
+      }
+      addDesign({
+        id: `predefined-${diseno.id}-${Date.now()}`,
+        tipo: 'PREDEFINIDO',
+        idDisenoPredefinido: diseno.idDisenoPredefinido ?? diseno.id,
+        nombre: diseno.nombre,
+        preview: imageUrl,
+        posicion: activeSide,
+        x: 50,
+        y: 50,
+        scale: 1.0,
+        rotation: 0,
+        bloqueado: false,
+        visible: true,
+      });
+    },
+    [activeSide, totalDesigns, addDesign],
+  );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      handleFileUpload(e.dataTransfer.files);
+    },
+    [handleFileUpload],
+  );
+
+  // ── Enviar cotización ──────────────────────────────────────────────────
+  const handleRequestQuote = useCallback(() => {
+    if (!product || !selectedSize || designs.length === 0) return;
+
+    const customizationId = `customization-${Date.now()}`;
+    const payload = {
+      producto: { idProducto: product.idProducto, nombre: product.nombre },
+      color: { nombre: selectedColor.nombre, codigoHex: selectedColor.codigoHex },
+      talla: selectedSize,
+      cantidad: quantity,
+      designs: designs.map(serializeDesign),
     };
 
-    setDesigns((prev) => [...prev, newDesign]);
-    setSelectedDesignId(newDesign.id);
-  };
+    window.sessionStorage.setItem(`gtt_customization_${customizationId}`, JSON.stringify(payload));
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    handleFileUpload(e.dataTransfer.files);
-  }, [handleFileUpload]);
+    const queryParams = new URLSearchParams({
+      producto: String(product.idProducto),
+      color: selectedColor.nombre,
+      talla: selectedSize,
+      cantidad: quantity.toString(),
+      personalizacion: 'true',
+      disenos: designs.length.toString(),
+      customizationId,
+    });
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  }, []);
+    router.push(`/solicitar-cotizacion?${queryParams.toString()}`);
+  }, [product, selectedSize, designs, selectedColor, quantity, router]);
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  }, []);
-
-  const updateDesign = (id: string, updates: Partial<CustomizationDesign>) => {
-    setDesigns((prev) => prev.map((d) => 
-      d.id === id ? { ...d, ...updates } : d
-    ));
-  };
-
-  const removeDesign = (id: string) => {
-    setDesigns((prev) => prev.filter((d) => d.id !== id));
-    if (selectedDesignId === id) {
-      setSelectedDesignId(null);
-    }
-  };
-
+  // ── Estados de carga / error ───────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="flex min-h-screen flex-col">
         <Header />
-        <main className="flex flex-1 items-center justify-center">
-          <div className="text-muted-foreground">Cargando producto...</div>
+        <main className="flex flex-1 items-center justify-center bg-background">
+          <div className="animate-pulse text-muted-foreground">Cargando producto…</div>
         </main>
         <Footer />
       </div>
@@ -235,11 +357,13 @@ export default function CustomizePage() {
     return (
       <div className="flex min-h-screen flex-col">
         <Header />
-        <main className="flex flex-1 items-center justify-center">
+        <main className="flex flex-1 items-center justify-center bg-background">
           <div className="text-center">
-            <h1 className="text-2xl font-semibold text-foreground">Producto no disponible para personalizacion</h1>
-            <Link href="/catalogo" className="mt-4 text-accent hover:underline">
-              Volver al catalogo
+            <h1 className="text-2xl font-semibold text-foreground">
+              Producto no disponible para personalización
+            </h1>
+            <Link href="/catalogo" className="mt-4 inline-block text-accent hover:underline">
+              Volver al catálogo
             </Link>
           </div>
         </main>
@@ -249,512 +373,518 @@ export default function CustomizePage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col bg-background text-foreground selection:bg-indigo-500/20">
       <Header cartItemCount={2} />
 
-      <main className="flex-1 py-8">
-        <div className="container mx-auto px-4">
-          {/* Breadcrumb */}
-          <nav className="mb-6 flex items-center gap-2 text-sm">
-            <Link href={`/producto/${product.idProducto}`} className="flex items-center gap-1 text-muted-foreground hover:text-foreground">
+      {/* Sub-header de contexto */}
+      <div className="border-b border-border bg-card/50 px-6 py-4 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-7xl items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link
+              href={`/producto/${product.idProducto}`}
+              className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
               <ChevronLeft className="h-4 w-4" />
               Volver al Producto
             </Link>
-          </nav>
+            <span className="text-border">|</span>
+            <span className="text-sm font-medium text-muted-foreground">Personalización</span>
+            <span className="text-sm font-semibold text-foreground/80">{product.nombre}</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+            Modo Editor Activo
+          </div>
+        </div>
+      </div>
 
-          <h1 className="mb-8 font-serif text-3xl font-semibold text-foreground">
-            Personaliza tu {product.nombre}
-          </h1>
+      {/* ═══════════════════════════════════════════════════════════════
+          LAYOUT 3 PANELES
+      ════════════════════════════════════════════════════════════════ */}
+      <main className="mx-auto w-full max-w-7xl flex-1 p-6">
+        <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-4">
 
-          <div className="grid gap-8 lg:grid-cols-3">
-            {/* Canvas Area */}
-            <div className="lg:col-span-2">
-              <div className="rounded-2xl border border-border bg-card p-6">
-                {/* Side Toggle */}
-                <div className="mb-4 flex gap-2">
+          {/* ── PANEL IZQUIERDO: herramientas y capas ─────────────── */}
+          <div className="flex flex-col gap-5 rounded-2xl border border-border bg-card p-5 shadow-sm lg:col-span-1">
+
+            {/* Selector de lado */}
+            <div>
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Lado de Personalización
+              </h3>
+              <div className="flex gap-2">
+                {(['pecho', 'espalda'] as ProductSide[]).map((side) => (
                   <button
-                    onClick={() => setActiveSide('pecho')}
+                    key={side}
+                    onClick={() => setActiveSide(side)}
                     className={cn(
-                      'flex-1 rounded-lg border py-2 text-sm font-medium transition-colors',
-                      activeSide === 'pecho'
-                        ? 'border-accent bg-accent text-accent-foreground'
-                        : 'border-border bg-muted text-muted-foreground hover:border-accent/50'
+                      'flex-1 rounded-xl border py-2.5 text-xs font-semibold transition-all duration-200',
+                      activeSide === side
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700 shadow-sm'
+                        : 'border-border bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground',
                     )}
                   >
-                    Pecho (Frente)
+                    {side === 'pecho' ? 'Frente (Pecho)' : 'Posterior (Espalda)'}
                   </button>
-                  <button
-                    onClick={() => setActiveSide('espalda')}
-                    className={cn(
-                      'flex-1 rounded-lg border py-2 text-sm font-medium transition-colors',
-                      activeSide === 'espalda'
-                        ? 'border-accent bg-accent text-accent-foreground'
-                        : 'border-border bg-muted text-muted-foreground hover:border-accent/50'
-                    )}
-                  >
-                    Espalda
-                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Subida de imágenes */}
+            <div>
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Agregar mis Imágenes
+              </h3>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg"
+                multiple
+                onChange={(e) => handleFileUpload(e.target.files)}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={totalDesigns >= MAX_DESIGNS}
+                className="group w-full flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border p-5 text-center transition-all hover:border-indigo-500/50 hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <div className="rounded-lg bg-indigo-50 p-2 text-indigo-600 transition-transform duration-200 group-hover:scale-110">
+                  <Upload className="h-4 w-4" />
                 </div>
+                <div>
+                  <p className="text-xs font-semibold text-foreground">Subir Archivos PNG/JPG</p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">Hasta 2 MB (Mín 500×500 px)</p>
+                </div>
+              </button>
+            </div>
 
-                {/* Design Canvas */}
-                <div
-                  ref={canvasRef}
-                  onDrop={handleDrop}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  className={cn(
-                    'relative mx-auto aspect-[3/4] max-w-md overflow-hidden rounded-xl border-2 border-dashed transition-colors',
-                    isDragging ? 'border-accent bg-accent/5' : 'border-border bg-secondary'
-                  )}
-                >
-                  {/* T-Shirt Mockup */}
-                  <div 
-                    className="absolute inset-4 flex items-center justify-center"
-                  >
-                    <div 
-                      className="h-full w-4/5 rounded-xl border border-border/50"
-                      style={{ 
-                        backgroundColor: selectedColor.codigoHex === '#FFFFFF' ? '#f8f8f8' : selectedColor.codigoHex 
-                      }}
+            {/* Lista de capas */}
+            <div className="flex min-h-[180px] flex-1 flex-col">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Capas del Lienzo
+                </h3>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  {totalDesigns}/{MAX_DESIGNS}
+                </span>
+              </div>
+
+              {designs.length === 0 ? (
+                <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 p-4 text-center">
+                  <ImageIcon className="mb-1.5 h-6 w-6 text-muted-foreground/60" />
+                  <p className="text-[11px] text-muted-foreground">
+                    Sube o selecciona un elemento para empezar
+                  </p>
+                </div>
+              ) : (
+                <div className="max-h-[220px] space-y-2 overflow-y-auto pr-1">
+                  {designs.map((design) => (
+                    <div
+                      key={design.id}
+                      onClick={() => selectDesignInCanvas(design.id)}
+                      className={cn(
+                        'group flex cursor-pointer items-center gap-2.5 rounded-xl border p-2 transition-all hover:bg-muted/30',
+                        selectedDesignId === design.id
+                          ? 'border-indigo-600 bg-indigo-50/20'
+                          : 'border-border bg-card',
+                      )}
                     >
-                      {/* Print Area Indicator */}
-                      <div className="relative h-full p-8">
-                        <div className="absolute inset-x-8 top-1/4 bottom-1/4 border border-dashed border-foreground/20 rounded-lg">
-                          <span className="absolute -top-6 left-0 text-xs text-muted-foreground">
-                            Area de impresion (32x38cm)
-                          </span>
-                        </div>
-
-                        {/* Rendered Designs */}
-                        {currentSideDesigns.map((design: any) => (
-                          <div
-                            key={design.id}
-                            onClick={() => setSelectedDesignId(design.id)}
-                            className={cn(
-                              'absolute cursor-move transition-shadow',
-                              selectedDesignId === design.id && 'ring-2 ring-accent ring-offset-2'
-                            )}
-                            style={{
-                              left: `${design.x}%`,
-                              top: `${design.y}%`,
-                              transform: `translate(-50%, -50%) scale(${design.scale}) rotate(${design.rotation}deg)`,
-                            }}
-                          >
-                            <img
-                              src={design.preview}
-                              alt={design.nombre}
-                              className="h-20 w-20 object-contain pointer-events-none"
-                              draggable={false}
-                            />
-                          </div>
-                        ))}
+                      <img
+                        src={design.preview}
+                        alt={design.nombre}
+                        className="h-9 w-9 rounded-md border bg-slate-50 object-contain"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-medium text-foreground">{design.nombre}</p>
+                        <p className="text-[9px] capitalize text-muted-foreground">{design.posicion}</p>
+                      </div>
+                      <div className="flex items-center gap-0.5 opacity-80 transition-opacity group-hover:opacity-100">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleVisibility(design.id); }}
+                          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                          title={design.visible !== false ? 'Ocultar' : 'Mostrar'}
+                        >
+                          {design.visible !== false
+                            ? <Eye className="h-3 w-3" />
+                            : <EyeOff className="h-3 w-3 text-destructive" />}
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); duplicateDesign(design.id); }}
+                          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                          title="Duplicar"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); removeDesign(design.id); }}
+                          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
                       </div>
                     </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Galería de diseños predefinidos */}
+            <div className="border-t border-border pt-4">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Diseños Predefinidos
+              </h3>
+              {isLoadingPredefinedDesigns ? (
+                <div className="animate-pulse text-xs text-muted-foreground">Cargando galería…</div>
+              ) : predefinedDesigns.length === 0 ? (
+                <div className="text-xs text-muted-foreground">No hay galerías disponibles</div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  {predefinedDesigns.map((diseno) => (
+                    <button
+                      key={diseno.idDisenoPredefinido ?? diseno.id}
+                      type="button"
+                      onClick={() => handleSelectPredefinedDesign(diseno)}
+                      disabled={totalDesigns >= MAX_DESIGNS}
+                      className="group aspect-square flex flex-col items-center justify-center gap-1 rounded-xl border border-border bg-muted/30 p-1 text-center transition-all hover:border-indigo-500/50 hover:bg-muted disabled:opacity-50"
+                    >
+                      <img
+                        src={diseno.urlImagen || diseno.imagen}
+                        alt={diseno.nombre}
+                        className="h-10 w-10 rounded object-contain"
+                      />
+                      <span className="w-full truncate text-[9px] font-medium text-foreground">
+                        {diseno.nombre}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── PANEL CENTRAL: Canvas de Fabric.js ────────────────── */}
+          <div className="relative flex flex-col items-center justify-center overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm lg:col-span-2">
+            <div
+              ref={containerRef}
+              className="relative flex w-full max-w-[500px] items-center justify-center"
+              style={{ aspectRatio: '1' }}
+            >
+              <div
+                style={{ transform: `scale(${containerScale})`, transformOrigin: 'center center' }}
+                className={cn(
+                  'overflow-hidden rounded-xl border border-border/80 bg-[#f8fafc] shadow-md transition-all duration-200',
+                  isDragging && 'ring-2 ring-indigo-500/40',
+                )}
+                onDrop={handleDrop}
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
+              >
+                {/* El elemento <canvas> que Fabric.js administra */}
+                <canvas ref={canvasElRef} id="canvas-personalizacion" />
+              </div>
+
+              {isDragging && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl border-2 border-dashed border-indigo-500 bg-indigo-600/5 backdrop-blur-[1px]">
+                  <div className="flex animate-bounce flex-col items-center gap-1.5 rounded-xl border bg-white/95 px-4 py-3 text-indigo-700 shadow-lg">
+                    <Upload className="h-6 w-6 text-indigo-600" />
+                    <p className="text-xs font-semibold">Suelta tus imágenes aquí</p>
                   </div>
-
-                  {/* Drop Zone Overlay */}
-                  {isDragging && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-accent/10">
-                      <div className="rounded-lg bg-card p-4 shadow-lg">
-                        <Upload className="mx-auto h-8 w-8 text-accent" />
-                        <p className="mt-2 text-sm font-medium text-foreground">Suelta tu imagen aqui</p>
-                      </div>
-                    </div>
-                  )}
                 </div>
+              )}
+            </div>
 
-                {/* Upload Button */}
-                <div className="mt-4 flex items-center justify-between">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/jpg"
-                    multiple
-                    onChange={(e) => handleFileUpload(e.target.files)}
-                    className="hidden"
-                  />
-                  <Button
-                    variant="outline"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={totalDesigns >= maxDesigns}
-                    className="gap-2"
-                  >
-                    <Upload className="h-4 w-4" />
-                    Subir Imagen
-                  </Button>
-                  <span className="text-sm text-muted-foreground">
-                    {totalDesigns} / {maxDesigns} imagenes
-                  </span>
-                </div>
+            {/* Barra de zoom flotante */}
+            <div className="absolute bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-white/95 px-3.5 py-1.5 shadow-lg backdrop-blur-md">
+              <button
+                onClick={() => changeZoom(zoom - ZOOM_STEP)}
+                disabled={zoom <= 1.0}
+                className="rounded p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-30"
+                title="Alejar"
+              >
+                <ZoomOut className="h-4 w-4" />
+              </button>
+              <span className="min-w-[45px] text-center text-xs font-semibold text-slate-700">
+                {Math.round(zoom * 100)}%
+              </span>
+              <button
+                onClick={() => changeZoom(zoom + ZOOM_STEP)}
+                disabled={zoom >= 2.5}
+                className="rounded p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-30"
+                title="Acercar"
+              >
+                <ZoomIn className="h-4 w-4" />
+              </button>
+              <span className="mx-1 h-4 w-px bg-slate-200" />
+              <button
+                onClick={resetZoom}
+                className="rounded p-1 text-[10px] font-bold text-slate-600 hover:bg-slate-100"
+                title="Restablecer zoom"
+              >
+                1:1
+              </button>
+            </div>
+          </div>
 
-                {/* Image Requirements */}
-                <div className="mt-4 rounded-lg bg-muted p-3">
-                  <p className="text-xs text-muted-foreground">
-                    <strong>Requisitos:</strong> PNG o JPG, entre 500x500 y 2000x2000 pixeles, maximo 2MB
+          {/* ── PANEL DERECHO: propiedades del elemento seleccionado ── */}
+          <div className="flex flex-col rounded-2xl border border-border bg-card p-5 shadow-sm lg:col-span-1">
+            <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Propiedades del Elemento
+            </h3>
+
+            {selectedDesign ? (
+              <div className="flex flex-1 flex-col space-y-5">
+                <div>
+                  <p className="text-xs font-semibold text-slate-400">Elemento seleccionado:</p>
+                  <p className="mt-0.5 truncate text-xs font-semibold text-foreground">
+                    {selectedDesign.nombre}
                   </p>
                 </div>
 
-                {/* Predefined Designs */}
-                <div className="mt-4 rounded-xl border border-border bg-card p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-sm font-medium text-foreground">
-                      Diseños predefinidos
-                    </h3>
-                    <span className="text-xs text-muted-foreground">
-                      Se agregan al lado activo: {activeSide}
+                {/* Escala */}
+                <div className="space-y-2">
+                  <label className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <ZoomIn className="h-3.5 w-3.5" /> Tamaño / Escala
                     </span>
-                  </div>
-
-                  {isLoadingPredefinedDesigns ? (
-                    <p className="text-sm text-muted-foreground">Cargando diseños...</p>
-                  ) : predefinedDesigns.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      No hay diseños predefinidos disponibles.
-                    </p>
-                  ) : (
-                    <div className="flex flex-wrap gap-3">
-                      {predefinedDesigns.map((diseno) => (
-                        <button
-                          key={diseno.idDisenoPredefinido ?? diseno.id}
-                          type="button"
-                          onClick={() => handleSelectPredefinedDesign(diseno)}
-                          disabled={totalDesigns >= maxDesigns}
-                          className="group flex w-24 flex-col items-center gap-2 rounded-lg border border-border bg-muted p-2 text-center transition-colors hover:border-accent disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <img
-                            src={diseno.urlImagen || diseno.imagen}
-                            alt={diseno.nombre}
-                            className="h-14 w-14 rounded object-contain"
-                          />
-                          <span className="line-clamp-2 text-xs text-foreground">
-                            {diseno.nombre}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                    <span>{Math.round(selectedDesign.scale * 100)}%</span>
+                  </label>
+                  <Slider
+                    value={[selectedDesign.scale]}
+                    min={0.4} max={2.2} step={0.05}
+                    disabled={selectedDesign.bloqueado}
+                    onValueChange={([v]) => updateDesign(selectedDesign.id, { scale: v })}
+                  />
                 </div>
-              </div>
 
-              {/* Design Controls */}
-              {selectedDesign && (
-                <div className="mt-4 rounded-xl border border-border bg-card p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-medium text-foreground">Ajustar Diseno</h3>
+                {/* Rotación */}
+                <div className="space-y-2">
+                  <label className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <RotateCw className="h-3.5 w-3.5" /> Rotación
+                    </span>
+                    <span>{Math.round(selectedDesign.rotation)}°</span>
+                  </label>
+                  <Slider
+                    value={[selectedDesign.rotation]}
+                    min={-180} max={180} step={5}
+                    disabled={selectedDesign.bloqueado}
+                    onValueChange={([v]) => updateDesign(selectedDesign.id, { rotation: v })}
+                  />
+                </div>
+
+                {/* Posición X */}
+                <div className="space-y-2">
+                  <label className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <Move className="h-3.5 w-3.5" /> Posición X (Horizontal)
+                    </span>
+                    <span>{Math.round(selectedDesign.x)}%</span>
+                  </label>
+                  <Slider
+                    value={[selectedDesign.x]}
+                    min={0} max={100} step={1}
+                    disabled={selectedDesign.bloqueado}
+                    onValueChange={([v]) => updateDesign(selectedDesign.id, { x: v })}
+                  />
+                </div>
+
+                {/* Posición Y */}
+                <div className="space-y-2">
+                  <label className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <Move className="h-3.5 w-3.5 rotate-90" /> Posición Y (Vertical)
+                    </span>
+                    <span>{Math.round(selectedDesign.y)}%</span>
+                  </label>
+                  <Slider
+                    value={[selectedDesign.y]}
+                    min={0} max={100} step={1}
+                    disabled={selectedDesign.bloqueado}
+                    onValueChange={([v]) => updateDesign(selectedDesign.id, { y: v })}
+                  />
+                </div>
+
+                {/* Organizar capas */}
+                <div className="space-y-2.5 border-t border-border pt-2">
+                  <span className="block text-xs font-semibold text-muted-foreground">Organizar Capas</span>
+                  <div className="grid grid-cols-2 gap-2">
                     <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => removeDesign(selectedDesign.id)}
+                      variant="outline" size="sm"
+                      className="flex h-8 items-center gap-1 text-xs"
+                      onClick={() => bringDesignToFront(selectedDesign.id)}
                     >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Eliminar
+                      <ArrowUp className="h-3.5 w-3.5 text-slate-500" /> Traer al frente
+                    </Button>
+                    <Button
+                      variant="outline" size="sm"
+                      className="flex h-8 items-center gap-1 text-xs"
+                      onClick={() => sendDesignToBack(selectedDesign.id)}
+                    >
+                      <ArrowDown className="h-3.5 w-3.5 text-slate-500" /> Enviar atrás
                     </Button>
                   </div>
-
-                  <div className="space-y-4">
-                    {/* Scale */}
-                    <div>
-                      <label className="mb-2 flex items-center justify-between text-sm">
-                        <span className="flex items-center gap-2">
-                          <ZoomIn className="h-4 w-4 text-muted-foreground" />
-                          Tamano
-                        </span>
-                        <span className="text-muted-foreground">{Math.round(selectedDesign.scale * 100)}%</span>
-                      </label>
-                      <Slider
-                        value={[selectedDesign.scale]}
-                        min={0.5}
-                        max={2}
-                        step={0.1}
-                        onValueChange={([value]) => updateDesign(selectedDesign.id, { scale: value })}
-                      />
-                    </div>
-
-                    {/* Position X */}
-                    <div>
-                      <label className="mb-2 flex items-center justify-between text-sm">
-                        <span className="flex items-center gap-2">
-                          <Move className="h-4 w-4 text-muted-foreground" />
-                          Posicion Horizontal
-                        </span>
-                        <span className="text-muted-foreground">{Math.round(selectedDesign.x)}%</span>
-                      </label>
-                      <Slider
-                        value={[selectedDesign.x]}
-                        min={10}
-                        max={90}
-                        step={1}
-                        onValueChange={([value]) => updateDesign(selectedDesign.id, { x: value })}
-                      />
-                    </div>
-
-                    {/* Position Y */}
-                    <div>
-                      <label className="mb-2 flex items-center justify-between text-sm">
-                        <span className="flex items-center gap-2">
-                          <Move className="h-4 w-4 text-muted-foreground rotate-90" />
-                          Posicion Vertical
-                        </span>
-                        <span className="text-muted-foreground">{Math.round(selectedDesign.y)}%</span>
-                      </label>
-                      <Slider
-                        value={[selectedDesign.y]}
-                        min={10}
-                        max={90}
-                        step={1}
-                        onValueChange={([value]) => updateDesign(selectedDesign.id, { y: value })}
-                      />
-                    </div>
-
-                    {/* Rotation */}
-                    <div>
-                      <label className="mb-2 flex items-center justify-between text-sm">
-                        <span className="flex items-center gap-2">
-                          <RotateCw className="h-4 w-4 text-muted-foreground" />
-                          Rotacion
-                        </span>
-                        <span className="text-muted-foreground">{selectedDesign.rotation}°</span>
-                      </label>
-                      <Slider
-                        value={[selectedDesign.rotation]}
-                        min={-180}
-                        max={180}
-                        step={5}
-                        onValueChange={([value]) => updateDesign(selectedDesign.id, { rotation: value })}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Uploaded Images List */}
-              {designs.length > 0 && (
-                <div className="mt-4">
-                  <h3 className="mb-3 text-sm font-medium text-foreground">Diseños seleccionados</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {designs.map((design: any) => (
-                      <div
-                        key={design.id}
-                        onClick={() => {
-                          setActiveSide(design.posicion);
-                          setSelectedDesignId(design.id);
-                        }}
-                        className={cn(
-                          'relative h-16 w-16 cursor-pointer overflow-hidden rounded-lg border-2 transition-all',
-                          selectedDesignId === design.id
-                            ? 'border-accent ring-2 ring-accent/30'
-                            : 'border-border hover:border-accent/50'
-                        )}
-                      >
-                        <img
-                          src={design.preview}
-                          alt={design.nombre}
-                          className="h-full w-full object-cover"
-                        />
-                        <span className="absolute bottom-0 left-0 right-0 bg-primary/80 py-0.5 text-center text-[10px] text-primary-foreground capitalize">
-                          {design.posicion}
-                        </span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeDesign(design.id);
-                          }}
-                          className="absolute -right-1 -top-1 rounded-full bg-destructive p-0.5 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:opacity-100"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Sidebar - Product Options */}
-            <div className="space-y-6">
-              <div className="rounded-xl border border-border bg-card p-6">
-                <h2 className="font-serif text-xl font-semibold text-foreground">
-                  {product.nombre}
-                </h2>
-                <p className="mt-1 text-2xl font-semibold text-accent">
-                  {formatPrice(product.precio || product.precioBase)}
-                </p>
-
-                {/* Color Selection */}
-                <div className="mt-6">
-                  <label className="mb-3 block text-sm font-medium text-foreground">
-                    Color: <span className="font-normal text-muted-foreground">{selectedColor.nombre}</span>
-                  </label>
-                  <div className="flex gap-2">
-                    {colores.map((color, index) => (
-                      <button
-                        key={color.idColor}
-                        onClick={() => setSelectedColorIndex(index)}
-                        className={cn(
-                          'h-8 w-8 rounded-full border-2 transition-all',
-                          selectedColorIndex === index
-                            ? 'border-accent ring-2 ring-accent/30'
-                            : 'border-border hover:border-muted-foreground'
-                        )}
-                        style={{ 
-                          backgroundColor: color.codigoHex,
-                          boxShadow: color.codigoHex === '#FFFFFF' ? 'inset 0 0 0 1px rgba(0,0,0,0.1)' : 'none'
-                        }}
-                        title={color.nombre}
-                      >
-                        <span className="sr-only">{color.nombre}</span>
-                      </button>
-                    ))}
-                  </div>
                 </div>
 
-                {/* Size Selection */}
-                <div className="mt-6">
-                  <label className="mb-3 block text-sm font-medium text-foreground">
-                    Talla
-                  </label>
-                  <div className="flex gap-2">
-                    {(product.tallas || []).map((size) => (
-                      <button
-                        key={size}
-                        onClick={() => setSelectedSize(size as ProductSize)}
-                        className={cn(
-                          'flex h-10 w-10 items-center justify-center rounded-lg border text-sm font-medium transition-colors',
-                          selectedSize === size
-                            ? 'border-accent bg-accent text-accent-foreground'
-                            : 'border-border bg-card hover:border-accent/50'
-                        )}
-                      >
-                        {size}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Quantity */}
-                <div className="mt-6">
-                  <label className="mb-3 block text-sm font-medium text-foreground">
-                    Cantidad
-                  </label>
-                  <div className="flex items-center rounded-lg border border-border">
-                    <button
-                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                      className="flex h-10 w-10 items-center justify-center text-muted-foreground hover:text-foreground"
-                    >
-                      -
-                    </button>
-                    <input
-                      type="number"
-                      min="1"
-                      value={quantity}
-                      onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="h-10 flex-1 border-x border-border bg-transparent text-center text-sm focus:outline-none"
-                    />
-                    <button
-                      onClick={() => setQuantity(quantity + 1)}
-                      className="flex h-10 w-10 items-center justify-center text-muted-foreground hover:text-foreground"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                {/* Summary */}
-                <div className="mt-6 rounded-lg bg-muted p-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Precio unitario</span>
-                    <span className="text-foreground">{formatPrice(product.precio || product.precioBase)}</span>
-                  </div>
-                  <div className="mt-2 flex justify-between text-sm">
-                    <span className="text-muted-foreground">Cantidad</span>
-                    <span className="text-foreground">{quantity}</span>
-                  </div>
-                  <div className="mt-2 flex justify-between text-sm">
-                    <span className="text-muted-foreground">Diseños</span>
-                    <span className="text-foreground">{designs.length}</span>
-                  </div>
-                  <div className="mt-3 border-t border-border pt-3 flex justify-between">
-                    <span className="font-medium text-foreground">Total estimado</span>
-                    <span className="font-semibold text-foreground">{formatPrice((product.precio || product.precioBase) * quantity)}</span>
-                  </div>
-                </div>
-
-                {/* Warning for custom products */}
-                <div className="mt-4 flex items-start gap-2 rounded-lg bg-accent/10 p-3">
-                  <AlertTriangle className="h-4 w-4 text-accent shrink-0 mt-0.5" />
-                  <p className="text-xs text-muted-foreground">
-                    Los productos personalizados requieren una cotizacion para confirmar el precio final de produccion.
-                  </p>
-                </div>
-
-                {/* Actions */}
-                <div className="mt-6 space-y-3">
-                  <Button 
-                    className="w-full gap-2 bg-accent text-accent-foreground hover:bg-accent/90"
-                    disabled={!selectedSize || designs.length === 0}
-                    onClick={() => {
-                      const customizationId = `customization-${Date.now()}`;
-
-                      const customizationPayload = {
-                        producto: {
-                          idProducto: product.idProducto,
-                          nombre: product.nombre,
-                        },
-                        color: {
-                          nombre: selectedColor.nombre,
-                          codigoHex: selectedColor.codigoHex,
-                        },
-                        talla: selectedSize,
-                        cantidad: quantity,
-                        designs: designs.map((design) => ({
-                          id: design.id,
-                          tipo: design.tipo,
-                          idDisenoPredefinido: design.idDisenoPredefinido ?? null,
-                          nombre: design.nombre,
-                          preview: design.tipo === 'PREDEFINIDO' ? design.preview : null,
-                          posicion: design.posicion,
-                          x: design.x,
-                          y: design.y,
-                          scale: design.scale,
-                          rotation: design.rotation,
-                        })),
-                      };
-
-                      window.sessionStorage.setItem(
-                        `gtt_customization_${customizationId}`,
-                        JSON.stringify(customizationPayload),
-                      );
-
-                      const params = new URLSearchParams({
-                        producto: String(product.idProducto),
-                        color: selectedColor.nombre,
-                        talla: selectedSize || '',
-                        cantidad: quantity.toString(),
-                        personalizacion: 'true',
-                        disenos: designs.length.toString(),
-                        customizationId,
-                      });
-
-                      router.push(`/solicitar-cotizacion?${params.toString()}`);
-                    }}
+                {/* Bloquear / eliminar */}
+                <div className="mt-auto space-y-2 border-t border-border pt-4">
+                  <button
+                    onClick={() => toggleLock(selectedDesign.id)}
+                    className={cn(
+                      'flex h-9 w-full items-center justify-center gap-2 rounded-lg border py-2 text-xs font-semibold transition-all',
+                      selectedDesign.bloqueado
+                        ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100/80'
+                        : 'border-border text-slate-700 hover:bg-slate-50',
+                    )}
                   >
-                    <FileText className="h-4 w-4" />
-                    Solicitar Cotización
+                    {selectedDesign.bloqueado
+                      ? <><Lock className="h-3.5 w-3.5 text-amber-600" /> Desbloquear</>
+                      : <><Unlock className="h-3.5 w-3.5 text-slate-500" /> Bloquear en lienzo</>}
+                  </button>
+                  <Button
+                    variant="outline"
+                    className="h-9 w-full border-destructive/20 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => removeDesign(selectedDesign.id)}
+                  >
+                    <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Eliminar elemento
                   </Button>
-                  {designs.length === 0 && (
-                    <p className="text-center text-xs text-muted-foreground">
-                      Sube al menos una imagen para continuar
-                    </p>
-                  )}
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 p-5 text-center">
+                <ImageIcon className="mb-2 h-8 w-8 text-muted-foreground/40" />
+                <p className="text-xs font-semibold text-muted-foreground">Sin elemento seleccionado</p>
+                <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                  Haz clic sobre una imagen en el lienzo o selecciónala en el panel de capas.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </main>
 
-      <Footer />
+      {/* ═══════════════════════════════════════════════════════════════
+          BARRA INFERIOR STICKY
+      ════════════════════════════════════════════════════════════════ */}
+      <footer className="sticky bottom-0 z-10 border-t border-border bg-card/90 px-6 py-4 shadow-2xl backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4">
+
+          {/* Opciones del producto */}
+          <div className="flex flex-wrap items-center gap-6">
+
+            {/* Selector de color */}
+            <div>
+              <span className="mb-1 block text-[11px] font-bold uppercase text-muted-foreground">Color</span>
+              <div className="flex gap-1.5">
+                {colores.map((color, index) => (
+                  <button
+                    key={color.idColor}
+                    onClick={() => setSelectedColorIndex(index)}
+                    className={cn(
+                      'relative h-7 w-7 rounded-full border-2 shadow-sm transition-all hover:scale-110',
+                      selectedColorIndex === index
+                        ? 'scale-105 border-indigo-600 ring-2 ring-indigo-600/30 ring-offset-1'
+                        : 'border-border',
+                    )}
+                    style={{
+                      backgroundColor: color.codigoHex,
+                      boxShadow: color.codigoHex === '#FFFFFF' ? 'inset 0 0 0 1px rgba(0,0,0,0.1)' : undefined,
+                    }}
+                    title={color.nombre}
+                  >
+                    {selectedColorIndex === index && (
+                      <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-slate-800">✓</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Selector de talla */}
+            <div>
+              <span className="mb-1 block text-[11px] font-bold uppercase text-muted-foreground">Talla</span>
+              <div className="flex gap-1">
+                {(product.tallas ?? []).map((size) => (
+                  <button
+                    key={size}
+                    onClick={() => setSelectedSize(size as ProductSize)}
+                    className={cn(
+                      'flex h-7 items-center justify-center rounded-md border px-2.5 text-[11px] font-bold transition-all hover:border-indigo-500/50',
+                      selectedSize === size
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700 shadow-sm'
+                        : 'border-border bg-card text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {size}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Cantidad */}
+            <div>
+              <span className="mb-1 block text-[11px] font-bold uppercase text-muted-foreground">Cantidad</span>
+              <div className="flex h-7 items-center rounded-lg border border-border bg-muted/20">
+                <button
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  className="flex h-full w-7 items-center justify-center font-semibold text-muted-foreground hover:text-foreground"
+                >
+                  −
+                </button>
+                <input
+                  type="number" min="1" value={quantity}
+                  onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="h-full w-10 border-none bg-transparent text-center text-xs font-semibold focus:outline-none"
+                />
+                <button
+                  onClick={() => setQuantity((q) => q + 1)}
+                  className="flex h-full w-7 items-center justify-center font-semibold text-muted-foreground hover:text-foreground"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Resumen + CTA */}
+          <div className="ml-auto flex items-center gap-6">
+            <div className="text-right">
+              <div className="text-xs text-muted-foreground">
+                Precio unitario:{' '}
+                <span className="font-semibold text-foreground">
+                  {formatPrice(product.precio ?? product.precioBase)}
+                </span>
+              </div>
+              <div className="mt-0.5 text-xs text-muted-foreground">
+                Diseños agregados:{' '}
+                <span className="font-semibold text-foreground">{designs.length}</span>
+              </div>
+              <div className="mt-1 flex items-baseline justify-end gap-1.5 text-sm font-semibold text-foreground">
+                Total estimado:
+                <span className="text-lg font-bold text-indigo-600">
+                  {formatPrice((product.precio ?? product.precioBase) * quantity)}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-stretch gap-1">
+              <Button
+                className="h-11 gap-2 rounded-xl bg-indigo-600 px-6 font-semibold text-white shadow-md transition-all duration-300 hover:bg-indigo-700 active:scale-95"
+                disabled={!selectedSize || designs.length === 0}
+                onClick={handleRequestQuote}
+              >
+                <FileText className="h-4 w-4" />
+                Solicitar Cotización
+              </Button>
+              {designs.length === 0 && (
+                <p className="text-center text-[10px] text-muted-foreground">
+                  Agrega al menos una imagen
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

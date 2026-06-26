@@ -105,6 +105,23 @@ export class AdminService {
     return mapBackendProductToFrontend(rawProduct);
   }
 
+  /**
+   * Registra un producto enviando hasta 2 imágenes reales (FRONT y BACK)
+   * al endpoint multipart del backend.
+   */
+  static async createProductWithImage(
+    data: CreateProductPayload,
+    files: { front?: File; back?: File },
+  ): Promise<Producto> {
+    const formData = new FormData();
+    formData.append('producto', JSON.stringify(data));
+    if (files.front) formData.append('files', files.front);
+    if (files.back) formData.append('files', files.back);
+
+    const rawProduct = await ApiClient.postFormData<any>('/productos/con-imagen', formData);
+    return mapBackendProductToFrontend(rawProduct);
+  }
+
   static async updateProduct(id: string, data: Partial<CreateProductPayload>): Promise<Producto> {
     const rawProduct = await ApiClient.put<any>(`/productos/${id}`, data);
     return mapBackendProductToFrontend(rawProduct);
