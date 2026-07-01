@@ -20,9 +20,7 @@ Funcionalidades principales implementadas hasta el cierre del curso:
 * Gestión de diseños predefinidos.
 * Personalización de productos.
 * Solicitud y respuesta de cotizaciones.
-* Carrito de compras.
 * Registro y gestión de pedidos.
-* Pagos simulados.
 * Recuperación de contraseña por correo.
 * Notificaciones por correo para cotizaciones y pedidos.
 * Integración con AWS S3 para almacenamiento de imágenes.
